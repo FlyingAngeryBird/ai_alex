@@ -20,6 +20,18 @@
 - 不把火山密钥、Apple Music token、用户录音提交到仓库。
 - 发现 Apple Music 官方能力受限时，按规格降级，不临时接入非官方网易云接口。
 
+### 0.1 已确认执行顺序调整
+
+用户已确认采用 Subagent-Driven 执行方式，并要求前端 UI 原型先完成。因此实际执行顺序调整为：
+
+1. Task 1：M0 工程底座。
+2. Task 3：Electron 主进程、preload 和安全 IPC 最小壳。
+3. Task 4：M1 前端主界面、粒子球、对话区、后续扩展用的状态边界。
+4. Task 2：IPC 结果契约和核心服务测试。
+5. Task 5-10：按 ASR、LLM、TTS、Apple Music、沉浸音乐页、打包顺序继续。
+
+UI 原型验收通过前，不接入真实火山引擎和 Apple Music。UI 代码必须保留扩展空间：页面状态、粒子状态、对话状态、音乐播放状态分别管理，不把云服务调用写死在组件内部。
+
 ## 1. 目标文件结构
 
 最终项目文件结构：
@@ -1540,4 +1552,3 @@ APPLE_MUSIC_DEVELOPER_TOKEN=真实值
 
 - `AppResult`、`AssistantOutput`、`MusicTrack`、`PlaybackState` 在全局类型契约中固定。
 - IPC channel 名称与规格保持一致。
-
