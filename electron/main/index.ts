@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { registerAppHandlers } from './ipc/appHandlers.js'
+import { registerTtsHandlers } from './ipc/ttsHandlers.js'
 import { registerVoiceHandlers } from './ipc/voiceHandlers.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -31,6 +32,7 @@ function createMainWindow(): BrowserWindow {
 }
 
 registerAppHandlers()
+registerTtsHandlers()
 registerVoiceHandlers()
 
 void app.whenReady().then(() => {

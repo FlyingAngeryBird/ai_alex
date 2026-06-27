@@ -236,8 +236,13 @@ VOLCENGINE_ASR_RESOURCE_ID=volc.seedasr.auc
 VOLCENGINE_ASR_ENDPOINT=https://openspeech.bytedance.com/api/v3/auc/bigmodel
 VOLCENGINE_ASR_UID=lingli-desktop
 VOLCENGINE_ASR_MAX_QUERY_ATTEMPTS=10
+VOLCENGINE_STREAM_ASR_ENDPOINT=wss://openspeech.bytedance.com/api/v3/sauc/bigmodel
+VOLCENGINE_STREAM_ASR_RESOURCE_ID=volc.bigasr.sauc.duration
 VOLCENGINE_TTS_APP_ID=
 VOLCENGINE_TTS_ACCESS_TOKEN=
+VOLCENGINE_TTS_ENDPOINT=wss://openspeech.bytedance.com/api/v3/tts/bidirection
+VOLCENGINE_TTS_RESOURCE_ID=volc.service_type.10029
+VOLCENGINE_TTS_VOICE=
 APPLE_MUSIC_DEVELOPER_TOKEN=
 ```
 
@@ -1036,7 +1041,7 @@ Behavior:
   - speechEndLevel: `0.035`
   - silenceMs: `900`
 
-- [ ] **Step 3: 实现 voice IPC**
+- [x] **Step 3: 实现 voice IPC**
 
 Create `/Users/sea/Documents/ai_alex/electron/main/ipc/voiceHandlers.ts`:
 
@@ -1085,6 +1090,12 @@ app.whenReady().then(() => {
   createWindow();
 });
 ```
+
+Current implementation note:
+
+- 已在 `/Users/sea/Documents/ai_alex/electron/main/ipc/voiceHandlers.ts` 注册 `voice.startRecording`、`voice.stopAndTranscribe`、`voice.startRealtime`、`voice.pushRealtimeAudio`、`voice.stopRealtime`。
+- 已新增 `/Users/sea/Documents/ai_alex/electron/main/providers/realtimeVoiceProvider.ts`，定义流式语音识别 2.0 的 `start / pushAudio / stop` Provider 边界；默认实现会返回未配置错误，避免误以为实时服务已接通。
+- 已在 `/Users/sea/Documents/ai_alex/electron/preload/index.ts` 暴露实时语音 IPC 通道，后续前端可把自动聆听模式切到 WebSocket 流式 ASR。
 
 - [x] **Step 4: 实现前端录音 composable**
 
@@ -1267,6 +1278,12 @@ export function registerTtsHandlers() {
   });
 }
 ```
+
+Current implementation note:
+
+- 已新增 `/Users/sea/Documents/ai_alex/electron/main/ipc/ttsHandlers.ts`，注册 `tts.speak`、`tts.startStreaming`、`tts.pushText`、`tts.stopStreaming`。
+- 已在 `/Users/sea/Documents/ai_alex/electron/main/providers/realtimeVoiceProvider.ts` 定义语音合成 2.0 的 `start / pushText / stop` Provider 边界；默认实现会返回未配置错误。
+- 音色和其他语音参数暂不写死，等真实 WebSocket 链路跑通后再按产品验收调整。
 
 - [ ] **Step 3: 实现 Web Audio 分析**
 

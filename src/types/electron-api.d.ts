@@ -24,7 +24,13 @@ export type LingliChannel =
   | 'music.resume'
   | 'music.search'
   | 'tts.speak'
+  | 'tts.startStreaming'
+  | 'tts.pushText'
+  | 'tts.stopStreaming'
   | 'voice.startRecording'
+  | 'voice.startRealtime'
+  | 'voice.pushRealtimeAudio'
+  | 'voice.stopRealtime'
   | 'voice.stopAndTranscribe'
 
 declare global {
