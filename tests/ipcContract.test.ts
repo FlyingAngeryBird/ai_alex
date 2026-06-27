@@ -1,12 +1,10 @@
-import assert from 'node:assert/strict'
-import { describe, it } from 'node:test'
+import { describe, expect, it } from 'vitest'
 
 describe('IPC contract', () => {
   it('exposes only the approved renderer channels', async () => {
-    const preloadPath = '../electron/preload/index' + '.ts'
-    const { exposedChannels } = (await import(preloadPath)) as typeof import('../electron/preload/index')
+    const { exposedChannels } = await import('../electron/preload/index')
 
-    assert.deepEqual(exposedChannels, [
+    expect(exposedChannels).toEqual([
       'app.getRuntimeState',
       'chat.sendMessage',
       'music.authorize',

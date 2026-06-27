@@ -28,7 +28,7 @@ export default defineConfig({
   renderer: {
     plugins: [vue()],
     build: {
-      outDir: 'dist'
+      outDir: 'dist-electron/renderer'
     },
     resolve: {
       alias: {
