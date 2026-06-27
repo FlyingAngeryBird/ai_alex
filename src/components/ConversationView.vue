@@ -21,6 +21,15 @@ const statusText: Record<ParticleState, string> = {
   playing: '播放',
   error: '异常'
 }
+
+const autoListenText: Record<AutoListenState, string> = {
+  off: '自动聆听',
+  armed: '自动开',
+  speech_detected: '聆听中',
+  finalizing: '整理中',
+  paused_for_tts: '稍候',
+  error: '需授权'
+}
 </script>
 
 <template>
@@ -61,7 +70,7 @@ const statusText: Record<ParticleState, string> = {
           @click="$emit('toggleAutoListen')"
         >
           <span class="switch-track"><span class="switch-thumb" /></span>
-          <b>{{ autoListenState === 'speech_detected' ? '聆听中' : autoListenState === 'off' ? '自动聆听' : '自动开' }}</b>
+          <b>{{ autoListenText[autoListenState] }}</b>
         </button>
         <button class="icon-text-button" type="button" @click="$emit('demoMusic')">
           ♪ 演示音乐页

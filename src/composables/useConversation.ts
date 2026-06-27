@@ -64,18 +64,34 @@ export function useConversation(options: UseConversationOptions = {}) {
     audioLevel.value = 0.42
   }
 
-  function toggleAutoListen(): void {
-    if (autoListenState.value === 'off' || autoListenState.value === 'error') {
-      autoListenState.value = 'armed'
-      audioLevel.value = Math.max(audioLevel.value, 0.18)
-      return
-    }
+  function enableAutoListen(): void {
+    autoListenState.value = 'armed'
+    audioLevel.value = Math.max(audioLevel.value, 0.18)
+  }
 
+  function disableAutoListen(): void {
     autoListenState.value = 'off'
     if (!isListening.value && particleState.value === 'listening') {
       particleState.value = 'idle'
       audioLevel.value = 0.14
     }
+  }
+
+  function markAutoListenError(): void {
+    autoListenState.value = 'error'
+    if (!isListening.value) {
+      particleState.value = 'idle'
+      audioLevel.value = 0.14
+    }
+  }
+
+  function toggleAutoListen(): void {
+    if (autoListenState.value === 'off' || autoListenState.value === 'error') {
+      enableAutoListen()
+      return
+    }
+
+    disableAutoListen()
   }
 
   async function stopListening(text = DEFAULT_USER_TEXT): Promise<ConversationResult> {
@@ -125,8 +141,11 @@ export function useConversation(options: UseConversationOptions = {}) {
   return {
     audioLevel,
     autoListenState,
+    disableAutoListen,
+    enableAutoListen,
     isListening,
     latestMessage,
+    markAutoListenError,
     messages,
     particleState,
     sendMusicDemoRequest,

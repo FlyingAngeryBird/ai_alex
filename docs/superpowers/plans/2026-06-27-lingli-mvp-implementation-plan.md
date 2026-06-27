@@ -1086,7 +1086,7 @@ Behavior:
 - Prevent repeated keydown from starting multiple recorders.
 - Update particle state and status text.
 
-- [ ] **Step 4A: 实现自动聆听 composable**
+- [x] **Step 4A: 实现自动聆听 composable**
 
 Create `/Users/sea/Documents/ai_alex/src/composables/useAutoListen.ts`.
 
@@ -1098,6 +1098,12 @@ Behavior:
 - If volume stays below `speechEndLevel` for `silenceMs`, finalize the current utterance and call the same ASR/chat pipeline used by push-to-talk.
 - While TTS is playing, set state to `paused_for_tts` and do not capture AI output.
 - If microphone permission fails, return a recoverable message and keep push-to-talk available.
+
+Current implementation note:
+
+- 已新增 `/Users/sea/Documents/ai_alex/src/services/voiceActivity.ts`，用可测试的语音活动检测器判断 `speech_start` / `speech_end`。
+- 已新增 `/Users/sea/Documents/ai_alex/src/composables/useAutoListen.ts`，负责麦克风权限、音量采样、自动聆听开关和清理资源。
+- 已接入 `/Users/sea/Documents/ai_alex/src/App.vue` 原型状态机；当前版本自动结束后仍使用模拟文本，等 Step 4 / 火山 ASR 完成后接入真实识别文本。
 
 - [ ] **Step 5: 验收 M2**
 

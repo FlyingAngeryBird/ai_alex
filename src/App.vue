@@ -4,6 +4,7 @@ import ConversationView from '@/components/ConversationView.vue'
 import MiniPlayer from '@/components/MiniPlayer.vue'
 import MusicImmersiveView from '@/components/MusicImmersiveView.vue'
 import ParticleSphere from '@/components/ParticleSphere.vue'
+import { useAutoListen } from '@/composables/useAutoListen'
 import { useConversation } from '@/composables/useConversation'
 import { useMusic } from '@/composables/useMusic'
 import type { ParticleState } from '@/types/app'
@@ -12,6 +13,31 @@ const conversation = useConversation()
 const music = useMusic()
 const spaceHeld = ref(false)
 const viewMode = computed(() => music.viewMode.value)
+const autoDetectableStates = new Set(['armed', 'speech_detected'])
+
+const autoListen = useAutoListen({
+  canDetect: () =>
+    music.viewMode.value === 'conversation' &&
+    !spaceHeld.value &&
+    autoDetectableStates.has(conversation.autoListenState.value),
+  onSpeechStart: () => {
+    if (conversation.autoListenState.value !== 'armed' || music.viewMode.value !== 'conversation') {
+      return
+    }
+
+    conversation.startListening()
+  },
+  onSpeechEnd: async () => {
+    if (!conversation.isListening.value || music.viewMode.value !== 'conversation') {
+      return
+    }
+
+    const result = await conversation.stopListening('我刚刚开口说话了')
+    if (result.intent === 'play_music') {
+      music.startDemoTrack()
+    }
+  }
+})
 
 const particleState = computed<ParticleState>(() => {
   if (music.viewMode.value === 'music' && music.playback.value.status !== 'error') {
@@ -31,6 +57,10 @@ const audioLevel = computed(() => {
     return 0.34 + Math.abs(Math.sin(position * 1.7)) * 0.36
   }
 
+  if (autoListen.enabled.value && autoDetectableStates.has(conversation.autoListenState.value)) {
+    return Math.max(conversation.audioLevel.value, Math.min(0.48, autoListen.level.value * 2.4))
+  }
+
   return conversation.audioLevel.value
 })
 
@@ -39,6 +69,21 @@ async function runMusicDemo(): Promise<void> {
   if (result.intent === 'play_music') {
     music.startDemoTrack()
   }
+}
+
+async function toggleAutoListen(): Promise<void> {
+  if (conversation.autoListenState.value === 'off' || conversation.autoListenState.value === 'error') {
+    const didStart = await autoListen.start()
+    if (didStart) {
+      conversation.enableAutoListen()
+    } else {
+      conversation.markAutoListenError()
+    }
+    return
+  }
+
+  autoListen.stop()
+  conversation.disableAutoListen()
 }
 
 async function handleKeyUp(event: KeyboardEvent): Promise<void> {
@@ -73,6 +118,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeyDown)
   window.removeEventListener('keyup', handleKeyUp)
+  autoListen.stop()
 })
 </script>
 
@@ -94,7 +140,7 @@ onBeforeUnmount(() => {
           :auto-listen-state="conversation.autoListenState.value"
           :is-listening="conversation.isListening.value"
           @demo-music="runMusicDemo"
-          @toggle-auto-listen="conversation.toggleAutoListen"
+          @toggle-auto-listen="toggleAutoListen"
         />
         <MiniPlayer
           v-if="music.hasActiveTrack.value"
