@@ -1,7 +1,7 @@
 import { app, BrowserWindow } from 'electron'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { registerAppHandlers } from './ipc/appHandlers'
+import { registerAppHandlers } from './ipc/appHandlers.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 

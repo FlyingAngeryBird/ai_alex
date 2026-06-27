@@ -1,6 +1,9 @@
-import { resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import vue from '@vitejs/plugin-vue'
+
+const projectRoot = dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
   main: {
@@ -9,7 +12,7 @@ export default defineConfig({
       outDir: 'dist-electron/main',
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'electron/main/index.ts')
+          index: resolve(projectRoot, 'electron/main/index.ts')
         }
       }
     }
@@ -20,7 +23,7 @@ export default defineConfig({
       outDir: 'dist-electron/preload',
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'electron/preload/index.ts')
+          index: resolve(projectRoot, 'electron/preload/index.ts')
         }
       }
     }
@@ -32,7 +35,7 @@ export default defineConfig({
     },
     resolve: {
       alias: {
-        '@': resolve(__dirname, 'src')
+        '@': resolve(projectRoot, 'src')
       }
     }
   }
