@@ -231,6 +231,11 @@ VOLCENGINE_ARK_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
 VOLCENGINE_ARK_MODEL=
 VOLCENGINE_ASR_APP_ID=
 VOLCENGINE_ASR_ACCESS_TOKEN=
+VOLCENGINE_ASR_CLUSTER=volcengine_input_common
+VOLCENGINE_ASR_RESOURCE_ID=volc.seedasr.auc
+VOLCENGINE_ASR_ENDPOINT=https://openspeech.bytedance.com/api/v3/auc/bigmodel
+VOLCENGINE_ASR_UID=lingli-desktop
+VOLCENGINE_ASR_MAX_QUERY_ATTEMPTS=10
 VOLCENGINE_TTS_APP_ID=
 VOLCENGINE_TTS_ACCESS_TOKEN=
 APPLE_MUSIC_DEVELOPER_TOKEN=
@@ -1000,17 +1005,23 @@ export async function writeTempAudio(buffer: Buffer, extension = 'webm') {
 }
 ```
 
-- [ ] **Step 2: 实现 ASR provider**
+- [x] **Step 2: 实现 ASR provider**
 
 Create `/Users/sea/Documents/ai_alex/electron/main/providers/asrProvider.ts`.
 
 Implementation notes:
 
 - Read `VOLCENGINE_ASR_APP_ID` and `VOLCENGINE_ASR_ACCESS_TOKEN`.
-- Send recorded file to Volcengine recording-file ASR API.
+- Send recorded audio to Volcengine ASR submit/query API from Electron main process.
 - Add a provider boundary for realtime ASR: `startRealtimeAsr()` and `stopRealtimeAsr()` can initially return `realtime_asr_not_configured`, but the IPC and UI state must already be shaped for streaming integration.
 - Normalize all errors with `fail('asr_failed', '我刚刚没听清，可以再说一次吗？', true)`.
 - If credentials are missing, return `fail('asr_not_configured', '语音识别还没有配置火山引擎密钥。', false)`.
+
+Current implementation note:
+
+- 已新增 `/Users/sea/Documents/ai_alex/electron/main/providers/asrProvider.ts`，从主进程读取火山 ASR 环境变量，并通过 submit/query 模式提交录音和轮询识别结果。
+- 已在 `/Users/sea/Documents/ai_alex/electron/main/ipc/voiceHandlers.ts` 默认接入 `createVolcengineAsrProvider()`；测试仍可注入 mock provider。
+- 当前完成的是录音识别 Provider；实时 WebSocket ASR 仍作为下一阶段增强项，不影响手动录音识别闭环继续推进。
 
 - [ ] **Step 2A: 实现语音活动检测服务**
 
@@ -1090,7 +1101,7 @@ Current implementation note:
 
 - 已新增 `/Users/sea/Documents/ai_alex/src/composables/useKeyboardRecorder.ts`，按住空格时启动 `MediaRecorder`，松开后把音频 `ArrayBuffer` 发送给 `voice.stopAndTranscribe`。
 - 已新增 `/Users/sea/Documents/ai_alex/electron/main/ipc/voiceHandlers.ts`，主进程注册 `voice.startRecording` 和 `voice.stopAndTranscribe`，并通过可替换 `AsrProvider` 处理音频。
-- 当前 `AsrProvider` 仍是模拟识别文本；火山引擎 ASR 接入属于下一步，完成后再勾选 M2 验收。
+- 当前默认 `AsrProvider` 已切换为火山引擎录音识别 Provider；缺少密钥时会返回“语音识别还没有配置火山引擎密钥”，便于产品侧提示配置。
 
 - [x] **Step 4A: 实现自动聆听 composable**
 

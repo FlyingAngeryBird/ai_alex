@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module'
+import { createVolcengineAsrProvider, VolcengineAsrError } from '../providers/asrProvider.js'
 
 type AppResult<T> =
   | {
@@ -36,7 +37,7 @@ type ElectronRuntime = {
 
 const require = createRequire(import.meta.url)
 
-const mockAsrProvider: AsrProvider = {
+export const mockAsrProvider: AsrProvider = {
   async transcribe() {
     return {
       text: '我刚刚开口说话了'
@@ -75,7 +76,7 @@ function getIpcMain(): IpcMainLike {
 
 export function registerVoiceHandlers(
   ipc: IpcMainLike = getIpcMain(),
-  asrProvider: AsrProvider = mockAsrProvider
+  asrProvider: AsrProvider = createVolcengineAsrProvider()
 ): void {
   ipc.handle('voice.startRecording', () => ok({ ready: true }))
 
@@ -88,6 +89,10 @@ export function registerVoiceHandlers(
       const result = await asrProvider.transcribe(payload)
       return ok(result)
     } catch (error) {
+      if (error instanceof VolcengineAsrError && error.code === 'ASR_NOT_CONFIGURED') {
+        return fail('ASR_NOT_CONFIGURED', error.message)
+      }
+
       return fail(
         'VOICE_TRANSCRIBE_FAILED',
         error instanceof Error ? error.message : '语音识别失败'
