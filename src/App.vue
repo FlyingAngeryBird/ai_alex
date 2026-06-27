@@ -91,8 +91,10 @@ onBeforeUnmount(() => {
         <ConversationView
           :messages="conversation.messages.value"
           :state="conversation.particleState.value"
+          :auto-listen-state="conversation.autoListenState.value"
           :is-listening="conversation.isListening.value"
           @demo-music="runMusicDemo"
+          @toggle-auto-listen="conversation.toggleAutoListen"
         />
         <MiniPlayer
           v-if="music.hasActiveTrack.value"

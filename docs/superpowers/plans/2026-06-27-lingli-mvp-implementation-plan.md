@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 构建 macOS 第一版“灵粒”桌面 AI 语音伙伴，实现粒子球主界面、按住说话、火山引擎 ASR/LLM/TTS、当前会话记忆、Apple Music 搜索播放和沉浸音乐页。
+**Goal:** 构建 macOS 第一版“灵粒”桌面 AI 语音伙伴，实现粒子球主界面、自动监听/按住说话两种语音输入、火山引擎 ASR/LLM/TTS、当前会话记忆、Apple Music 搜索播放和沉浸音乐页。
 
 **Architecture:** 使用 Electron 主进程作为本地后端，Vue 3 渲染层只负责 UI 和交互。火山引擎、Apple Music、会话记忆、音频缓存全部封装在 provider/service 后面，通过统一 IPC 契约暴露给前端。
 
@@ -157,6 +157,16 @@ export type PlaybackState = {
   positionMs: number;
   durationMs: number | null;
 };
+
+export type VoiceInputMode = 'push_to_talk' | 'auto_listen';
+
+export type AutoListenState =
+  | 'off'
+  | 'armed'
+  | 'speech_detected'
+  | 'finalizing'
+  | 'paused_for_tts'
+  | 'error';
 ```
 
 ---
@@ -959,14 +969,16 @@ git commit -m "feat: add Lingli particle chat shell"
 
 ---
 
-## Task 5: M2 录音和火山 ASR
+## Task 5: M2 语音输入和火山 ASR
 
 **Files:**
 
 - Create: `/Users/sea/Documents/ai_alex/electron/main/providers/asrProvider.ts`
 - Create: `/Users/sea/Documents/ai_alex/electron/main/services/audioCache.ts`
+- Create: `/Users/sea/Documents/ai_alex/electron/main/services/voiceActivityService.ts`
 - Create: `/Users/sea/Documents/ai_alex/electron/main/ipc/voiceHandlers.ts`
 - Create: `/Users/sea/Documents/ai_alex/src/composables/useKeyboardRecorder.ts`
+- Create: `/Users/sea/Documents/ai_alex/src/composables/useAutoListen.ts`
 - Modify: `/Users/sea/Documents/ai_alex/electron/main/index.ts`
 - Modify: `/Users/sea/Documents/ai_alex/src/App.vue`
 
@@ -996,8 +1008,22 @@ Implementation notes:
 
 - Read `VOLCENGINE_ASR_APP_ID` and `VOLCENGINE_ASR_ACCESS_TOKEN`.
 - Send recorded file to Volcengine recording-file ASR API.
+- Add a provider boundary for realtime ASR: `startRealtimeAsr()` and `stopRealtimeAsr()` can initially return `realtime_asr_not_configured`, but the IPC and UI state must already be shaped for streaming integration.
 - Normalize all errors with `fail('asr_failed', '我刚刚没听清，可以再说一次吗？', true)`.
 - If credentials are missing, return `fail('asr_not_configured', '语音识别还没有配置火山引擎密钥。', false)`.
+
+- [ ] **Step 2A: 实现语音活动检测服务**
+
+Create `/Users/sea/Documents/ai_alex/electron/main/services/voiceActivityService.ts`.
+
+Behavior:
+
+- Expose thresholds for `speechStartLevel`, `speechEndLevel`, and `silenceMs`.
+- The renderer may perform local volume detection first, but the thresholds must live in one shared service/config so future native audio or streaming ASR can reuse them.
+- Default MVP thresholds:
+  - speechStartLevel: `0.08`
+  - speechEndLevel: `0.035`
+  - silenceMs: `900`
 
 - [ ] **Step 3: 实现 voice IPC**
 
@@ -1012,6 +1038,18 @@ import { writeTempAudio } from '../services/audioCache';
 export function registerVoiceHandlers() {
   ipcMain.handle('voice.startRecording', () => {
     return ok({ recording: true });
+  });
+
+  ipcMain.handle('voice.startRealtime', () => {
+    return ok({ mode: 'auto_listen', state: 'armed' });
+  });
+
+  ipcMain.handle('voice.stopRealtime', () => {
+    return ok({ mode: 'auto_listen', state: 'off' });
+  });
+
+  ipcMain.handle('voice.setAutoListen', (_event, payload: { enabled: boolean }) => {
+    return ok({ enabled: Boolean(payload?.enabled) });
   });
 
   ipcMain.handle('voice.stopAndTranscribe', async (_event, payload: { audio: ArrayBuffer; extension?: string }) => {
@@ -1048,6 +1086,19 @@ Behavior:
 - Prevent repeated keydown from starting multiple recorders.
 - Update particle state and status text.
 
+- [ ] **Step 4A: 实现自动聆听 composable**
+
+Create `/Users/sea/Documents/ai_alex/src/composables/useAutoListen.ts`.
+
+Behavior:
+
+- User can toggle auto listen on/off.
+- When enabled, request microphone permission and connect the stream to `AnalyserNode`.
+- If volume stays above `speechStartLevel` for a short debounce window, set state to `speech_detected` and particle to `listening`.
+- If volume stays below `speechEndLevel` for `silenceMs`, finalize the current utterance and call the same ASR/chat pipeline used by push-to-talk.
+- While TTS is playing, set state to `paused_for_tts` and do not capture AI output.
+- If microphone permission fails, return a recoverable message and keep push-to-talk available.
+
 - [ ] **Step 5: 验收 M2**
 
 Run:
@@ -1060,16 +1111,18 @@ npm run dev
 
 Manual acceptance:
 
-- 按住空格时状态变成“正在聆听”。
-- 松开空格后状态变成“正在理解”。
+- 手动模式：按住空格时状态变成“正在聆听”。
+- 手动模式：松开空格后状态变成“正在理解”。
+- 自动模式：开启自动聆听后，开口说话能进入“正在聆听”，停顿后自动进入“正在理解”。
+- TTS 播放时自动聆听暂停，播报结束后恢复到 armed 状态。
 - 火山 ASR 返回的中文文本出现在对话区。
 - 关闭麦克风权限时显示可恢复提示。
 
 Commit:
 
 ```bash
-git add electron/main/providers/asrProvider.ts electron/main/services/audioCache.ts electron/main/ipc/voiceHandlers.ts electron/main/index.ts src/composables/useKeyboardRecorder.ts src/App.vue
-git commit -m "feat: add push-to-talk ASR flow"
+git add electron/main/providers/asrProvider.ts electron/main/services/audioCache.ts electron/main/services/voiceActivityService.ts electron/main/ipc/voiceHandlers.ts electron/main/index.ts src/composables/useKeyboardRecorder.ts src/composables/useAutoListen.ts src/App.vue
+git commit -m "feat: add voice input ASR flow"
 ```
 
 ---
@@ -1534,7 +1587,7 @@ APPLE_MUSIC_DEVELOPER_TOKEN=真实值
 
 - macOS Electron 桌面应用：Task 1、Task 3、Task 10。
 - Vue + Three.js 粒子球：Task 4。
-- 按住空格录音：Task 5。
+- 自动监听/按住空格录音：Task 5。
 - 火山 ASR：Task 5。
 - 豆包 LLM 和记忆：Task 2、Task 6。
 - 火山 TTS：Task 7。

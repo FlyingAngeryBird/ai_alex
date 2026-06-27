@@ -18,6 +18,20 @@ describe('UI prototype state', () => {
     ])
   })
 
+  it('arms auto listen and pauses it while the assistant speaks', async () => {
+    const conversation = useConversation({ delayMs: 0 })
+
+    conversation.toggleAutoListen()
+    expect(conversation.autoListenState.value).toBe('armed')
+
+    conversation.startListening()
+    expect(conversation.autoListenState.value).toBe('speech_detected')
+
+    await conversation.stopListening('我今天想聊聊天')
+    expect(conversation.autoListenState.value).toBe('armed')
+    expect(conversation.particleState.value).toBe('idle')
+  })
+
   it('keeps music playback state available after leaving immersive view', () => {
     const music = useMusic()
 

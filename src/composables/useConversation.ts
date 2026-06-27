@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import type { ConversationResult, ParticleState, UiMessage } from '@/types/app'
+import type { AutoListenState, ConversationResult, ParticleState, UiMessage } from '@/types/app'
 
 type UseConversationOptions = {
   delayMs?: number
@@ -43,6 +43,7 @@ export function useConversation(options: UseConversationOptions = {}) {
   const delayMs = options.delayMs ?? 720
   const particleState = ref<ParticleState>('idle')
   const audioLevel = ref(0.12)
+  const autoListenState = ref<AutoListenState>('off')
   const isListening = ref(false)
   const messages = ref<UiMessage[]>([
     createMessage('assistant', '晚上好，我在这里。', 'idle')
@@ -56,8 +57,25 @@ export function useConversation(options: UseConversationOptions = {}) {
     }
 
     isListening.value = true
+    if (autoListenState.value === 'armed') {
+      autoListenState.value = 'speech_detected'
+    }
     particleState.value = 'listening'
     audioLevel.value = 0.42
+  }
+
+  function toggleAutoListen(): void {
+    if (autoListenState.value === 'off' || autoListenState.value === 'error') {
+      autoListenState.value = 'armed'
+      audioLevel.value = Math.max(audioLevel.value, 0.18)
+      return
+    }
+
+    autoListenState.value = 'off'
+    if (!isListening.value && particleState.value === 'listening') {
+      particleState.value = 'idle'
+      audioLevel.value = 0.14
+    }
   }
 
   async function stopListening(text = DEFAULT_USER_TEXT): Promise<ConversationResult> {
@@ -70,6 +88,9 @@ export function useConversation(options: UseConversationOptions = {}) {
     const intent = detectIntent(normalizedText)
 
     messages.value.push(createMessage('user', normalizedText, 'listening'))
+    if (autoListenState.value === 'speech_detected') {
+      autoListenState.value = 'finalizing'
+    }
     particleState.value = 'thinking'
     audioLevel.value = 0.24
 
@@ -77,11 +98,17 @@ export function useConversation(options: UseConversationOptions = {}) {
 
     messages.value.push(createMessage('assistant', buildAssistantReply(intent), 'speaking'))
     particleState.value = 'speaking'
+    if (autoListenState.value !== 'off') {
+      autoListenState.value = 'paused_for_tts'
+    }
     audioLevel.value = intent === 'play_music' ? 0.56 : 0.38
 
     await wait(delayMs)
 
     particleState.value = 'idle'
+    if (autoListenState.value === 'paused_for_tts') {
+      autoListenState.value = 'armed'
+    }
     audioLevel.value = 0.14
 
     return {
@@ -97,12 +124,14 @@ export function useConversation(options: UseConversationOptions = {}) {
 
   return {
     audioLevel,
+    autoListenState,
     isListening,
     latestMessage,
     messages,
     particleState,
     sendMusicDemoRequest,
     startListening,
-    stopListening
+    stopListening,
+    toggleAutoListen
   }
 }

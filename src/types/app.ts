@@ -8,6 +8,16 @@ export type ParticleState =
 
 export type ViewMode = 'conversation' | 'music'
 
+export type VoiceInputMode = 'push_to_talk' | 'auto_listen'
+
+export type AutoListenState =
+  | 'off'
+  | 'armed'
+  | 'speech_detected'
+  | 'finalizing'
+  | 'paused_for_tts'
+  | 'error'
+
 export type UiMessage = {
   id: string
   role: 'user' | 'assistant' | 'system'

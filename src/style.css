@@ -64,8 +64,8 @@ button:focus-visible {
 }
 
 .app-shell[data-view="conversation"] .particle-stage {
-  inset: 0 0 200px;
-  transform: translateY(-18px);
+  inset: 0 0 188px;
+  transform: translateY(-22px);
 }
 
 .particle-sphere {
@@ -94,7 +94,7 @@ button:focus-visible {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   align-items: end;
-  width: min(720px, calc(100vw - 72px));
+  width: min(700px, calc(100vw - 72px));
   height: 100%;
   margin: 0 auto;
   padding: 28px 0 18px;
@@ -103,12 +103,16 @@ button:focus-visible {
 .conversation-panel {
   align-self: end;
   width: 100%;
-  padding: 12px;
-  border: 1px solid rgba(255, 245, 224, 0.12);
+  padding: 12px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
-  background: rgba(8, 9, 14, 0.48);
-  box-shadow: 0 16px 64px rgba(0, 0, 0, 0.26);
-  backdrop-filter: blur(14px);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.035)),
+    rgba(9, 10, 16, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 18px 72px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(26px) saturate(1.28);
 }
 
 .conversation-header,
@@ -199,10 +203,10 @@ h1 {
 .message-row {
   max-width: min(560px, 88%);
   padding: 8px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
   color: #e9e4d8;
-  background: rgba(255, 255, 255, 0.045);
+  background: rgba(255, 255, 255, 0.06);
   font-size: 0.92rem;
   line-height: 1.42;
 }
@@ -214,7 +218,7 @@ h1 {
 .message-row--user {
   align-self: flex-end;
   color: #07100f;
-  background: #a9f0df;
+  background: rgba(169, 240, 223, 0.86);
 }
 
 .message-row--assistant {
@@ -225,13 +229,13 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  min-width: 168px;
+  min-width: 158px;
   height: 38px;
   padding: 0 12px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 8px;
   color: #d8d2c4;
-  background: rgba(255, 255, 255, 0.055);
+  background: rgba(255, 255, 255, 0.065);
 }
 
 .space-cue span {
@@ -254,10 +258,18 @@ h1 {
   background: rgba(0, 213, 200, 0.1);
 }
 
+.action-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
 .icon-text-button,
 .primary-play-button,
 .round-button,
-.mini-track {
+.mini-track,
+.auto-listen-toggle {
   border: 1px solid rgba(255, 255, 255, 0.14);
   cursor: pointer;
 }
@@ -271,10 +283,53 @@ h1 {
   background: rgba(255, 225, 111, 0.1);
 }
 
+.auto-listen-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 8px;
+  color: #e9e2d2;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.auto-listen-toggle[aria-checked="true"] {
+  border-color: rgba(143, 228, 203, 0.42);
+  color: #e6fff8;
+  background: rgba(93, 221, 189, 0.12);
+}
+
+.switch-track {
+  position: relative;
+  width: 30px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.switch-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(255, 248, 230, 0.92);
+  transition: transform 180ms ease;
+}
+
+.auto-listen-toggle[aria-checked="true"] .switch-thumb {
+  transform: translateX(12px);
+  background: #8fe4cb;
+}
+
 .icon-text-button:hover,
 .primary-play-button:hover,
 .round-button:hover,
-.mini-track:hover {
+.mini-track:hover,
+.auto-listen-toggle:hover {
   border-color: rgba(255, 225, 111, 0.44);
 }
 
@@ -495,6 +550,14 @@ h1 {
     padding-bottom: 16px;
   }
 
+  .conversation-actions {
+    gap: 10px;
+  }
+
+  .action-cluster {
+    gap: 8px;
+  }
+
   .music-view {
     padding: 22px 24px 28px;
   }
@@ -515,12 +578,12 @@ h1 {
 
 @media (max-height: 720px) {
   .app-shell[data-view="conversation"] .particle-stage {
-    bottom: 190px;
-    transform: translateY(-22px);
+    bottom: 176px;
+    transform: translateY(-26px);
   }
 
   .message-list {
-    max-height: 64px;
+    max-height: 58px;
   }
 
   .cover-art {

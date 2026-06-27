@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import type { ParticleState, UiMessage } from '@/types/app'
+import type { AutoListenState, ParticleState, UiMessage } from '@/types/app'
 
 defineProps<{
+  autoListenState: AutoListenState
   isListening: boolean
   messages: UiMessage[]
   state: ParticleState
@@ -9,6 +10,7 @@ defineProps<{
 
 defineEmits<{
   demoMusic: []
+  toggleAutoListen: []
 }>()
 
 const statusText: Record<ParticleState, string> = {
@@ -50,9 +52,21 @@ const statusText: Record<ParticleState, string> = {
         <span>Space</span>
         <b>{{ isListening ? '松开发送' : '按住说话' }}</b>
       </div>
-      <button class="icon-text-button" type="button" @click="$emit('demoMusic')">
-        ♪ 演示音乐页
-      </button>
+      <div class="action-cluster">
+        <button
+          class="auto-listen-toggle"
+          type="button"
+          role="switch"
+          :aria-checked="autoListenState !== 'off'"
+          @click="$emit('toggleAutoListen')"
+        >
+          <span class="switch-track"><span class="switch-thumb" /></span>
+          <b>{{ autoListenState === 'speech_detected' ? '聆听中' : autoListenState === 'off' ? '自动聆听' : '自动开' }}</b>
+        </button>
+        <button class="icon-text-button" type="button" @click="$emit('demoMusic')">
+          ♪ 演示音乐页
+        </button>
+      </div>
     </footer>
   </div>
 </template>

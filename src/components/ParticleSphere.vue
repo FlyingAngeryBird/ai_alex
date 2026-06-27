@@ -18,12 +18,12 @@ type VisualConfig = {
 }
 
 const stateConfig: Record<ParticleState, VisualConfig> = {
-  idle: createConfig(['#eeb95d', '#45cfee', '#df7f9e', '#5eddbd', '#d6bf68'], 0.82, 0.023, 1.3, 0.38, 0.02),
-  listening: createConfig(['#e7fff7', '#97ffe4', '#00e0a4', '#6ee7ff'], 0.82, 0.026, 1.42, 0.78, 0.036),
-  thinking: createConfig(['#ffc266', '#ff8f64', '#ff6f91', '#b88cff'], 0.76, 0.019, 1.12, 0.98, 0.012),
-  speaking: createConfig(['#fff7e6', '#f7d987', '#80e4ff', '#b8f6ea'], 0.88, 0.027, 1.4, 0.82, 0.044),
-  playing: createConfig(['#ffe16f', '#ff8f64', '#00d5c8', '#84ddff'], 0.9, 0.028, 1.5, 1.05, 0.052),
-  error: createConfig(['#ff8f8f', '#c85d6d', '#6b2534'], 0.54, 0.02, 1.18, 0.28, 0.008)
+  idle: createConfig(['#f0c879', '#72d6ec', '#d987a4', '#8fe4cb', '#d8c578'], 0.82, 0.023, 1.16, 0.36, 0.018),
+  listening: createConfig(['#e7fff7', '#97ffe4', '#00e0a4', '#6ee7ff'], 0.84, 0.026, 1.26, 0.76, 0.032),
+  thinking: createConfig(['#ffc266', '#ff8f64', '#ff6f91', '#b88cff'], 0.76, 0.019, 1.04, 0.96, 0.011),
+  speaking: createConfig(['#fff7e6', '#f7d987', '#80e4ff', '#b8f6ea'], 0.88, 0.027, 1.24, 0.8, 0.04),
+  playing: createConfig(['#ffe16f', '#ff8f64', '#00d5c8', '#84ddff'], 0.9, 0.028, 1.36, 1.02, 0.048),
+  error: createConfig(['#ff8f8f', '#c85d6d', '#6b2534'], 0.54, 0.02, 1.08, 0.28, 0.008)
 }
 
 const container = ref<HTMLElement | null>(null)
