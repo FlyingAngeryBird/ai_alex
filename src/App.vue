@@ -6,10 +6,12 @@ import MusicImmersiveView from '@/components/MusicImmersiveView.vue'
 import ParticleSphere from '@/components/ParticleSphere.vue'
 import { useAutoListen } from '@/composables/useAutoListen'
 import { useConversation } from '@/composables/useConversation'
+import { useKeyboardRecorder } from '@/composables/useKeyboardRecorder'
 import { useMusic } from '@/composables/useMusic'
 import type { ParticleState } from '@/types/app'
 
 const conversation = useConversation()
+const keyboardRecorder = useKeyboardRecorder()
 const music = useMusic()
 const spaceHeld = ref(false)
 const viewMode = computed(() => music.viewMode.value)
@@ -20,22 +22,19 @@ const autoListen = useAutoListen({
     music.viewMode.value === 'conversation' &&
     !spaceHeld.value &&
     autoDetectableStates.has(conversation.autoListenState.value),
-  onSpeechStart: () => {
+  onSpeechStart: async () => {
     if (conversation.autoListenState.value !== 'armed' || music.viewMode.value !== 'conversation') {
       return
     }
 
-    conversation.startListening()
+    await startVoiceCapture()
   },
   onSpeechEnd: async () => {
     if (!conversation.isListening.value || music.viewMode.value !== 'conversation') {
       return
     }
 
-    const result = await conversation.stopListening('我刚刚开口说话了')
-    if (result.intent === 'play_music') {
-      music.startDemoTrack()
-    }
+    await finishVoiceCapture('我刚刚开口说话了')
   }
 })
 
@@ -71,6 +70,34 @@ async function runMusicDemo(): Promise<void> {
   }
 }
 
+async function startVoiceCapture(): Promise<void> {
+  try {
+    await keyboardRecorder.start()
+  } catch {
+    // Keep the prototype interactive even before Electron voice services are fully configured.
+  }
+
+  conversation.startListening()
+}
+
+async function finishVoiceCapture(fallbackText = '我想和你聊聊今天的心情'): Promise<void> {
+  let text = fallbackText
+
+  if (keyboardRecorder.isRecording.value) {
+    try {
+      const transcription = await keyboardRecorder.stopAndTranscribe()
+      text = transcription.text || fallbackText
+    } catch {
+      text = fallbackText
+    }
+  }
+
+  const result = await conversation.stopListening(text)
+  if (result.intent === 'play_music') {
+    music.startDemoTrack()
+  }
+}
+
 async function toggleAutoListen(): Promise<void> {
   if (conversation.autoListenState.value === 'off' || conversation.autoListenState.value === 'error') {
     const didStart = await autoListen.start()
@@ -94,20 +121,17 @@ async function handleKeyUp(event: KeyboardEvent): Promise<void> {
   event.preventDefault()
   spaceHeld.value = false
 
-  const result = await conversation.stopListening()
-  if (result.intent === 'play_music') {
-    music.startDemoTrack()
-  }
+  await finishVoiceCapture()
 }
 
-function handleKeyDown(event: KeyboardEvent): void {
+async function handleKeyDown(event: KeyboardEvent): Promise<void> {
   if (event.code !== 'Space' || event.repeat || music.viewMode.value !== 'conversation') {
     return
   }
 
   event.preventDefault()
   spaceHeld.value = true
-  conversation.startListening()
+  await startVoiceCapture()
 }
 
 onMounted(() => {

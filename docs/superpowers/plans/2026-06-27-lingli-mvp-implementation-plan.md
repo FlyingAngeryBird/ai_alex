@@ -1075,7 +1075,7 @@ app.whenReady().then(() => {
 });
 ```
 
-- [ ] **Step 4: 实现前端录音 composable**
+- [x] **Step 4: 实现前端录音 composable**
 
 Create `/Users/sea/Documents/ai_alex/src/composables/useKeyboardRecorder.ts`.
 
@@ -1085,6 +1085,12 @@ Behavior:
 - On Space keyup: stop recorder, send Blob ArrayBuffer to `voice.stopAndTranscribe`.
 - Prevent repeated keydown from starting multiple recorders.
 - Update particle state and status text.
+
+Current implementation note:
+
+- 已新增 `/Users/sea/Documents/ai_alex/src/composables/useKeyboardRecorder.ts`，按住空格时启动 `MediaRecorder`，松开后把音频 `ArrayBuffer` 发送给 `voice.stopAndTranscribe`。
+- 已新增 `/Users/sea/Documents/ai_alex/electron/main/ipc/voiceHandlers.ts`，主进程注册 `voice.startRecording` 和 `voice.stopAndTranscribe`，并通过可替换 `AsrProvider` 处理音频。
+- 当前 `AsrProvider` 仍是模拟识别文本；火山引擎 ASR 接入属于下一步，完成后再勾选 M2 验收。
 
 - [x] **Step 4A: 实现自动聆听 composable**
 
@@ -1103,7 +1109,7 @@ Current implementation note:
 
 - 已新增 `/Users/sea/Documents/ai_alex/src/services/voiceActivity.ts`，用可测试的语音活动检测器判断 `speech_start` / `speech_end`。
 - 已新增 `/Users/sea/Documents/ai_alex/src/composables/useAutoListen.ts`，负责麦克风权限、音量采样、自动聆听开关和清理资源。
-- 已接入 `/Users/sea/Documents/ai_alex/src/App.vue` 原型状态机；当前版本自动结束后仍使用模拟文本，等 Step 4 / 火山 ASR 完成后接入真实识别文本。
+- 已接入 `/Users/sea/Documents/ai_alex/src/App.vue` 原型状态机；当前版本自动结束后会复用录音通道，并由主进程模拟 ASR 返回文本，等火山 ASR 完成后替换真实识别文本。
 
 - [ ] **Step 5: 验收 M2**
 
