@@ -1,144 +1,153 @@
-# Lingli MVP Design
+# 灵粒 MVP 设计规格
 
-Date: 2026-06-27
-Status: Draft for user review
-Platform: macOS first
+日期：2026-06-27
+状态：等待用户审核
+平台：macOS 第一版
 
-## 1. Confirmed Product Goal
+## 1. 已确认的产品目标
 
-Lingli is a macOS desktop AI voice companion. When the user opens the app, they see a soft, artistic, animated particle sphere. The user holds Space to speak, releases to send, and Lingli responds with text and voice. The app keeps short-term conversation memory during the current session.
+灵粒是一款 macOS 桌面 AI 语音伙伴应用。用户打开应用后，会看到一个柔和、有艺术感、持续呼吸律动的动态粒子球。用户按住空格键说话，松开后发送语音；灵粒会识别语音、理解上下文，并用文字和语音回复用户。
 
-When the user asks for music, Lingli detects the music intent, searches Apple Music, enters an immersive playback view, and keeps the particle sphere moving with the audio or playback state.
+应用在 MVP 阶段保留当前会话内的短期记忆。用户可以连续聊天，灵粒需要理解前后文，而不是每一句都当成孤立问题。
 
-## 2. Confirmed Scope
+当用户表达播放音乐的意图时，灵粒会识别该意图，使用 Apple Music 搜索音乐，进入沉浸式音乐播放页，并让粒子球根据音频或播放状态继续律动。
 
-MVP must include:
+## 2. 已确认的产品范围
 
-- macOS Electron desktop app.
-- Vue 3 front end with a Three.js particle sphere.
-- Hold Space to record, release to send.
-- Volcengine ASR for speech recognition.
-- Volcengine Ark / Doubao LLM for warm multi-turn conversation.
-- Volcengine TTS for AI voice playback.
-- Apple Music MusicKit as the primary music provider.
-- Music search, playback, pause/resume, return to chat.
-- Session memory for recent conversation turns.
-- Clear loading, success, and failure states for each user action.
+MVP 必须包含：
 
-MVP does not include:
+- macOS Electron 桌面应用。
+- Vue 3 前端界面。
+- Three.js 动态粒子球。
+- 按住空格录音，松开后发送识别。
+- 火山引擎 ASR 语音识别。
+- 火山方舟 / 豆包大模型多轮对话。
+- 火山引擎 TTS 语音合成和播报。
+- Apple Music MusicKit 作为主要音乐服务。
+- 音乐搜索、播放、暂停/继续、返回对话。
+- 当前会话内的短期记忆。
+- 每个用户操作都有明确的加载、成功、失败反馈。
 
-- Windows packaging.
-- Login/account system beyond Apple Music authorization.
-- Long-term memory persisted across app restarts.
-- Guaranteed synced lyrics for every song.
-- Music collection, playlist management, likes, or recommendations based on saved listening history.
+MVP 不包含：
 
-## 3. Key Product Decisions
+- Windows 打包。
+- 除 Apple Music 授权外的用户账号系统。
+- 应用重启后仍保留的长期记忆。
+- 每首歌都保证有逐句同步歌词。
+- 音乐收藏、歌单管理、喜欢歌曲、基于历史偏好的长期推荐。
 
-### 3.1 macOS First
+## 3. 关键产品决策
 
-The first release is developed and accepted on macOS only. Windows packaging is a later phase after the core experience is stable.
+### 3.1 第一版只做 macOS
 
-### 3.2 Volcengine AI Chain
+第一版只在 macOS 上开发和验收。等核心体验稳定后，再考虑 Windows 版本。
 
-The AI chain uses Volcengine:
+### 3.2 AI 链路统一使用火山引擎
 
-- ASR: recording-file recognition first, not streaming ASR.
-- LLM: Ark / Doubao chat model.
-- TTS: Volcengine TTS, preferably streaming if stable during integration.
+MVP 的 AI 链路使用火山引擎：
 
-The first version prioritizes a reliable push-to-talk flow over real-time interruption.
+- ASR：优先使用录音文件识别，不做第一版流式识别。
+- LLM：使用火山方舟 / 豆包对话模型。
+- TTS：使用火山引擎语音合成，如果流式 TTS 接入稳定，则优先使用流式方案。
 
-### 3.3 Apple Music Main Provider
+第一版优先保证“按住说话、松开发送、AI 回复”的可靠体验，不做实时打断和实时字幕。
 
-Apple Music MusicKit is the primary music provider. The app must not depend on unofficial NetEase Cloud Music APIs.
+### 3.3 音乐主链路使用 Apple Music
 
-MusicKit requirements and limits:
+Apple Music MusicKit 是 MVP 的主要音乐服务。应用不依赖任何非官方网易云音乐 API。
 
-- The user may need to authorize Apple Music.
-- Full playback may depend on the user's Apple Music subscription and regional availability.
-- Some songs may not be playable.
-- Official synced lyric access may not be stable or complete enough for MVP.
+Apple Music 的产品限制需要提前接受：
 
-Therefore, synced lyrics are an enhancement, not a blocking MVP requirement. If lyrics are unavailable, the immersive page shows song metadata, artwork, playback progress, and Lingli's recommendation text.
+- 用户可能需要完成 Apple Music 授权。
+- 完整播放可能依赖用户的 Apple Music 订阅和所在地区。
+- 部分歌曲可能无法播放。
+- 官方逐句歌词能力不一定能稳定开放给第三方应用。
 
-## 4. Architecture
+因此，逐句同步歌词是优先能力，但不是 MVP 阻塞项。如果拿不到歌词，沉浸播放页需要降级展示歌曲信息、封面、播放进度和灵粒的推荐理由。
 
-The app is split into three layers.
+## 4. 技术架构
 
-### 4.1 Renderer Front End
+应用分为三层：
 
-Technology:
+1. 前端渲染层。
+2. Electron 主进程本地后端。
+3. 外部服务层。
+
+### 4.1 前端渲染层
+
+技术：
 
 - Vue 3
 - Vite
 - Three.js
 - Web Audio API
 
-Responsibilities:
+职责：
 
-- Particle sphere rendering.
-- Chat interface.
-- Recording interaction states.
-- Keyboard handling for Space.
-- Music immersive page.
-- Playback controls.
-- Lyrics display when available.
-- Audio spectrum analysis when browser-accessible audio is available.
+- 渲染粒子球。
+- 展示聊天界面。
+- 管理录音交互状态。
+- 监听空格键按下和松开。
+- 展示沉浸式音乐页。
+- 控制音乐播放 UI。
+- 在歌词可用时展示歌词。
+- 在可访问音频数据时分析音频频谱，驱动粒子球律动。
 
-The renderer must not read cloud secrets or call Volcengine directly.
+前端不能读取云服务密钥，也不能直接调用火山引擎接口。
 
-### 4.2 Electron Main Process
+### 4.2 Electron 主进程
 
-Responsibilities:
+职责：
 
-- Desktop window lifecycle.
-- Environment variable loading.
-- IPC request handling.
-- Volcengine API calls.
-- Apple Music provider bridge where applicable.
-- Temporary audio file and cache management.
-- Conversation memory.
-- Intent routing.
-- Error normalization.
+- 管理桌面窗口生命周期。
+- 读取环境变量。
+- 处理前端 IPC 请求。
+- 调用火山引擎 ASR / LLM / TTS。
+- 处理 Apple Music 授权和音乐服务桥接。
+- 管理临时音频文件和缓存。
+- 管理当前会话记忆。
+- 处理意图路由。
+- 统一错误格式。
 
-The main process acts as the local backend.
+主进程是本应用的“本地后端”。
 
-### 4.3 External Services
+### 4.3 外部服务层
 
-Services:
+外部服务包括：
 
-- Volcengine ASR
-- Volcengine Ark / Doubao LLM
-- Volcengine TTS
-- Apple Music MusicKit / Apple Music API
+- 火山引擎 ASR。
+- 火山方舟 / 豆包 LLM。
+- 火山引擎 TTS。
+- Apple Music MusicKit / Apple Music API。
 
-All external services must be wrapped behind local provider interfaces so they can be replaced later.
+所有外部服务都必须封装在本地 provider 接口后面，方便后续替换。
 
-## 5. Main Modules
+## 5. 主要模块
 
-### 5.1 Renderer Modules
+### 5.1 前端模块
 
-- `ParticleSphere`: renders the visual sphere and accepts state/audio inputs.
-- `ConversationView`: displays messages and interaction status.
-- `RecordingController`: manages key press UI state and calls IPC.
-- `MusicImmersiveView`: displays music playback, artwork, progress, lyrics when available, and return control.
-- `AudioAnalyser`: converts playable audio into amplitude/frequency values for the particle sphere.
+- `ParticleSphere`：渲染粒子球，并接收状态和音频输入。
+- `ConversationView`：展示聊天消息和交互状态。
+- `RecordingController`：管理按键录音 UI 状态，并调用 IPC。
+- `MusicImmersiveView`：展示音乐播放页、封面、进度、歌词和返回控制。
+- `AudioAnalyser`：把可访问的音频转成音量/频率数据，驱动粒子球。
 
-### 5.2 Main Process Modules
+### 5.2 主进程模块
 
-- `asrProvider`: sends recorded audio to Volcengine ASR and returns text.
-- `llmProvider`: sends messages to Doubao and returns structured assistant output.
-- `ttsProvider`: converts assistant text to playable audio.
-- `musicProvider`: searches and plays Apple Music content.
-- `memoryService`: stores the recent session conversation.
-- `intentService`: interprets LLM output and routes music actions.
-- `audioCache`: stores temporary recordings and TTS audio.
-- `ipcHandlers`: exposes safe capabilities to the renderer.
+- `asrProvider`：把录音发送给火山 ASR，返回识别文本。
+- `llmProvider`：把消息发送给豆包模型，返回结构化 AI 回复。
+- `ttsProvider`：把 AI 回复文本转换成可播放语音。
+- `musicProvider`：搜索和播放 Apple Music 内容。
+- `memoryService`：保存当前会话最近的对话上下文。
+- `intentService`：解析大模型结果，并路由音乐等意图。
+- `audioCache`：保存临时录音和 TTS 音频。
+- `ipcHandlers`：向前端暴露安全的能力调用。
 
-## 6. IPC Capability Contract
+## 6. IPC 能力契约
 
-Renderer-to-main calls:
+前端只能通过 IPC 调用主进程能力。
+
+需要暴露的能力：
 
 - `voice.startRecording`
 - `voice.stopAndTranscribe`
@@ -152,7 +161,7 @@ Renderer-to-main calls:
 - `music.getPlaybackState`
 - `app.getRuntimeState`
 
-Each IPC response must use a consistent shape:
+每个 IPC 响应必须使用统一格式：
 
 ```ts
 type AppResult<T> =
@@ -160,25 +169,27 @@ type AppResult<T> =
   | { ok: false; error: { code: string; message: string; recoverable: boolean } };
 ```
 
-## 7. Conversation Flow
+## 7. 对话流程
 
-1. App opens.
-2. Particle sphere enters `idle`.
-3. Lingli greets the user with a warm opening line.
-4. User holds Space.
-5. Front end enters `listening`.
-6. User releases Space.
-7. Main process sends audio to ASR.
-8. Front end enters `thinking`.
-9. Main process sends recognized text and memory to LLM.
-10. LLM returns structured response.
-11. If intent is normal chat, TTS speaks the answer and particle enters `speaking`.
-12. If intent is music, app searches Apple Music and enters the music flow.
-13. When speaking or playback ends, state returns to `idle` or `playing`.
+1. 用户打开应用。
+2. 粒子球进入 `idle` 待机状态。
+3. 灵粒用一句温暖的开场白问候用户。
+4. 用户按住空格键。
+5. 前端进入 `listening` 聆听状态。
+6. 用户松开空格键。
+7. 主进程把录音发送给火山 ASR。
+8. 前端进入 `thinking` 思考状态。
+9. 主进程把识别文本和会话记忆发送给豆包模型。
+10. 豆包模型返回结构化回复。
+11. 如果是普通聊天，主进程调用 TTS，灵粒播报回复，粒子进入 `speaking` 状态。
+12. 如果是音乐意图，应用搜索 Apple Music，并进入音乐流程。
+13. 播报结束后回到 `idle`；音乐播放中保持 `playing` 状态。
 
-## 8. LLM Output Contract
+## 8. 大模型输出契约
 
-The LLM should return structured JSON that the app can route safely:
+大模型需要尽量返回可路由的结构化 JSON。
+
+普通聊天：
 
 ```json
 {
@@ -188,7 +199,7 @@ The LLM should return structured JSON that the app can route safely:
 }
 ```
 
-For music:
+音乐意图：
 
 ```json
 {
@@ -201,219 +212,221 @@ For music:
 }
 ```
 
-If the model returns invalid JSON, the app treats it as normal chat and logs a recoverable routing error.
+如果模型返回了非法 JSON，应用不能崩溃。系统应当把它当成普通聊天文本处理，并记录一个可恢复的路由错误。
 
-## 9. Particle States
+## 9. 粒子球状态
 
-Required states:
+必须支持的状态：
 
-- `idle`: slow breathing, soft rotation.
-- `listening`: brighter, faster, more responsive.
-- `thinking`: gathered, pulsing, slightly tighter.
-- `speaking`: driven by TTS audio amplitude.
-- `playing`: driven by music audio or playback state fallback.
-- `error`: calm dim state with visible recovery text.
+- `idle`：缓慢呼吸，柔和自转。
+- `listening`：变亮、加速、更敏感。
+- `thinking`：粒子收拢、脉冲、略微紧致。
+- `speaking`：根据 TTS 音频强弱变化。
+- `playing`：根据音乐音频或播放状态律动。
+- `error`：平静降亮，并展示可恢复提示。
 
-The particle component must expose a simple input API:
+粒子组件需要暴露简单输入 API：
 
 ```ts
 setVisualState(state: ParticleState): void
 setAudioLevel(level: number): void
 ```
 
-## 10. Music Flow
+## 10. 音乐流程
 
-1. LLM returns `intent: "play_music"`.
-2. Main process checks Apple Music authorization.
-3. If not authorized, renderer asks the user to authorize.
-4. `musicProvider.search(query)` returns candidate songs.
-5. The app chooses the best candidate for MVP, usually the first playable result.
-6. Renderer enters `MusicImmersiveView`.
-7. Playback starts.
-8. Lyrics are loaded only if officially available.
-9. If lyrics are unavailable, the page shows artwork, metadata, progress, and Lingli's recommendation text.
-10. Return button goes back to the chat view and keeps music playing in a compact mini-player.
-11. The compact mini-player provides pause/resume and a way to return to the immersive music page.
+1. 大模型返回 `intent: "play_music"`。
+2. 主进程检查 Apple Music 授权状态。
+3. 如果未授权，前端引导用户完成授权。
+4. `musicProvider.search(query)` 返回候选歌曲。
+5. MVP 阶段默认选择最合适的可播放结果，通常是第一首可播放歌曲。
+6. 前端进入 `MusicImmersiveView` 沉浸播放页。
+7. 开始播放音乐。
+8. 仅在官方能力可用时加载歌词。
+9. 如果没有歌词，页面展示封面、歌曲信息、进度和灵粒推荐理由。
+10. 点击返回按钮回到对话页，同时保留一个紧凑音乐播放器。
+11. 紧凑音乐播放器提供暂停/继续，并支持重新进入沉浸播放页。
 
-## 11. Acceptance Gates
+## 11. 分阶段验收门禁
 
-### M0 Project Foundation
+### M0 工程底座
 
-Goal: create a clean macOS Electron app foundation.
+目标：建立干净的 macOS Electron 应用基础。
 
-Result:
+交付结果：
 
-- Electron + Vue app starts.
-- Directory structure is clear.
-- Environment variables are ignored by Git.
-- IPC can round-trip a test request.
+- Electron + Vue 应用可以启动。
+- 目录结构清晰。
+- 环境变量被 Git 忽略。
+- IPC 可以完成一次测试通信。
 
-Acceptance:
+验收标准：
 
-- The app opens on macOS.
-- Renderer cannot access Volcengine secrets.
-- `.env` is not committed.
-- `.superpowers/` is ignored.
+- 应用可以在 macOS 打开。
+- 前端无法访问火山引擎密钥。
+- `.env` 不会被提交。
+- `.superpowers/` 被忽略。
 
-### M1 Particle UI
+### M1 粒子 UI
 
-Goal: create Lingli's core visual identity.
+目标：建立灵粒的核心视觉识别。
 
-Result:
+交付结果：
 
-- A central particle sphere with soft color, breathing, rotation, and state transitions.
+- 页面中央有柔和、有呼吸感、有渐变和状态切换的粒子球。
 
-Acceptance:
+验收标准：
 
-- Supports `idle`, `listening`, `thinking`, `speaking`, and `playing`.
-- State transitions are visible and smooth.
-- The reference particle HTML is used as visual inspiration.
-- UI does not overlap at common macOS laptop sizes.
+- 支持 `idle`、`listening`、`thinking`、`speaking`、`playing`。
+- 状态切换肉眼可见且流畅。
+- 当前目录中的粒子参考 HTML 作为视觉参考。
+- 常见 macOS 笔记本窗口尺寸下，UI 不重叠、不溢出。
 
-### M2 Recording and ASR
+### M2 录音和 ASR
 
-Goal: convert user speech into text.
+目标：把用户语音转换成文字。
 
-Result:
+交付结果：
 
-- Hold Space to record.
-- Release Space to transcribe with Volcengine ASR.
+- 按住空格键录音。
+- 松开空格键后，调用火山 ASR 识别。
 
-Acceptance:
+验收标准：
 
-- Recording starts only while Space is held.
-- Releasing Space sends the audio.
-- Mandarin speech returns usable text.
-- Failure shows a warm recoverable message.
+- 只有按住空格时才录音。
+- 松开空格后自动发送音频。
+- 中文普通话可以返回可用文本。
+- 失败时展示温和、可恢复的提示。
 
-### M3 LLM and Session Memory
+### M3 LLM 和会话记忆
 
-Goal: enable warm multi-turn conversation.
+目标：实现温暖、连续的多轮对话。
 
-Result:
+交付结果：
 
-- User text is sent to Doubao with system prompt and recent context.
-- Assistant returns structured output.
+- 用户文本和最近会话上下文发送给豆包模型。
+- AI 返回结构化结果。
 
-Acceptance:
+验收标准：
 
-- Five continuous chat turns retain context.
-- Tone is warm and natural.
-- Music intent can be represented as structured output.
-- Invalid model output does not crash the app.
+- 连续 5 轮聊天不丢失前文背景。
+- 回复语气温暖、自然，不机械。
+- 音乐意图可以用结构化结果表达。
+- 模型输出异常时应用不崩溃。
 
-### M4 TTS and Speaking State
+### M4 TTS 和说话状态
 
-Goal: make Lingli speak.
+目标：让灵粒真正“说话”。
 
-Result:
+交付结果：
 
-- Assistant text is converted to speech.
-- Audio plays automatically.
-- Particle responds to speech.
+- AI 文本回复转换成语音。
+- 语音自动播放。
+- 粒子球跟随语音波动。
 
-Acceptance:
+验收标准：
 
-- TTS starts after reply generation.
-- User can hear the response.
-- Particle visibly responds during playback.
-- End of playback returns to the correct state.
+- 回复生成后能启动 TTS。
+- 用户能听到回复语音。
+- 播放过程中粒子球有明显音频响应。
+- 播放结束后回到正确状态。
 
-### M5 Apple Music Intent and Search
+### M5 Apple Music 意图和搜索
 
-Goal: turn music requests into playable search results.
+目标：把音乐请求转换成 Apple Music 搜索结果。
 
-Result:
+交付结果：
 
-- Music intent triggers Apple Music search.
-- App obtains song metadata and playable state.
+- 音乐意图触发 Apple Music 搜索。
+- 应用获取歌曲元数据和可播放状态。
 
-Acceptance:
+验收标准：
 
-- "播放一首轻松的音乐" triggers music flow.
-- Normal conversation does not accidentally trigger music.
-- Unauthorized Apple Music state is handled.
-- Unplayable song state is handled.
+- 用户说“播放一首轻松的音乐”可以触发音乐流程。
+- 普通聊天不会误触发音乐。
+- 未授权 Apple Music 时有明确引导。
+- 歌曲不可播放时有明确提示。
 
-### M6 Immersive Music Page
+### M6 沉浸音乐页
 
-Goal: deliver the first complete music experience.
+目标：完成第一版音乐体验。
 
-Result:
+交付结果：
 
-- Music page shows song metadata, artwork, progress, controls, and lyrics if available.
+- 音乐页展示歌曲信息、封面、进度、控制按钮，以及可用时的歌词。
 
-Acceptance:
+验收标准：
 
-- Play, pause, resume, and return work.
-- Returning to chat keeps playback available in a compact mini-player.
-- Particle moves with audio if available, or with a tasteful playback-state fallback.
-- Lyrics are synced when official data is available.
-- Lack of lyrics does not fail the MVP.
+- 播放、暂停、继续、返回都可用。
+- 返回对话页后，保留紧凑音乐播放器。
+- 粒子球能根据音频律动；如果拿不到音频数据，则使用优雅的播放状态律动兜底。
+- 官方歌词可用时，支持歌词同步展示。
+- 没有歌词不算 MVP 失败。
 
-### M7 macOS Packaging
+### M7 macOS 打包
 
-Goal: produce a local macOS build.
+目标：生成本地可运行的 macOS 应用。
 
-Result:
+交付结果：
 
-- The app can be packaged and launched outside the dev server.
+- 应用可以打包，并在非开发模式下启动。
 
-Acceptance:
+验收标准：
 
-- Fresh setup with `.env` can run the app.
-- Voice chat flow works.
-- Music authorization/search/playback path works where Apple account permissions allow it.
+- 新环境配置 `.env` 后可以运行。
+- 语音对话链路可用。
+- 在 Apple 账号权限允许的情况下，音乐授权、搜索、播放链路可用。
 
-## 12. Error Handling Standards
+## 12. 错误处理标准
 
-Every user-facing failure must include:
+每个用户可见错误都必须说明：
 
-- What happened in plain language.
-- Whether the user can retry.
-- A safe fallback when available.
+- 发生了什么。
+- 用户能否重试。
+- 是否有安全兜底方案。
 
-Required error examples:
+必须处理的错误场景：
 
-- Microphone permission denied.
-- ASR request failed.
-- LLM response failed.
-- TTS generation failed.
-- Apple Music not authorized.
-- Apple Music subscription or region does not allow playback.
-- Song has no lyrics.
+- 麦克风权限被拒绝。
+- ASR 请求失败。
+- LLM 回复失败。
+- TTS 生成失败。
+- Apple Music 未授权。
+- Apple Music 订阅或地区不支持播放。
+- 歌曲没有歌词。
 
-## 13. Security and Privacy
+## 13. 安全和隐私
 
-- Volcengine keys live in `.env` and are read only by the main process.
-- The renderer never receives raw cloud credentials.
-- Recordings and TTS files are temporary.
-- Session memory is in memory only for MVP.
-- The app should not persist user conversation history in MVP.
+- 火山引擎密钥只存放在 `.env`。
+- `.env` 只由 Electron 主进程读取。
+- 前端不能拿到任何云服务密钥。
+- 录音和 TTS 文件只作为临时文件保存。
+- MVP 阶段会话记忆只保存在内存中。
+- MVP 阶段不落盘保存用户聊天记录。
 
-## 14. Testing Strategy
+## 14. 测试策略
 
-Manual acceptance testing is required for every milestone.
+每个里程碑都必须做人工验收。
 
-Automated tests should cover:
+自动化测试优先覆盖：
 
-- Provider response normalization.
-- Intent parsing fallback.
-- Lyric parsing if an official lyric source is available.
-- Memory trimming to the configured recent-turn limit.
-- IPC result shape consistency.
+- Provider 返回结果标准化。
+- 意图解析异常兜底。
+- 如果存在官方歌词来源，则测试歌词解析。
+- 会话记忆裁剪到指定轮数。
+- IPC 返回格式一致性。
 
-Visual verification is required for:
+视觉验收必须覆盖：
 
-- Particle state transitions.
-- Main chat layout.
-- Immersive music page layout.
-- Small and large macOS window sizes.
+- 粒子球状态切换。
+- 主聊天界面布局。
+- 沉浸音乐页布局。
+- macOS 小窗口和大窗口尺寸。
 
-## 15. External References
+## 15. 外部参考
 
-- Volcengine Ark / Doubao Chat API: https://www.volcengine.com/docs/82379/1494384
-- Volcengine recording-file ASR: https://www.volcengine.com/docs/6561/1354868
-- Volcengine WebSocket TTS: https://www.volcengine.com/docs/6561/2532486
-- Apple MusicKit: https://developer.apple.com/musickit/
-- Apple Music API: https://developer.apple.com/documentation/applemusicapi
+- 火山方舟 / 豆包 Chat API：https://www.volcengine.com/docs/82379/1494384
+- 火山引擎录音文件识别：https://www.volcengine.com/docs/6561/1354868
+- 火山引擎 WebSocket TTS：https://www.volcengine.com/docs/6561/2532486
+- Apple MusicKit：https://developer.apple.com/musickit/
+- Apple Music API：https://developer.apple.com/documentation/applemusicapi
+
