@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "vue-tsc --noEmit && electron-vite build",
-    "test": "sh -c 'find tests -name \"*.test.ts\" -print -quit 2>/dev/null | grep -q . || exit 0; vitest run --passWithNoTests'",
+    "test": "sh -c 'find tests -name \"*.test.ts\" -print -quit 2>/dev/null | grep -q . || exit 0; find tests -name \"*.test.ts\" -print0 | xargs -0 node --experimental-strip-types --test'",
     "test:watch": "vitest",
     "typecheck": "vue-tsc --noEmit"
   },
