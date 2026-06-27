@@ -36,8 +36,8 @@ const autoListenText: Record<AutoListenState, string> = {
   <div class="conversation-panel" :data-state="state">
     <header class="conversation-header">
       <div>
-        <p class="eyebrow">Lingli</p>
-        <h1>灵粒</h1>
+        <p class="eyebrow">AI companion</p>
+        <h1>lingmo</h1>
       </div>
       <div class="status-pill" :aria-label="`当前状态：${statusText[state]}`">
         <span class="status-dot" />
@@ -45,7 +45,7 @@ const autoListenText: Record<AutoListenState, string> = {
       </div>
     </header>
 
-    <div class="message-list" aria-live="polite">
+    <div class="message-list" aria-label="历史对话" aria-live="polite">
       <article
         v-for="message in messages"
         :key="message.id"

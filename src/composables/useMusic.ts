@@ -4,7 +4,7 @@ import type { MusicTrack, PlaybackState, ViewMode } from '@/types/app'
 const demoTrack: MusicTrack = {
   id: 'demo-midnight-roam',
   title: '午夜漫游',
-  artist: 'Lingli Session',
+  artist: 'lingmo session',
   album: 'Prototype Tapes',
   durationMs: 184000,
   lyrics: [

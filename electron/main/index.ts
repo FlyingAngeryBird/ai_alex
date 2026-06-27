@@ -12,7 +12,7 @@ function createMainWindow(): BrowserWindow {
     height: 780,
     minWidth: 900,
     minHeight: 640,
-    title: '灵粒',
+    title: 'lingmo',
     backgroundColor: '#080910',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

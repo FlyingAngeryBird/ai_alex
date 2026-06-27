@@ -35,12 +35,15 @@ describe('UI prototype state', () => {
   it('keeps music playback state available after leaving immersive view', () => {
     const music = useMusic()
 
+    expect(music.hasActiveTrack.value).toBe(false)
+
     music.startDemoTrack()
     music.closeImmersive()
     music.togglePlayback()
 
     expect(music.viewMode.value).toBe('conversation')
     expect(music.playback.value.track?.title).toBe('午夜漫游')
+    expect(music.playback.value.track?.artist).toBe('lingmo session')
     expect(music.playback.value.status).toBe('paused')
 
     music.togglePlayback()

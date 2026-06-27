@@ -64,8 +64,8 @@ button:focus-visible {
 }
 
 .app-shell[data-view="conversation"] .particle-stage {
-  inset: 0 0 188px;
-  transform: translateY(-22px);
+  inset: 0 0 218px;
+  transform: translateY(-34px);
 }
 
 .particle-sphere {
@@ -94,25 +94,25 @@ button:focus-visible {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   align-items: end;
-  width: min(700px, calc(100vw - 72px));
+  width: min(580px, calc(100vw - 72px));
   height: 100%;
   margin: 0 auto;
-  padding: 28px 0 18px;
+  padding: 28px 0 16px;
 }
 
 .conversation-panel {
   align-self: end;
   width: 100%;
-  padding: 12px 13px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
+  padding: 10px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.035)),
-    rgba(9, 10, 16, 0.34);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.072), rgba(255, 255, 255, 0.028)),
+    rgba(9, 10, 16, 0.25);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 18px 72px rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(26px) saturate(1.28);
+    inset 0 1px 0 rgba(255, 255, 255, 0.11),
+    0 16px 64px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(30px) saturate(1.32);
 }
 
 .conversation-header,
@@ -134,9 +134,9 @@ button:focus-visible {
 }
 
 .eyebrow {
-  margin: 0 0 4px;
+  margin: 0 0 3px;
   color: #96ded5;
-  font-size: 0.72rem;
+  font-size: 0.62rem;
   font-weight: 700;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -150,23 +150,23 @@ p {
 
 h1 {
   color: #fff8e6;
-  font-family: "Songti SC", "Noto Serif SC", Georgia, serif;
-  font-size: clamp(1.38rem, 2.5vh, 1.8rem);
-  font-weight: 600;
+  font-size: clamp(1.08rem, 2vh, 1.32rem);
+  font-weight: 650;
+  letter-spacing: 0;
 }
 
 .status-pill {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-width: 82px;
-  height: 32px;
+  min-width: 70px;
+  height: 28px;
   justify-content: center;
   border: 1px solid rgba(255, 225, 111, 0.22);
-  border-radius: 8px;
+  border-radius: 999px;
   color: #f8eed4;
   background: rgba(255, 225, 111, 0.08);
-  font-size: 0.82rem;
+  font-size: 0.74rem;
   white-space: nowrap;
 }
 
@@ -192,23 +192,37 @@ h1 {
 .message-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-height: 82px;
-  min-height: 48px;
-  margin: 10px 0;
-  overflow: auto;
+  gap: 7px;
+  max-height: 104px;
+  min-height: 44px;
+  margin: 8px 0;
+  padding-right: 4px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
   scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
+}
+
+.message-list::-webkit-scrollbar {
+  width: 5px;
+}
+
+.message-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.24);
 }
 
 .message-row {
-  max-width: min(560px, 88%);
-  padding: 8px 10px;
+  max-width: min(460px, 86%);
+  padding: 7px 9px;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
+  border-radius: 12px;
   color: #e9e4d8;
-  background: rgba(255, 255, 255, 0.06);
-  font-size: 0.92rem;
-  line-height: 1.42;
+  background: rgba(255, 255, 255, 0.052);
+  font-size: 0.82rem;
+  line-height: 1.38;
 }
 
 .message-row p {
@@ -218,7 +232,7 @@ h1 {
 .message-row--user {
   align-self: flex-end;
   color: #07100f;
-  background: rgba(169, 240, 223, 0.86);
+  background: rgba(169, 240, 223, 0.8);
 }
 
 .message-row--assistant {
@@ -228,28 +242,28 @@ h1 {
 .space-cue {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  min-width: 158px;
-  height: 38px;
-  padding: 0 12px;
+  gap: 8px;
+  min-width: 136px;
+  height: 34px;
+  padding: 0 10px;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 8px;
+  border-radius: 12px;
   color: #d8d2c4;
   background: rgba(255, 255, 255, 0.065);
 }
 
 .space-cue span {
-  min-width: 56px;
-  padding: 4px 8px;
-  border-radius: 6px;
+  min-width: 50px;
+  padding: 3px 7px;
+  border-radius: 9px;
   color: #fff7df;
   background: rgba(255, 255, 255, 0.1);
-  font-size: 0.78rem;
+  font-size: 0.7rem;
   text-align: center;
 }
 
 .space-cue b {
-  font-size: 0.88rem;
+  font-size: 0.78rem;
 }
 
 .space-cue--active {
@@ -261,7 +275,7 @@ h1 {
 .action-cluster {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -276,22 +290,24 @@ h1 {
 
 .icon-text-button,
 .primary-play-button {
-  height: 38px;
-  padding: 0 14px;
-  border-radius: 8px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 12px;
   color: #fff8e6;
   background: rgba(255, 225, 111, 0.1);
+  font-size: 0.78rem;
 }
 
 .auto-listen-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
-  height: 38px;
-  padding: 0 12px;
-  border-radius: 8px;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 12px;
   color: #e9e2d2;
   background: rgba(255, 255, 255, 0.06);
+  font-size: 0.78rem;
 }
 
 .auto-listen-toggle[aria-checked="true"] {
@@ -578,12 +594,12 @@ h1 {
 
 @media (max-height: 720px) {
   .app-shell[data-view="conversation"] .particle-stage {
-    bottom: 176px;
-    transform: translateY(-26px);
+    bottom: 198px;
+    transform: translateY(-38px);
   }
 
   .message-list {
-    max-height: 58px;
+    max-height: 72px;
   }
 
   .cover-art {
