@@ -9,8 +9,7 @@ const props = defineProps<{
 }>()
 
 type VisualConfig = {
-  colorA: THREE.Color
-  colorB: THREE.Color
+  palette: THREE.Color[]
   opacity: number
   pointSize: number
   radius: number
@@ -19,12 +18,12 @@ type VisualConfig = {
 }
 
 const stateConfig: Record<ParticleState, VisualConfig> = {
-  idle: createConfig('#fff2d1', '#70d8ff', 0.64, 0.021, 1.42, 0.42, 0.018),
-  listening: createConfig('#e7fff7', '#00e0a4', 0.82, 0.026, 1.5, 0.78, 0.036),
-  thinking: createConfig('#ffc266', '#ff6f91', 0.76, 0.019, 1.18, 0.98, 0.012),
-  speaking: createConfig('#fff7e6', '#4fd5ff', 0.88, 0.027, 1.48, 0.82, 0.044),
-  playing: createConfig('#ffe16f', '#00d5c8', 0.9, 0.028, 1.58, 1.05, 0.052),
-  error: createConfig('#ff8f8f', '#6b2534', 0.54, 0.02, 1.24, 0.28, 0.008)
+  idle: createConfig(['#eeb95d', '#45cfee', '#df7f9e', '#5eddbd', '#d6bf68'], 0.82, 0.023, 1.3, 0.38, 0.02),
+  listening: createConfig(['#e7fff7', '#97ffe4', '#00e0a4', '#6ee7ff'], 0.82, 0.026, 1.42, 0.78, 0.036),
+  thinking: createConfig(['#ffc266', '#ff8f64', '#ff6f91', '#b88cff'], 0.76, 0.019, 1.12, 0.98, 0.012),
+  speaking: createConfig(['#fff7e6', '#f7d987', '#80e4ff', '#b8f6ea'], 0.88, 0.027, 1.4, 0.82, 0.044),
+  playing: createConfig(['#ffe16f', '#ff8f64', '#00d5c8', '#84ddff'], 0.9, 0.028, 1.5, 1.05, 0.052),
+  error: createConfig(['#ff8f8f', '#c85d6d', '#6b2534'], 0.54, 0.02, 1.18, 0.28, 0.008)
 }
 
 const container = ref<HTMLElement | null>(null)
@@ -48,8 +47,7 @@ let startedAt = 0
 let visualConfig = stateConfig.idle
 
 function createConfig(
-  colorA: string,
-  colorB: string,
+  palette: string[],
   opacity: number,
   pointSize: number,
   radius: number,
@@ -57,8 +55,7 @@ function createConfig(
   tightness: number
 ): VisualConfig {
   return {
-    colorA: new THREE.Color(colorA),
-    colorB: new THREE.Color(colorB),
+    palette: palette.map((color) => new THREE.Color(color)),
     opacity,
     pointSize,
     radius,
@@ -121,9 +118,18 @@ function seedParticles(): void {
 
 function updateColors(config: VisualConfig): void {
   const color = new THREE.Color()
+  const segmentCount = Math.max(1, config.palette.length - 1)
 
   for (let index = 0; index < particleCount; index += 1) {
-    color.copy(config.colorA).lerp(config.colorB, colorMix[index])
+    const scaledMix = colorMix[index] * segmentCount
+    const paletteIndex = Math.min(Math.floor(scaledMix), config.palette.length - 2)
+    const localMix = scaledMix - paletteIndex
+    color.copy(config.palette[paletteIndex]).lerp(config.palette[paletteIndex + 1], localMix)
+
+    if (props.state === 'idle') {
+      color.offsetHSL(0, 0.05, -0.05 + Math.sin(phases[index]) * 0.035)
+    }
+
     const offset = index * 3
     colors[offset] = color.r
     colors[offset + 1] = color.g

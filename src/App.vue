@@ -11,6 +11,7 @@ import type { ParticleState } from '@/types/app'
 const conversation = useConversation()
 const music = useMusic()
 const spaceHeld = ref(false)
+const viewMode = computed(() => music.viewMode.value)
 
 const particleState = computed<ParticleState>(() => {
   if (music.viewMode.value === 'music' && music.playback.value.status !== 'error') {
@@ -76,12 +77,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="app-shell" :data-view="music.viewMode.value">
+  <main class="app-shell" :data-view="viewMode">
     <ParticleSphere class="particle-stage" :state="particleState" :audio-level="audioLevel" />
 
     <Transition name="view-fade" mode="out-in">
       <MusicImmersiveView
-        v-if="music.viewMode.value === 'music'"
+        v-if="viewMode === 'music'"
         :playback="music.playback.value"
         @back="music.closeImmersive"
         @toggle-playback="music.togglePlayback"

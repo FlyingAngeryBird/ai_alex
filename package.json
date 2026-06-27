@@ -4,7 +4,8 @@
   "private": true,
   "main": "dist-electron/main/index.js",
   "scripts": {
-    "dev": "vite --configLoader runner --host 127.0.0.1 --port 5173",
+    "dev": "npm run build && python3 -m http.server 5173 --bind 127.0.0.1 --directory dist-electron/renderer",
+    "dev:vite": "vite --configLoader runner --host 127.0.0.1 --port 5173",
     "build": "vue-tsc --noEmit && tsc --target ES2022 --module NodeNext --moduleResolution NodeNext --rootDir electron --outDir dist-electron --strict --skipLibCheck electron/main/index.ts electron/preload/index.ts electron/main/ipc/appHandlers.ts && vite build --configLoader runner --outDir dist-electron/renderer",
     "test": "vitest run --passWithNoTests --configLoader runner",
     "test:watch": "vitest",
