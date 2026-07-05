@@ -1,0 +1,918 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lingmo 音乐粒子律动 v15</title>
+    <style>
+      :root {
+        --void: #06070c;
+        --milk: #f9f3df;
+        --milk-soft: rgba(249, 243, 223, 0.66);
+        --milk-dim: rgba(249, 243, 223, 0.35);
+        --hair: rgba(255, 255, 255, 0.11);
+        --teal: #2ee6d6;
+        --teal-soft: rgba(46, 230, 214, 0.2);
+        --gold: #ffe16f;
+        --gold-soft: rgba(255, 225, 111, 0.22);
+        --rose: #eaa1ba;
+        --font-serif: "Songti SC", "Noto Serif SC", "Source Han Serif CN", Georgia, serif;
+        --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        color: var(--milk);
+        background: var(--void);
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+        text-rendering: geometricPrecision;
+      }
+
+      button,
+      input {
+        border: 0;
+        color: inherit;
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      input:focus {
+        outline: none;
+      }
+
+      .app {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        min-width: 980px;
+        min-height: 680px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 52% 46%, rgba(46, 230, 214, 0.075), transparent 35%),
+          radial-gradient(circle at 76% 20%, rgba(255, 225, 111, 0.045), transparent 27%),
+          linear-gradient(180deg, #090a11 0%, #05060a 58%, #08070b 100%);
+      }
+
+      .app::before {
+        position: absolute;
+        inset: 0;
+        content: "";
+        opacity: 0.34;
+        pointer-events: none;
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.031) 1px, transparent 1px);
+        background-size: 96px 96px;
+        mask-image: radial-gradient(circle at 52% 48%, #000 0 48%, transparent 78%);
+      }
+
+      #visualizer {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        width: 100%;
+        height: 100%;
+      }
+
+      .topbar {
+        position: absolute;
+        top: 24px;
+        right: 34px;
+        left: 34px;
+        z-index: 4;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        pointer-events: none;
+      }
+
+      .top-left,
+      .top-right {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        pointer-events: auto;
+      }
+
+      .round-button,
+      .pill-button,
+      .icon-button {
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--hair);
+        background: rgba(255, 255, 255, 0.046);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+        backdrop-filter: blur(18px) saturate(1.08);
+      }
+
+      .round-button,
+      .icon-button {
+        width: 42px;
+        height: 42px;
+        border-radius: 999px;
+      }
+
+      .round-button {
+        font-size: 1.15rem;
+      }
+
+      .pill-button {
+        height: 38px;
+        grid-auto-flow: column;
+        gap: 9px;
+        padding: 0 15px;
+        border-radius: 999px;
+        color: rgba(255, 248, 226, 0.88);
+        font-size: 0.78rem;
+      }
+
+      .pill-button--gold {
+        border-color: rgba(255, 225, 111, 0.22);
+        background: rgba(255, 225, 111, 0.07);
+      }
+
+      .status-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--gold);
+        box-shadow: 0 0 16px var(--gold-soft);
+      }
+
+      .search-glass {
+        width: min(430px, 33vw);
+        padding: 8px;
+        border: 1px solid rgba(143, 222, 213, 0.13);
+        border-radius: 18px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.016)),
+          rgba(7, 13, 15, 0.5);
+        box-shadow:
+          0 22px 70px rgba(0, 0, 0, 0.24),
+          inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        backdrop-filter: blur(26px) saturate(1.18);
+      }
+
+      .search-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 34px;
+        gap: 8px;
+      }
+
+      .search-row input {
+        height: 34px;
+        min-width: 0;
+        padding: 0 13px;
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 11px;
+        color: rgba(255, 248, 226, 0.88);
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .search-row input::placeholder {
+        color: rgba(249, 243, 223, 0.42);
+      }
+
+      .search-button {
+        width: 34px;
+        height: 34px;
+        border-radius: 11px;
+        color: #06100f;
+        background: rgba(169, 240, 223, 0.72);
+        font-weight: 800;
+      }
+
+      .source-row {
+        display: flex;
+        gap: 6px;
+        margin-top: 8px;
+      }
+
+      .source-chip {
+        height: 24px;
+        min-width: 56px;
+        padding: 0 10px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 999px;
+        color: rgba(249, 243, 223, 0.56);
+        background: rgba(255, 255, 255, 0.035);
+        font-size: 0.68rem;
+      }
+
+      .source-chip[data-active="true"] {
+        border-color: rgba(255, 225, 111, 0.35);
+        color: #fff3cd;
+        background: rgba(255, 225, 111, 0.08);
+      }
+
+      .player {
+        position: absolute;
+        bottom: 8.2vh;
+        left: 12vw;
+        z-index: 3;
+        display: grid;
+        grid-template-columns: 118px minmax(520px, 690px);
+        gap: 32px;
+        align-items: center;
+        pointer-events: auto;
+      }
+
+      .cover {
+        display: grid;
+        gap: 10px;
+      }
+
+      .cover-art {
+        width: 118px;
+        aspect-ratio: 1;
+        border: 1px solid rgba(255, 255, 255, 0.13);
+        border-radius: 9px;
+        background:
+          radial-gradient(circle at 57% 35%, rgba(255, 245, 205, 0.74), transparent 12%),
+          linear-gradient(142deg, #273344 0%, #d89aaa 46%, #25c7bc 100%);
+        box-shadow: 0 24px 72px rgba(0, 0, 0, 0.34);
+      }
+
+      .cover-label {
+        width: 118px;
+        color: rgba(249, 243, 223, 0.42);
+        font-size: 0.68rem;
+      }
+
+      .copy {
+        min-width: 0;
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        color: rgba(143, 222, 213, 0.86);
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .track-title {
+        margin: 0;
+        max-width: 620px;
+        color: #fff4d4;
+        font-family: var(--font-serif);
+        font-size: clamp(3.2rem, 4.8vw, 5.25rem);
+        font-weight: 560;
+        line-height: 0.96;
+        white-space: nowrap;
+      }
+
+      .artist {
+        margin: 10px 0 0;
+        color: rgba(249, 243, 223, 0.58);
+        font-size: clamp(1.08rem, 1.15vw, 1.32rem);
+      }
+
+      .progress-track {
+        position: relative;
+        height: 4px;
+        margin-top: 22px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.105);
+      }
+
+      .progress-track span {
+        display: block;
+        width: 28%;
+        height: 100%;
+        border-radius: inherit;
+        background: var(--gold);
+        box-shadow: 0 0 16px rgba(255, 225, 111, 0.44);
+      }
+
+      .time-row {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 8px;
+        color: rgba(249, 243, 223, 0.48);
+        font-size: 0.72rem;
+      }
+
+      .control-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 18px;
+      }
+
+      .control-row .round-button {
+        width: 38px;
+        height: 38px;
+        color: #fff8e6;
+      }
+
+      .play-button {
+        width: 44px;
+        height: 44px;
+      }
+
+      .pause-bars {
+        display: grid;
+        grid-template-columns: 3px 3px;
+        gap: 5px;
+      }
+
+      .pause-bars span {
+        width: 3px;
+        height: 13px;
+        border-radius: 999px;
+        background: currentColor;
+      }
+
+      .source-note {
+        color: rgba(249, 243, 223, 0.42);
+        font-size: 0.72rem;
+      }
+
+      .lyrics {
+        position: absolute;
+        top: 59%;
+        right: 2.8vw;
+        z-index: 3;
+        width: min(720px, 42vw);
+        height: min(690px, 74vh);
+        overflow: hidden;
+        pointer-events: none;
+        transform: translateY(-50%);
+        mask-image: linear-gradient(transparent, #000 12%, #000 88%, transparent);
+      }
+
+      .lyric-line {
+        position: absolute;
+        top: 50%;
+        left: 0;
+        width: 100%;
+        margin: 0;
+        color: rgba(249, 243, 223, 0.18);
+        font-family: var(--font-serif);
+        font-size: clamp(1rem, 1.32vw, 1.34rem);
+        line-height: 1.44;
+        text-align: center;
+        text-wrap: balance;
+        filter: blur(0.25px);
+        will-change: opacity, transform, filter, color;
+      }
+
+      .lyric-line.is-current {
+        color: #fff4d4;
+        text-shadow:
+          0 0 22px rgba(255, 225, 111, 0.23),
+          0 0 54px rgba(46, 230, 214, 0.1);
+        filter: blur(0);
+      }
+
+      .hidden-audio,
+      .hidden-input {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <canvas id="visualizer" aria-hidden="true"></canvas>
+      <audio id="audio" class="hidden-audio" crossorigin="anonymous"></audio>
+      <input id="audioFile" class="hidden-input" type="file" accept="audio/*" />
+
+      <header class="topbar">
+        <div class="top-left">
+          <button class="round-button" type="button" aria-label="返回">←</button>
+          <button id="statusButton" class="pill-button pill-button--gold" type="button">
+            <span class="status-dot"></span>
+            <span id="statusLabel">Playing</span>
+          </button>
+          <button class="pill-button" type="button">退出</button>
+        </div>
+
+        <div class="top-right">
+          <button id="audioPick" class="pill-button" type="button">本地音频</button>
+          <form class="search-glass" aria-label="歌曲搜索">
+            <div class="search-row">
+              <input value="海边的夜" aria-label="搜索歌曲" />
+              <button class="search-button" type="button" aria-label="搜索">⌕</button>
+            </div>
+            <div class="source-row">
+              <button class="source-chip" data-active="true" type="button">全部</button>
+              <button class="source-chip" type="button">netease</button>
+              <button class="source-chip" type="button">kuwo</button>
+              <button class="source-chip" type="button">joox</button>
+            </div>
+          </form>
+        </div>
+      </header>
+
+      <section class="player" aria-label="当前播放">
+        <div class="cover">
+          <div class="cover-art" aria-hidden="true"></div>
+          <span class="cover-label">lingmo session</span>
+        </div>
+
+        <div class="copy">
+          <p class="eyebrow">GD Studio · netease</p>
+          <h1 class="track-title">海屿你</h1>
+          <p class="artist">马也_Crabbbit</p>
+          <div class="progress-track" aria-hidden="true"><span id="progressBar"></span></div>
+          <div class="time-row">
+            <span id="currentTime">0:23</span>
+            <span>4:55</span>
+          </div>
+          <div class="control-row">
+            <button class="round-button" type="button" aria-label="上一首">‹</button>
+            <button id="playButton" class="round-button play-button" type="button" aria-label="暂停">
+              <span class="pause-bars" aria-hidden="true"><span></span><span></span></span>
+            </button>
+            <button class="round-button" type="button" aria-label="下一首">›</button>
+            <span id="sourceNote" class="source-note">内部光源随音乐呼吸</span>
+          </div>
+        </div>
+      </section>
+
+      <aside id="lyrics" class="lyrics" aria-label="同步歌词"></aside>
+    </main>
+
+    <script>
+      (() => {
+        const canvas = document.getElementById("visualizer");
+        const ctx = canvas.getContext("2d");
+        const audio = document.getElementById("audio");
+        const audioFile = document.getElementById("audioFile");
+        const audioPick = document.getElementById("audioPick");
+        const playButton = document.getElementById("playButton");
+        const statusButton = document.getElementById("statusButton");
+        const statusLabel = document.getElementById("statusLabel");
+        const sourceNote = document.getElementById("sourceNote");
+        const progressBar = document.getElementById("progressBar");
+        const currentTime = document.getElementById("currentTime");
+        const lyricsEl = document.getElementById("lyrics");
+
+        const lyrics = [
+          "作词：Franko冯思源",
+          "作曲：Franko冯思源",
+          "编曲：罗洋（卡其漠）",
+          "制作人：马也_Crabbbit",
+          "从不主动示弱",
+          "我们的过去",
+          "分分合合太多",
+          "伤人的话难说",
+          "却觉得很洒脱",
+          "曾经的那些发生过的开心和难过",
+          "就像开败的花",
+          "浪也拍打着沙",
+          "我却对你情有独钟",
+          "蓝白色的房 海风轻推开了窗",
+          "你的影子被日落拉长"
+        ];
+
+        lyrics.forEach((line) => {
+          const p = document.createElement("p");
+          p.className = "lyric-line";
+          p.textContent = line;
+          lyricsEl.appendChild(p);
+        });
+        const lyricNodes = Array.from(lyricsEl.children);
+
+        function createSeed(seed) {
+          let t = seed >>> 0;
+          return () => {
+            t += 0x6d2b79f5;
+            let r = Math.imul(t ^ (t >>> 15), 1 | t);
+            r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+            return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+          };
+        }
+
+        const rand = createSeed(20260702);
+        const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+        const particles = [];
+        const shellCount = 2200;
+        const cloudCount = 620;
+        const coreCount = 220;
+
+        for (let i = 0; i < shellCount; i += 1) {
+          const y = 1 - (i / (shellCount - 1)) * 2;
+          const r = Math.sqrt(Math.max(0, 1 - y * y));
+          const theta = i * goldenAngle;
+          particles.push({
+            x: Math.cos(theta) * r,
+            y,
+            z: Math.sin(theta) * r,
+            layer: "shell",
+            radius: 0.9 + rand() * 0.1,
+            phase: rand() * Math.PI * 2,
+            seed: rand(),
+            warm: rand()
+          });
+        }
+
+        for (let i = 0; i < cloudCount; i += 1) {
+          const radius = 0.18 + Math.cbrt(rand()) * 0.68;
+          const theta = rand() * Math.PI * 2;
+          const phi = Math.acos(2 * rand() - 1);
+          particles.push({
+            x: radius * Math.sin(phi) * Math.cos(theta),
+            y: radius * Math.cos(phi),
+            z: radius * Math.sin(phi) * Math.sin(theta),
+            layer: "cloud",
+            radius,
+            phase: rand() * Math.PI * 2,
+            seed: rand(),
+            warm: rand()
+          });
+        }
+
+        for (let i = 0; i < coreCount; i += 1) {
+          const radius = Math.cbrt(rand()) * 0.3;
+          const theta = rand() * Math.PI * 2;
+          const phi = Math.acos(2 * rand() - 1);
+          particles.push({
+            x: radius * Math.sin(phi) * Math.cos(theta),
+            y: radius * Math.cos(phi),
+            z: radius * Math.sin(phi) * Math.sin(theta),
+            layer: "core",
+            radius,
+            phase: rand() * Math.PI * 2,
+            seed: rand(),
+            warm: rand()
+          });
+        }
+
+        let width = 0;
+        let height = 0;
+        let pixelRatio = 1;
+        let lastTime = 0;
+        let playing = true;
+        let analyser = null;
+        let freqData = null;
+        let audioCtx = null;
+        let audioSource = null;
+        let usingRealAudio = false;
+        let rotationY = 0;
+        let bass = 0.18;
+        let mid = 0.18;
+        let treble = 0.12;
+        let bassLong = 0.18;
+        let beatGlow = 0;
+        let interiorLight = 0.1;
+        let shimmer = 0.08;
+
+        function resize() {
+          pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+          width = window.innerWidth;
+          height = window.innerHeight;
+          canvas.width = Math.floor(width * pixelRatio);
+          canvas.height = Math.floor(height * pixelRatio);
+          canvas.style.width = `${width}px`;
+          canvas.style.height = `${height}px`;
+          ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+        }
+
+        function clamp01(value) {
+          return Math.max(0, Math.min(1, value));
+        }
+
+        function lerp(a, b, t) {
+          return a + (b - a) * t;
+        }
+
+        function follow(current, target, attack, release) {
+          return current + (target - current) * (target > current ? attack : release);
+        }
+
+        function mix(a, b, t) {
+          return [
+            Math.round(lerp(a[0], b[0], t)),
+            Math.round(lerp(a[1], b[1], t)),
+            Math.round(lerp(a[2], b[2], t))
+          ];
+        }
+
+        function colorForParticle(p, energy, light, depth) {
+          const teal = [46, 230, 214];
+          const cyan = [132, 221, 255];
+          const rose = [234, 161, 186];
+          const gold = [255, 225, 111];
+          const milk = [255, 246, 218];
+          let base = p.warm < 0.34 ? teal : p.warm < 0.64 ? cyan : p.warm < 0.82 ? rose : gold;
+          const heated = mix(base, gold, clamp01(energy * 0.62 + light * 0.3));
+          const finalColor = mix(heated, milk, clamp01(light * 0.42 + (p.layer === "core" ? bass * 0.3 : 0)));
+          const depthMul = 0.55 + depth * 0.45;
+          return [
+            Math.round(finalColor[0] * depthMul),
+            Math.round(finalColor[1] * depthMul),
+            Math.round(finalColor[2] * depthMul)
+          ];
+        }
+
+        function pseudoBands(s) {
+          const bpm = 86;
+          const cycle = (s * bpm / 60) % 1;
+          const beat = cycle < 0.16 ? Math.pow(1 - cycle / 0.16, 2.2) : 0;
+          const offBeat = Math.max(0, Math.sin((cycle + 0.5) * Math.PI * 2));
+          const phrase = (Math.sin(s * 0.24) + 1) / 2;
+          const melody = (Math.sin(s * 0.78) + Math.sin(s * 1.17 + 1.2) * 0.55 + 1.55) / 3.1;
+          const hat = Math.pow(Math.max(0, Math.sin(s * 2.9 + 0.7)), 3);
+          return {
+            bass: clamp01(0.16 + beat * 0.52 + offBeat * 0.08 + phrase * 0.08),
+            mid: clamp01(0.2 + melody * 0.38 + beat * 0.08),
+            treble: clamp01(0.12 + hat * 0.34 + Math.max(0, Math.sin(s * 6.1)) * 0.05)
+          };
+        }
+
+        function analyserBands() {
+          if (!analyser || !freqData) return null;
+          analyser.getByteFrequencyData(freqData);
+          const n = freqData.length;
+          const bassEnd = Math.max(5, Math.floor(n * 0.035));
+          const midEnd = Math.max(bassEnd + 1, Math.floor(n * 0.36));
+          const trebleEnd = Math.max(midEnd + 1, Math.floor(n * 0.78));
+          let b = 0;
+          let m = 0;
+          let t = 0;
+          for (let i = 0; i < bassEnd; i += 1) b += freqData[i];
+          for (let i = bassEnd; i < midEnd; i += 1) m += freqData[i];
+          for (let i = midEnd; i < trebleEnd; i += 1) t += freqData[i];
+          return {
+            bass: clamp01(b / bassEnd / 255),
+            mid: clamp01(m / (midEnd - bassEnd) / 255),
+            treble: clamp01(t / (trebleEnd - midEnd) / 255)
+          };
+        }
+
+        async function initAnalyser() {
+          if (audioSource) return true;
+          try {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === "suspended") await audioCtx.resume();
+            analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 1024;
+            analyser.smoothingTimeConstant = 0.86;
+            freqData = new Uint8Array(analyser.frequencyBinCount);
+            audioSource = audioCtx.createMediaElementSource(audio);
+            audioSource.connect(analyser);
+            analyser.connect(audioCtx.destination);
+            return true;
+          } catch (error) {
+            usingRealAudio = false;
+            sourceNote.textContent = "模拟频段运行中";
+            return false;
+          }
+        }
+
+        function updateBands(s, dt) {
+          const raw = playing ? analyserBands() || pseudoBands(s) : { bass: 0.08, mid: 0.08, treble: 0.04 };
+          bass = follow(bass, raw.bass, 0.1, 0.035);
+          mid = follow(mid, raw.mid, 0.06, 0.028);
+          treble = follow(treble, raw.treble, 0.14, 0.16);
+          bassLong += (bass - bassLong) * 0.008;
+
+          const onset = Math.max(0, bass - bassLong);
+          beatGlow = Math.max(beatGlow * Math.exp(-dt * 5.1), clamp01(onset * 2.7));
+          interiorLight = follow(interiorLight, mid * 0.72 + bass * 0.28, 0.055, 0.025);
+          shimmer = follow(shimmer, treble, 0.18, 0.13);
+        }
+
+        function drawStarRing(cx, cy, radius, s, front) {
+          const ringEnergy = 0.16 + mid * 0.36 + beatGlow * 0.14;
+          const tilt = 0.33;
+          const angle = s * (front ? 0.07 : -0.052) + (front ? 0.32 : -0.18);
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate(angle);
+          ctx.scale(1, tilt);
+          ctx.globalCompositeOperation = "lighter";
+          ctx.lineCap = "round";
+          ctx.setLineDash([radius * 0.11, radius * 0.22, radius * 0.02, radius * 0.18]);
+          ctx.lineDashOffset = -s * radius * (front ? 0.026 : 0.018);
+          ctx.strokeStyle = front
+            ? `rgba(255, 225, 111, ${0.09 + ringEnergy * 0.08})`
+            : `rgba(46, 230, 214, ${0.06 + ringEnergy * 0.06})`;
+          ctx.lineWidth = front ? 1.08 : 0.86;
+          ctx.beginPath();
+          ctx.arc(0, 0, radius * (front ? 1.23 : 1.3), front ? Math.PI * 0.02 : Math.PI * 1.04, front ? Math.PI * 0.92 : Math.PI * 1.94);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.globalAlpha = 0.8;
+          ctx.strokeStyle = front
+            ? `rgba(255, 246, 218, ${0.035 + shimmer * 0.035})`
+            : `rgba(132, 221, 255, ${0.03 + shimmer * 0.025})`;
+          ctx.lineWidth = 0.72;
+          ctx.beginPath();
+          ctx.arc(0, 0, radius * (front ? 1.06 : 1.43), front ? Math.PI * 0.13 : Math.PI * 1.22, front ? Math.PI * 0.78 : Math.PI * 1.8);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        function drawGlow(cx, cy, radius) {
+          const glowEnergy = 0.18 + bass * 0.28 + interiorLight * 0.22;
+          const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * (0.78 + bass * 0.1));
+          grad.addColorStop(0, `rgba(255, 229, 142, ${0.065 + glowEnergy * 0.08})`);
+          grad.addColorStop(0.34, `rgba(46, 230, 214, ${0.028 + mid * 0.052})`);
+          grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+          ctx.globalCompositeOperation = "lighter";
+          ctx.fillStyle = grad;
+          ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+        }
+
+        function drawParticles(cx, cy, baseR, s, dt) {
+          rotationY += dt * (0.052 + mid * 0.025);
+          const rotY = rotationY;
+          const rotX = -0.13 + Math.sin(s * 0.15) * 0.014;
+          const cyR = Math.cos(rotY);
+          const syR = Math.sin(rotY);
+          const cxR = Math.cos(rotX);
+          const sxR = Math.sin(rotX);
+          const phraseFlow = s * (0.16 + mid * 0.08);
+          const bodyBreath = 1 + Math.sin(s * 0.58) * 0.006 + bass * 0.012 + beatGlow * 0.012;
+          const lightA = [Math.cos(phraseFlow), Math.sin(phraseFlow * 0.73) * 0.36, Math.sin(phraseFlow)];
+          const lightB = [Math.cos(-phraseFlow * 0.82 + 2.1), Math.sin(phraseFlow * 0.58 + 1.4) * 0.42, Math.sin(-phraseFlow * 0.82 + 2.1)];
+          const projected = [];
+
+          for (const p of particles) {
+            const layerFlow = p.layer === "cloud"
+              ? Math.sin(phraseFlow * 1.7 + p.phase + p.y * 2.6) * mid * 0.018
+              : p.layer === "core"
+                ? Math.sin(s * 0.8 + p.phase) * bass * 0.012
+                : Math.sin(s * 0.22 + p.phase) * 0.003;
+            const radius = p.radius * bodyBreath * (1 + layerFlow);
+            const px = p.x * radius;
+            const py = p.y * radius;
+            const pz = p.z * radius;
+            const rx = px * cyR - pz * syR;
+            const rz = px * syR + pz * cyR;
+            const ry = py * cxR - rz * sxR;
+            const fz = py * sxR + rz * cxR;
+            const depth = (fz + 1.05) / 2.1;
+            const persp = 0.82 + depth * 0.22;
+            const lightDotA = Math.max(0, p.x * lightA[0] + p.y * lightA[1] + p.z * lightA[2]);
+            const lightDotB = Math.max(0, p.x * lightB[0] + p.y * lightB[1] + p.z * lightB[2]);
+            const innerLight = (Math.pow(lightDotA, 10) + Math.pow(lightDotB, 12)) * interiorLight;
+            const x = cx + rx * baseR * persp;
+            const y = cy + ry * baseR * persp;
+            projected.push({ p, x, y, depth, innerLight });
+          }
+
+          projected.sort((a, b) => a.depth - b.depth);
+          ctx.globalCompositeOperation = "lighter";
+
+          for (const item of projected) {
+            const { p, x, y, depth, innerLight } = item;
+            const energy = (bass + mid + treble) / 3;
+            const isSpark = p.seed > 0.86;
+            const twinkle = 0.72 + Math.sin(s * (1.1 + p.seed * 2.5) + p.phase) * 0.18;
+            const highGlow = isSpark ? shimmer * (0.22 + p.seed * 0.22) : 0;
+            let size = 0.68 + depth * 1.05;
+            let alpha = (0.07 + depth * 0.23 + energy * 0.08) * twinkle;
+
+            if (p.layer === "cloud") {
+              size = 0.48 + depth * 0.78 + innerLight * 0.9;
+              alpha = (0.04 + mid * 0.18 + innerLight * 0.42) * twinkle;
+            }
+
+            if (p.layer === "core") {
+              size = 0.5 + depth * 0.78 + bass * 0.55 + beatGlow * 0.28;
+              alpha = (0.08 + bass * 0.34 + innerLight * 0.52) * twinkle;
+            }
+
+            if (p.layer === "shell") {
+              size += beatGlow * 0.16 + highGlow * 0.5;
+              alpha += highGlow;
+            }
+
+            const [r, g, b] = colorForParticle(p, energy, innerLight + highGlow, depth);
+            ctx.globalAlpha = clamp01(alpha);
+            ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+            ctx.beginPath();
+            ctx.arc(x, y, Math.max(0.32, size), 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          ctx.globalAlpha = 1;
+          ctx.globalCompositeOperation = "source-over";
+        }
+
+        function updateLyrics(s) {
+          const lineDuration = 3.45;
+          const floatIndex = playing ? (s / lineDuration) % lyrics.length : 6;
+          const current = Math.floor(floatIndex);
+          const phase = floatIndex - current;
+          lyricNodes.forEach((node, index) => {
+            let distance = index - current - phase;
+            if (distance < -lyrics.length / 2) distance += lyrics.length;
+            if (distance > lyrics.length / 2) distance -= lyrics.length;
+            const abs = Math.abs(distance);
+            const opacity = clamp01(1.05 - abs * 0.18);
+            const scale = 1.04 - Math.min(abs, 7) * 0.018;
+            const y = distance * 43;
+            node.classList.toggle("is-current", abs < 0.42);
+            node.style.opacity = abs > 7.2 ? "0" : String(opacity * (abs < 0.42 ? 1 : 0.58));
+            node.style.transform = `translate3d(0, calc(-50% + ${y}px), 0) scale(${scale})`;
+            node.style.fontSize = abs < 0.42 ? "clamp(1.72rem, 2.25vw, 2.12rem)" : "clamp(1rem, 1.32vw, 1.34rem)";
+            node.style.filter = `blur(${abs < 2.2 ? 0 : Math.min(1.4, (abs - 2.2) * 0.28)}px)`;
+          });
+        }
+
+        function formatTime(seconds) {
+          const safe = Math.max(0, Math.floor(seconds));
+          const minutes = Math.floor(safe / 60);
+          return `${minutes}:${String(safe % 60).padStart(2, "0")}`;
+        }
+
+        function updateChrome(s) {
+          const duration = 295;
+          const position = usingRealAudio && Number.isFinite(audio.duration) ? audio.currentTime : (23 + s) % duration;
+          const total = usingRealAudio && Number.isFinite(audio.duration) ? audio.duration : duration;
+          progressBar.style.width = `${Math.min(100, (position / total) * 100)}%`;
+          currentTime.textContent = formatTime(position);
+          statusLabel.textContent = playing ? "Playing" : "Paused";
+          playButton.innerHTML = playing
+            ? '<span class="pause-bars" aria-hidden="true"><span></span><span></span></span>'
+            : '<span aria-hidden="true">▶</span>';
+          playButton.setAttribute("aria-label", playing ? "暂停" : "继续播放");
+        }
+
+        function frame(time) {
+          const s = time / 1000;
+          const dt = lastTime ? Math.min(0.05, (time - lastTime) / 1000) : 1 / 60;
+          lastTime = time;
+          updateBands(s, dt);
+
+          ctx.globalCompositeOperation = "source-over";
+          ctx.globalAlpha = 1;
+          ctx.clearRect(0, 0, width, height);
+          const bg = ctx.createRadialGradient(width * 0.52, height * 0.46, 0, width * 0.52, height * 0.46, Math.max(width, height) * 0.62);
+          bg.addColorStop(0, "rgba(12, 16, 22, 0.94)");
+          bg.addColorStop(0.42, "rgba(6, 7, 12, 0.98)");
+          bg.addColorStop(1, "rgba(4, 5, 8, 1)");
+          ctx.fillStyle = bg;
+          ctx.fillRect(0, 0, width, height);
+
+          const cx = width * 0.52;
+          const cy = height * 0.46;
+          const baseR = Math.min(width * 0.178, height * 0.31, 286);
+          drawStarRing(cx, cy, baseR, s, false);
+          drawGlow(cx, cy, baseR);
+          drawParticles(cx, cy, baseR, s, dt);
+          drawStarRing(cx, cy, baseR, s, true);
+          updateLyrics(s);
+          updateChrome(s);
+          window.requestAnimationFrame(frame);
+        }
+
+        async function togglePlay() {
+          playing = !playing;
+          if (usingRealAudio) {
+            if (playing) {
+              await initAnalyser();
+              if (audioCtx && audioCtx.state === "suspended") await audioCtx.resume();
+              audio.play().catch(() => {});
+            } else {
+              audio.pause();
+            }
+          }
+        }
+
+        playButton.addEventListener("click", togglePlay);
+        statusButton.addEventListener("click", togglePlay);
+        audioPick.addEventListener("click", () => audioFile.click());
+        audioFile.addEventListener("change", async () => {
+          const file = audioFile.files && audioFile.files[0];
+          if (!file) return;
+          usingRealAudio = true;
+          audio.src = URL.createObjectURL(file);
+          sourceNote.textContent = "真实频谱驱动中";
+          playing = true;
+          await initAnalyser();
+          audio.play().catch(() => {
+            usingRealAudio = false;
+            sourceNote.textContent = "模拟频段运行中";
+          });
+        });
+        audio.addEventListener("ended", () => {
+          playing = false;
+        });
+
+        resize();
+        window.addEventListener("resize", resize);
+        window.requestAnimationFrame(frame);
+      })();
+    </script>
+  </body>
+</html>

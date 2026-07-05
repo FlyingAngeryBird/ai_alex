@@ -1,11 +1,36 @@
 import { computed, ref } from 'vue'
 import type { AutoListenState, ConversationResult, ParticleState, UiMessage } from '@/types/app'
+import { invokeWithTimeout } from '../utils/invokeWithTimeout'
 
 type UseConversationOptions = {
   delayMs?: number
 }
 
+type CancelVoiceInputOptions = {
+  silent?: boolean
+}
+
+type ChatResponse = {
+  intent: ConversationResult['intent']
+  music: ConversationResult['music']
+  reply: string
+}
+
+type ChatAppResult =
+  | {
+      ok: true
+      data: ChatResponse
+    }
+  | {
+      ok: false
+      error: {
+        code: string
+        message: string
+      }
+    }
+
 const DEFAULT_USER_TEXT = '我想和你聊聊今天的心情'
+const CHAT_BRIDGE_UNAVAILABLE_MESSAGE = '对话通道不可用，请重新启动 lingmo 后再试。'
 
 function wait(ms: number): Promise<void> {
   if (ms <= 0) {
@@ -27,16 +52,40 @@ function createMessage(role: UiMessage['role'], text: string, state?: ParticleSt
   }
 }
 
-function detectIntent(text: string): ConversationResult['intent'] {
-  return /音乐|歌|播放|music|song/i.test(text) ? 'play_music' : 'chat'
-}
+async function requestAssistantReply(text: string): Promise<ChatResponse> {
+  const api = globalThis.window?.lingli
 
-function buildAssistantReply(intent: ConversationResult['intent']): string {
-  if (intent === 'play_music') {
-    return '好，我给你打开一段适合此刻的音乐。'
+  if (!api) {
+    return {
+      intent: 'chat',
+      music: null,
+      reply: CHAT_BRIDGE_UNAVAILABLE_MESSAGE
+    }
   }
 
-  return '我在。你刚才说的我记下了，我们可以慢慢往下聊。'
+  try {
+    const result = await invokeWithTimeout(
+      api.invoke<ChatResponse>('chat.sendMessage', { text }),
+      15000,
+      '对话服务响应超时。'
+    )
+
+    if (result.ok) {
+      return result.data
+    }
+
+    return {
+      intent: 'chat',
+      music: null,
+      reply: result.error.message || '我刚刚有点走神了，我们再来一次。'
+    }
+  } catch (error) {
+    return {
+      intent: 'chat',
+      music: null,
+      reply: error instanceof Error ? error.message : '对话服务暂时不可用，请稍后再试。'
+    }
+  }
 }
 
 export function useConversation(options: UseConversationOptions = {}) {
@@ -45,9 +94,7 @@ export function useConversation(options: UseConversationOptions = {}) {
   const audioLevel = ref(0.12)
   const autoListenState = ref<AutoListenState>('off')
   const isListening = ref(false)
-  const messages = ref<UiMessage[]>([
-    createMessage('assistant', '晚上好，我在这里。', 'idle')
-  ])
+  const messages = ref<UiMessage[]>([])
 
   const latestMessage = computed(() => messages.value[messages.value.length - 1] ?? null)
 
@@ -57,8 +104,8 @@ export function useConversation(options: UseConversationOptions = {}) {
     }
 
     isListening.value = true
-    if (autoListenState.value === 'armed') {
-      autoListenState.value = 'speech_detected'
+    if (autoListenState.value === 'armed' || autoListenState.value === 'prehearing' || autoListenState.value === 'grace') {
+      autoListenState.value = 'recording'
     }
     particleState.value = 'listening'
     audioLevel.value = 0.42
@@ -67,6 +114,10 @@ export function useConversation(options: UseConversationOptions = {}) {
   function enableAutoListen(): void {
     autoListenState.value = 'armed'
     audioLevel.value = Math.max(audioLevel.value, 0.18)
+  }
+
+  function setAutoListenState(state: AutoListenState): void {
+    autoListenState.value = state
   }
 
   function disableAutoListen(): void {
@@ -94,6 +145,45 @@ export function useConversation(options: UseConversationOptions = {}) {
     disableAutoListen()
   }
 
+  function markVoiceError(message: string): void {
+    isListening.value = false
+    particleState.value = 'error'
+    audioLevel.value = 0.12
+    if (autoListenState.value !== 'off') {
+      autoListenState.value = 'error'
+    }
+    messages.value.push(createMessage('system', message, 'error'))
+  }
+
+  function addSystemMessage(message: string): void {
+    messages.value.push(createMessage('system', message, 'idle'))
+  }
+
+  function cancelVoiceInput(message: string, cancelOptions: CancelVoiceInputOptions = {}): ConversationResult {
+    isListening.value = false
+    particleState.value = 'idle'
+    audioLevel.value = 0.14
+    if (
+      autoListenState.value === 'prehearing' ||
+      autoListenState.value === 'recording' ||
+      autoListenState.value === 'grace' ||
+      autoListenState.value === 'speech_detected' ||
+      autoListenState.value === 'finalizing'
+    ) {
+      autoListenState.value = 'armed'
+    }
+    if (!cancelOptions.silent) {
+      messages.value.push(createMessage('system', message, 'idle'))
+    }
+
+    return {
+      intent: 'chat',
+      music: null,
+      reply: message,
+      text: ''
+    }
+  }
+
   async function stopListening(text = DEFAULT_USER_TEXT): Promise<ConversationResult> {
     if (!isListening.value) {
       startListening()
@@ -101,10 +191,14 @@ export function useConversation(options: UseConversationOptions = {}) {
 
     isListening.value = false
     const normalizedText = text.trim() || DEFAULT_USER_TEXT
-    const intent = detectIntent(normalizedText)
 
     messages.value.push(createMessage('user', normalizedText, 'listening'))
-    if (autoListenState.value === 'speech_detected') {
+    if (
+      autoListenState.value === 'prehearing' ||
+      autoListenState.value === 'recording' ||
+      autoListenState.value === 'grace' ||
+      autoListenState.value === 'speech_detected'
+    ) {
       autoListenState.value = 'finalizing'
     }
     particleState.value = 'thinking'
@@ -112,12 +206,18 @@ export function useConversation(options: UseConversationOptions = {}) {
 
     await wait(delayMs)
 
-    messages.value.push(createMessage('assistant', buildAssistantReply(intent), 'speaking'))
-    particleState.value = 'speaking'
+    const assistant = await requestAssistantReply(normalizedText)
+
+    const replyRole: UiMessage['role'] =
+      assistant.reply === CHAT_BRIDGE_UNAVAILABLE_MESSAGE ? 'system' : 'assistant'
+    const nextState: ParticleState = replyRole === 'system' ? 'error' : 'speaking'
+
+    messages.value.push(createMessage(replyRole, assistant.reply, nextState))
+    particleState.value = nextState
     if (autoListenState.value !== 'off') {
       autoListenState.value = 'paused_for_tts'
     }
-    audioLevel.value = intent === 'play_music' ? 0.56 : 0.38
+    audioLevel.value = nextState === 'error' ? 0.12 : assistant.intent === 'play_music' ? 0.56 : 0.38
 
     await wait(delayMs)
 
@@ -128,27 +228,42 @@ export function useConversation(options: UseConversationOptions = {}) {
     audioLevel.value = 0.14
 
     return {
-      intent,
+      intent: assistant.intent,
+      music: assistant.music,
+      reply: assistant.reply,
       text: normalizedText
     }
   }
 
-  async function sendMusicDemoRequest(): Promise<ConversationResult> {
+  async function requestMusicPlayback(): Promise<ConversationResult> {
     startListening()
     return stopListening('放点适合夜晚散步的音乐')
   }
 
+  async function generateOpeningGreeting(): Promise<void> {
+    const assistant = await requestAssistantReply(
+      '请为桌面语音伙伴 lingmo 生成一句自然、温暖、简短的中文开场白。不要提到这是系统指令，只说给用户听的话。'
+    )
+
+    messages.value.splice(0, messages.value.length, createMessage('assistant', assistant.reply, 'idle'))
+  }
+
   return {
     audioLevel,
+    addSystemMessage,
     autoListenState,
+    cancelVoiceInput,
     disableAutoListen,
     enableAutoListen,
     isListening,
     latestMessage,
     markAutoListenError,
+    markVoiceError,
     messages,
     particleState,
-    sendMusicDemoRequest,
+    generateOpeningGreeting,
+    requestMusicPlayback,
+    setAutoListenState,
     startListening,
     stopListening,
     toggleAutoListen

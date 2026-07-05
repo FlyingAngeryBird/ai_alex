@@ -82,4 +82,20 @@ describe('keyboard recorder', () => {
     expect(recorder.isRecording.value).toBe(false)
     expect(fakeTrack.stop).toHaveBeenCalledTimes(1)
   })
+
+  it('does not request the microphone when the desktop voice bridge is unavailable', async () => {
+    const getUserMedia = vi.fn()
+    const recorder = useKeyboardRecorder({
+      createMediaRecorder: (stream) => new FakeMediaRecorder(stream) as unknown as MediaRecorder,
+      mediaDevices: {
+        getUserMedia
+      }
+    })
+
+    await expect(recorder.start()).rejects.toThrow('语音通道不可用')
+
+    expect(recorder.isRecording.value).toBe(false)
+    expect(recorder.errorMessage.value).toBe('语音通道不可用')
+    expect(getUserMedia).not.toHaveBeenCalled()
+  })
 })

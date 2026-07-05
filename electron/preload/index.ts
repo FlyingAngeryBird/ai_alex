@@ -2,6 +2,7 @@ import { createRequire } from 'node:module'
 
 export const exposedChannels = [
   'app.getRuntimeState',
+  'app.requestMicrophoneAccess',
   'chat.sendMessage',
   'music.authorize',
   'music.getPlaybackState',

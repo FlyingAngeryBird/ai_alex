@@ -16,6 +16,7 @@ export type AppResult<T> =
 
 export type LingliChannel =
   | 'app.getRuntimeState'
+  | 'app.requestMicrophoneAccess'
   | 'chat.sendMessage'
   | 'music.authorize'
   | 'music.getPlaybackState'

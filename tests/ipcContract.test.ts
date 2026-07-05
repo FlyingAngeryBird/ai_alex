@@ -6,6 +6,7 @@ describe('IPC contract', () => {
 
     expect(exposedChannels).toEqual([
       'app.getRuntimeState',
+      'app.requestMicrophoneAccess',
       'chat.sendMessage',
       'music.authorize',
       'music.getPlaybackState',

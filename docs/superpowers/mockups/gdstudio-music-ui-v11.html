@@ -1,0 +1,2025 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lingmo 音乐播放 UI 稿 v11 — 3D 蓬松爱心声场</title>
+    <style>
+      /* ============ 设计令牌 ============ */
+      :root {
+        --void: #07080d;
+        --ink: #0d1019;
+        --milk: #f8f4ea;
+        --milk-dim: rgba(248, 244, 234, 0.72);
+        --mist: rgba(248, 244, 234, 0.42);
+        --fog: rgba(248, 244, 234, 0.18);
+        --gold: #ffd85c;
+        --gold-soft: rgba(255, 216, 92, 0.35);
+        --teal: #00d6c8;
+        --teal-soft: rgba(0, 214, 200, 0.28);
+        --hair: rgba(255, 255, 255, 0.1);
+        --font-serif: "Noto Serif SC", "Songti SC", "Source Han Serif CN", Georgia, serif;
+        --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body {
+        width: 100%; height: 100%; margin: 0; overflow: hidden;
+        color: var(--milk);
+        background: var(--void);
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+        text-rendering: geometricPrecision;
+      }
+
+      body {
+        background:
+          radial-gradient(circle at 50% 42%, rgba(200, 80, 120, 0.07), transparent 46%),
+          radial-gradient(circle at 72% 18%, rgba(255, 150, 120, 0.05), transparent 34%),
+          linear-gradient(180deg, #12080c 0%, #0a0508 56%, #0d0709 100%);
+      }
+
+      button, input { color: inherit; font: inherit; border: none; background: none; }
+      button { cursor: pointer; }
+      input:focus { outline: none; }
+
+      .app {
+        position: relative;
+        width: 100vw; height: 100vh;
+        min-width: 360px; min-height: 560px;
+        overflow: hidden;
+      }
+
+      /* ============ 声场 ============ */
+      .field { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+      .field-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+      .field-core {
+        position: absolute;
+        top: 46%; left: 50%;
+        width: min(40vw, 440px);
+        aspect-ratio: 1;
+        border-radius: 999px;
+        transform: translate(-50%, -50%);
+        pointer-events: auto;
+        cursor: pointer;
+      }
+      .field-core::before, .field-core::after {
+        position: absolute; content: ""; border-radius: 999px; pointer-events: none;
+      }
+      .field-core::before {
+        inset: -6%;
+        border: 1px solid rgba(0, 214, 200, 0.14);
+        transform: rotate(-18deg) scaleX(1.14);
+      }
+      .field-core::after {
+        inset: -13%;
+        border: 1px solid rgba(255, 216, 92, 0.09);
+        box-shadow: 0 0 30px rgba(255, 216, 92, 0.05), inset 0 0 50px rgba(0, 214, 200, 0.04);
+        transform: rotate(22deg) scaleX(1.22);
+      }
+      .core-hint {
+        position: absolute; top: 50%; left: 50%;
+        width: 56px; height: 56px;
+        border-radius: 999px;
+        display: grid; place-items: center;
+        background: rgba(7, 8, 13, 0.4);
+        border: 1px solid var(--hair);
+        backdrop-filter: blur(10px);
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.85);
+        transition: opacity 0.25s ease, transform 0.25s ease;
+        pointer-events: none;
+      }
+      .field-core:hover .core-hint,
+      .field-core.paused .core-hint { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      .core-hint svg { width: 22px; height: 22px; color: var(--milk); }
+      .field-core.loading .core-hint { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+
+      .ripple {
+        position: absolute; top: 50%; left: 50%;
+        width: 120px; height: 120px;
+        border-radius: 999px;
+        border: 1px solid var(--gold-soft);
+        transform: translate(-50%, -50%) scale(0.6);
+        opacity: 0; pointer-events: none;
+      }
+      .ripple.go { animation: rippleOut 0.85s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+      @keyframes rippleOut {
+        0% { transform: translate(-50%, -50%) scale(0.6); opacity: 0.55; }
+        100% { transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
+      }
+
+      /* 声场中心加载旋转 */
+      .core-spinner {
+        position: absolute; top: 50%; left: 50%;
+        width: 48px; height: 48px;
+        border-radius: 999px;
+        border: 2px solid transparent;
+        border-top-color: var(--gold);
+        border-right-color: var(--gold-soft);
+        transform: translate(-50%, -50%);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+      }
+      .field-core.loading .core-spinner { opacity: 1; animation: spin 0.8s linear infinite; }
+      @keyframes spin { to { transform: translate(-50%, -50%) rotate(360deg); } }
+
+      /* ============ 顶栏 ============ */
+      .topbar {
+        position: absolute; top: 0; left: 0; right: 0; z-index: 5;
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 24px 36px;
+      }
+      .top-cluster { display: flex; align-items: center; gap: 12px; }
+
+      .ghost-btn {
+        width: 40px; height: 40px;
+        border-radius: 999px;
+        display: grid; place-items: center;
+        color: var(--milk);
+        border: 1px solid var(--hair);
+        background: rgba(255, 255, 255, 0.04);
+        backdrop-filter: blur(16px);
+        transition: background 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
+      }
+      .ghost-btn:hover { background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.18); }
+      .ghost-btn:active { transform: scale(0.93); }
+      .ghost-btn svg { width: 18px; height: 18px; }
+
+      .status-pill {
+        display: inline-flex; align-items: center; gap: 8px;
+        height: 32px; padding: 0 13px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 216, 92, 0.2);
+        background: rgba(255, 216, 92, 0.06);
+        color: rgba(255, 248, 230, 0.92);
+        font-size: 0.75rem; font-weight: 600;
+        letter-spacing: 0.02em;
+        backdrop-filter: blur(16px);
+        transition: border-color 0.2s ease, background 0.2s ease;
+      }
+      .status-dot {
+        width: 7px; height: 7px; border-radius: 999px;
+        background: var(--gold);
+        box-shadow: 0 0 12px var(--gold-soft);
+      }
+      .status-pill.playing .status-dot { animation: pulseDot 2.4s ease-in-out infinite; }
+      .status-pill.paused .status-dot { background: var(--mist); box-shadow: none; }
+      .status-pill.idle .status-dot { background: var(--teal); box-shadow: 0 0 10px var(--teal-soft); }
+      .status-pill.loading .status-dot { background: var(--gold); animation: pulseDot 1s ease-in-out infinite; }
+      .status-pill.error { border-color: rgba(255,100,100,0.3); background: rgba(255,100,100,0.06); }
+      .status-pill.error .status-dot { background: #ff6464; box-shadow: 0 0 10px rgba(255,100,100,0.4); }
+      @keyframes pulseDot { 0%,100% { opacity: 0.8; } 50% { opacity: 1; box-shadow: 0 0 18px var(--gold-soft); } }
+
+      /* 搜索面板 */
+      .search-wrap { position: relative; display: flex; align-items: center; }
+      .search-trigger {
+        position: relative; z-index: 3;
+        width: 40px; height: 40px; border-radius: 999px;
+        display: grid; place-items: center;
+        color: var(--milk);
+        border: 1px solid var(--hair);
+        background: rgba(255,255,255,0.04);
+        backdrop-filter: blur(16px);
+        transition: background 0.18s ease, border-color 0.18s ease;
+      }
+      .search-trigger:hover { background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.18); }
+      .search-trigger svg { width: 18px; height: 18px; }
+      .search-panel {
+        position: absolute; right: 0; top: 50px;
+        width: 360px;
+        max-height: calc(100vh - 90px);
+        display: flex; flex-direction: column;
+        padding: 10px;
+        border-radius: 16px;
+        border: 1px solid var(--hair);
+        background: rgba(7, 8, 12, 0.85);
+        backdrop-filter: blur(24px) saturate(1.2);
+        box-shadow: 0 18px 50px rgba(0,0,0,0.4);
+        opacity: 0; transform: translateY(-8px) scale(0.98); pointer-events: none;
+        transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.16,1,0.3,1);
+      }
+      .search-wrap.open .search-panel { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+      .search-input {
+        width: 100%; height: 38px;
+        padding: 0 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(255,255,255,0.08);
+        background: rgba(255,255,255,0.04);
+        color: var(--milk); font-size: 0.86rem;
+        transition: border-color 0.15s ease;
+      }
+      .search-input:focus { border-color: rgba(255,216,92,0.4); }
+      .search-input::placeholder { color: var(--fog); }
+      .source-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+      .source-chip {
+        height: 26px; padding: 0 11px; border-radius: 999px;
+        border: 1px solid rgba(255,255,255,0.08);
+        background: rgba(255,255,255,0.04);
+        color: var(--mist); font-size: 0.72rem;
+        white-space: nowrap;
+        transition: all 0.15s ease;
+      }
+      .source-chip:hover { color: var(--milk-dim); }
+      .source-chip.active { color: #fff4d4; border-color: rgba(255,216,92,0.35); background: rgba(255,216,92,0.08); }
+
+      /* 搜索结果列表 */
+      .search-results {
+        flex: 1; min-height: 0;
+        overflow-y: auto;
+        margin-top: 8px;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255,255,255,0.1) transparent;
+      }
+      .search-results::-webkit-scrollbar { width: 3px; }
+      .search-results::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+      .result-item {
+        display: flex; align-items: center; gap: 10px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: background 0.15s ease;
+      }
+      .result-item:hover { background: rgba(255,255,255,0.06); }
+      .result-item.active { background: rgba(255,216,92,0.08); }
+      .result-info { min-width: 0; flex: 1; }
+      .result-name {
+        color: var(--milk); font-size: 0.82rem; font-weight: 500;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .result-artist {
+        color: var(--mist); font-size: 0.68rem; margin-top: 2px;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .result-source {
+        flex-shrink: 0;
+        color: var(--fog); font-size: 0.6rem;
+        text-transform: uppercase; letter-spacing: 0.05em;
+      }
+      .search-status {
+        padding: 20px 10px;
+        text-align: center;
+        color: var(--mist); font-size: 0.76rem;
+      }
+
+      /* ============ 歌词 ============ */
+      .lyrics-rail {
+        position: absolute;
+        right: clamp(28px, 5vw, 80px);
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 4;
+        width: min(340px, 32vw);
+        max-height: 60vh;
+        -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14%, #000 86%, transparent 100%);
+        mask-image: linear-gradient(to bottom, transparent 0, #000 14%, #000 86%, transparent 100%);
+      }
+      .lyrics-eyebrow {
+        margin: 0 0 16px;
+        color: var(--teal);
+        font-size: 0.62rem; font-weight: 700;
+        letter-spacing: 0.14em; text-transform: uppercase;
+        opacity: 0.7;
+      }
+      .lyrics-scroll {
+        max-height: 50vh; overflow-y: auto;
+        padding-right: 4px;
+        scrollbar-width: none; /* Firefox：默认隐藏 */
+      }
+      .lyrics-scroll::-webkit-scrollbar { width: 3px; }
+      .lyrics-scroll::-webkit-scrollbar-thumb {
+        background: rgba(255,255,255,0.1); border-radius: 3px;
+      }
+      .lyrics-scroll::-webkit-scrollbar-track { background: transparent; }
+      /* 因果：滚动条仅在用户悬停（主动浏览意图）时显现，自动滚动时不可见 */
+      .lyrics-scroll:hover { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent; }
+      .lyric-line {
+        margin: 0; padding: 9px 0;
+        color: var(--mist);
+        font-family: var(--font-serif);
+        font-size: 1rem; line-height: 1.5;
+        transition: color 0.35s ease, font-size 0.35s ease, opacity 0.35s ease;
+        cursor: pointer;
+      }
+      .lyric-line:hover { color: var(--milk-dim); }
+      .lyric-line.current {
+        color: #ffe8b0;
+        font-size: 1.5rem;
+        font-weight: 600;
+        text-shadow: 0 0 18px rgba(255, 200, 100, 0.25);
+      }
+      .lyrics-empty {
+        padding: 40px 0;
+        text-align: center;
+        color: var(--fog);
+        font-family: var(--font-serif);
+        font-size: 0.9rem;
+        line-height: 1.6;
+      }
+
+      /* ============ 底部停靠区 ============ */
+      .dock-shade {
+        position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
+        height: 28vh;
+        background: linear-gradient(to top, rgba(5,6,10,0.78) 8%, rgba(5,6,10,0.32) 50%, transparent 100%);
+        pointer-events: none;
+      }
+
+      .dock {
+        position: absolute; left: 0; right: 0; bottom: 0; z-index: 4;
+        display: grid;
+        grid-template-columns: minmax(220px, 1fr) minmax(280px, 1.6fr) minmax(220px, 1fr);
+        align-items: end;
+        gap: 32px;
+        padding: 0 clamp(28px, 5vw, 80px) 30px;
+      }
+
+      .identity {
+        display: flex; align-items: center; gap: 14px;
+        min-width: 0;
+      }
+      .cover {
+        position: relative; flex-shrink: 0;
+        width: 64px; height: 64px;
+        border-radius: 12px; overflow: hidden;
+        border: 1px solid rgba(255,255,255,0.12);
+        background:
+          linear-gradient(145deg, rgba(255,216,92,0.78), rgba(255,111,145,0.55) 46%, rgba(0,213,200,0.68)),
+          #151512;
+        box-shadow: 0 12px 30px rgba(0,0,0,0.3);
+        transition: background 0.4s ease;
+      }
+      .cover img {
+        position: absolute; inset: 0;
+        width: 100%; height: 100%;
+        object-fit: cover;
+        opacity: 0;
+        transition: opacity 0.4s ease;
+      }
+      .cover img.loaded { opacity: 1; }
+      .identity-text { min-width: 0; }
+      .track-eyebrow {
+        margin: 0 0 5px;
+        color: var(--teal);
+        font-size: 0.6rem; font-weight: 700;
+        letter-spacing: 0.12em; text-transform: uppercase;
+        opacity: 0.7;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .track-title {
+        margin: 0;
+        color: #fff5dc;
+        font-family: var(--font-serif);
+        font-size: 1.5rem; font-weight: 700;
+        line-height: 1.1;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .track-title.idle { color: var(--mist); font-weight: 500; }
+      .track-artist {
+        margin: 4px 0 0;
+        color: var(--milk-dim);
+        font-size: 0.82rem;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+
+      .progress-zone { min-width: 0; padding-bottom: 6px; }
+      .progress-track {
+        position: relative;
+        height: 4px; border-radius: 999px;
+        background: rgba(255,255,255,0.1);
+        cursor: pointer;
+      }
+      .progress-fill {
+        position: absolute; left: 0; top: 0; height: 100%;
+        width: 0%; border-radius: inherit;
+        background: linear-gradient(90deg, var(--gold), #ffec9a);
+        box-shadow: 0 0 12px var(--gold-soft);
+        transition: width 0.1s linear;
+      }
+      .progress-track.dragging .progress-fill { transition: none; }
+      .progress-thumb {
+        position: absolute; top: 50%;
+        width: 12px; height: 12px; border-radius: 999px;
+        background: #fff5dc; border: 2px solid var(--gold);
+        transform: translate(-50%, -50%) scale(0);
+        box-shadow: 0 0 10px var(--gold-soft);
+        transition: transform 0.15s ease;
+        pointer-events: none;
+      }
+      .progress-track:hover .progress-thumb,
+      .progress-track.dragging .progress-thumb { transform: translate(-50%, -50%) scale(1); }
+      .time-row {
+        display: flex; justify-content: space-between;
+        margin-top: 9px;
+        color: var(--mist); font-size: 0.72rem;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .transport {
+        display: flex; align-items: center; justify-content: flex-end; gap: 12px;
+      }
+      .transport-btn {
+        width: 42px; height: 42px; border-radius: 999px;
+        display: grid; place-items: center;
+        color: var(--milk);
+        border: 1px solid var(--hair);
+        background: rgba(255,255,255,0.04);
+        backdrop-filter: blur(16px);
+        transition: all 0.15s ease;
+      }
+      .transport-btn:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.18); }
+      .transport-btn:active { transform: scale(0.93); }
+      .transport-btn svg { width: 18px; height: 18px; }
+      .transport-btn.play {
+        width: 50px; height: 50px;
+        border-color: rgba(255,216,92,0.35);
+        background: rgba(255,216,92,0.1);
+        color: #fff4d4;
+      }
+      .transport-btn.play svg { width: 20px; height: 20px; }
+
+      .volume { display: flex; align-items: center; gap: 8px; margin-left: 4px; }
+      .volume-btn {
+        width: 34px; height: 34px; border-radius: 999px;
+        display: grid; place-items: center;
+        color: var(--milk-dim);
+        transition: color 0.15s ease;
+      }
+      .volume-btn:hover { color: var(--milk); }
+      .volume-btn svg { width: 18px; height: 18px; }
+      .volume-slider {
+        position: relative;
+        width: 80px; height: 4px; border-radius: 999px;
+        background: rgba(255,255,255,0.1);
+        cursor: pointer;
+      }
+      .volume-fill {
+        position: absolute; left: 0; top: 0; height: 100%;
+        width: 70%; border-radius: inherit;
+        background: var(--teal);
+        box-shadow: 0 0 8px var(--teal-soft);
+      }
+      .volume-thumb {
+        position: absolute; top: 50%;
+        width: 10px; height: 10px; border-radius: 999px;
+        background: #fff5dc; border: 2px solid var(--teal);
+        transform: translate(-50%, -50%) scale(0);
+        transition: transform 0.15s ease;
+      }
+      .volume-slider:hover .volume-thumb,
+      .volume-slider.dragging .volume-thumb { transform: translate(-50%, -50%) scale(1); }
+
+      /* ============ 播放列表抽屉 ============ */
+      .drawer-overlay {
+        position: fixed; inset: 0; z-index: 8;
+        background: rgba(0,0,0,0.4);
+        opacity: 0; pointer-events: none;
+        transition: opacity 0.3s ease;
+        backdrop-filter: blur(2px);
+      }
+      .drawer-overlay.open { opacity: 1; pointer-events: auto; }
+      .drawer {
+        position: fixed; top: 0; right: 0; bottom: 0; z-index: 9;
+        width: min(360px, 84vw);
+        transform: translateX(100%);
+        transition: transform 0.35s cubic-bezier(0.16,1,0.3,1);
+        padding: 28px 24px;
+        border-left: 1px solid rgba(255,255,255,0.08);
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01)),
+          rgba(7,8,12,0.88);
+        backdrop-filter: blur(30px) saturate(1.2);
+        display: flex; flex-direction: column;
+      }
+      .drawer.open { transform: translateX(0); }
+      .drawer-head {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 22px;
+        flex-shrink: 0;
+      }
+      .drawer-title {
+        margin: 0;
+        font-family: var(--font-serif);
+        font-size: 1.3rem; font-weight: 700;
+      }
+      .queue {
+        display: flex; flex-direction: column; gap: 4px;
+        flex: 1; min-height: 0;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255,255,255,0.1) transparent;
+      }
+      .queue::-webkit-scrollbar { width: 3px; }
+      .queue::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+      .queue-item {
+        display: flex; align-items: center; gap: 12px;
+        padding: 10px 12px; border-radius: 12px;
+        border: 1px solid transparent;
+        cursor: pointer;
+        transition: background 0.15s ease, border-color 0.15s ease;
+      }
+      .queue-item:hover { background: rgba(255,255,255,0.05); }
+      .queue-item.active { background: rgba(255,216,92,0.08); border-color: rgba(255,216,92,0.2); }
+      .queue-thumb {
+        width: 40px; height: 40px; border-radius: 8px; flex-shrink: 0;
+        overflow: hidden;
+        background: linear-gradient(135deg, rgba(255,216,92,0.4), rgba(0,214,200,0.3));
+      }
+      .queue-thumb img { width: 100%; height: 100%; object-fit: cover; }
+      .queue-meta { min-width: 0; flex: 1; }
+      .queue-song { color: var(--milk); font-size: 0.86rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .queue-artist { color: var(--mist); font-size: 0.7rem; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .queue-empty {
+        padding: 40px 20px;
+        text-align: center;
+        color: var(--fog); font-size: 0.8rem;
+        line-height: 1.6;
+      }
+
+      /* ============ Toast ============ */
+      .toast {
+        position: fixed; bottom: 120px; left: 50%;
+        transform: translateX(-50%) translateY(20px);
+        z-index: 20;
+        padding: 12px 20px;
+        border-radius: 12px;
+        border: 1px solid var(--hair);
+        background: rgba(7,8,12,0.9);
+        backdrop-filter: blur(20px);
+        color: var(--milk);
+        font-size: 0.82rem;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.25s ease, transform 0.25s ease;
+      }
+      .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+      /* ============ 响应式 ============ */
+      @media (max-width: 1024px) {
+        .lyrics-rail { width: min(280px, 30vw); right: 28px; }
+        .dock { grid-template-columns: 1fr 1.4fr 1fr; gap: 20px; padding: 0 28px 26px; }
+        .track-title { font-size: 1.3rem; }
+      }
+
+      @media (max-width: 760px) {
+        .topbar { padding: 18px 20px; }
+        .status-pill { display: none; }
+        .search-panel { width: calc(100vw - 40px); }
+        .lyrics-rail {
+          top: auto; bottom: 200px;
+          transform: none;
+          right: 20px; left: 20px;
+          width: auto; max-height: 26vh;
+        }
+        .lyrics-scroll { max-height: 26vh; }
+        .field-core { width: min(56vw, 280px); top: 32%; }
+        .dock { grid-template-columns: 1fr; gap: 14px; padding: 0 20px 20px; }
+        .identity { justify-content: center; }
+        .transport { justify-content: center; }
+        .progress-zone { order: -1; }
+        .volume { display: none; }
+      }
+
+      @media (max-height: 680px) {
+        .field-core { width: min(34vw, 320px); top: 42%; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .status-pill.playing .status-dot { animation: none; }
+        .ripple { display: none; }
+        .lyric-line { transition: none; }
+        .core-spinner { animation: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <audio id="audio" preload="metadata" crossorigin="anonymous"></audio>
+
+      <div class="field" aria-hidden="true">
+        <canvas class="field-canvas" id="fieldCanvas"></canvas>
+        <div class="field-core" id="fieldCore" title="点击播放/暂停">
+          <div class="core-hint" id="coreHint">
+            <svg id="hintPlay" viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M8 5v14l11-7z"/></svg>
+            <svg id="hintPause" viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+            <svg id="hintSearch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          </div>
+          <div class="core-spinner" id="coreSpinner"></div>
+          <div class="ripple" id="ripple"></div>
+        </div>
+      </div>
+
+      <header class="topbar">
+        <div class="top-cluster">
+          <button class="ghost-btn" aria-label="返回聊天" title="返回聊天">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+          </button>
+          <div class="status-pill idle" id="statusPill"><span class="status-dot"></span><span id="statusText">Ready</span></div>
+        </div>
+        <div class="top-cluster">
+          <div class="search-wrap" id="searchWrap">
+            <button class="search-trigger" id="searchTrigger" aria-label="展开搜索" title="搜索">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            </button>
+            <div class="search-panel">
+              <input class="search-input" id="searchInput" type="text" placeholder="搜索歌曲、歌手或专辑" aria-label="搜索" />
+              <div class="source-chips" aria-label="音源选择">
+                <button class="source-chip active" type="button" data-source="netease">netease</button>
+                <button class="source-chip" type="button" data-source="joox">joox</button>
+                <button class="source-chip" type="button" data-source="kuwo">kuwo</button>
+              </div>
+              <div class="search-results" id="searchResults">
+                <div class="search-status">输入关键词搜索</div>
+              </div>
+            </div>
+          </div>
+          <button class="ghost-btn" id="queueBtn" aria-label="播放列表" title="播放列表">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h12"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <aside class="lyrics-rail" aria-label="同步歌词">
+        <p class="lyrics-eyebrow">同步歌词</p>
+        <div class="lyrics-scroll" id="lyricsScroll">
+          <div class="lyrics-empty" id="lyricsEmpty">搜索一首歌<br/>声场为你而启</div>
+        </div>
+      </aside>
+
+      <div class="dock-shade" aria-hidden="true"></div>
+      <section class="dock" aria-label="音乐播放控制">
+        <div class="identity">
+          <div class="cover" id="cover" aria-label="专辑封面"></div>
+          <div class="identity-text">
+            <p class="track-eyebrow" id="trackEyebrow">声场待启</p>
+            <h1 class="track-title idle" id="trackTitle">未在播放</h1>
+            <p class="track-artist" id="trackArtist">搜索一首歌开始</p>
+          </div>
+        </div>
+
+        <div class="progress-zone">
+          <div class="progress-track" id="progressTrack" aria-label="播放进度">
+            <div class="progress-fill" id="progressFill"></div>
+            <div class="progress-thumb" id="progressThumb"></div>
+          </div>
+          <div class="time-row"><span id="currentTime">0:00</span><span id="totalTime">0:00</span></div>
+        </div>
+
+        <div class="transport">
+          <button class="transport-btn" id="prevBtn" aria-label="上一首">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+          </button>
+          <button class="transport-btn play" id="playBtn" aria-label="播放">
+            <svg id="btnPause" viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+            <svg id="btnPlay" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+          <button class="transport-btn" id="nextBtn" aria-label="下一首">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+          </button>
+          <div class="volume">
+            <button class="volume-btn" id="muteBtn" aria-label="静音">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+            </button>
+            <div class="volume-slider" id="volumeSlider">
+              <div class="volume-fill" id="volumeFill"></div>
+              <div class="volume-thumb" id="volumeThumb"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="drawer-overlay" id="drawerOverlay"></div>
+      <aside class="drawer" id="drawer" aria-label="播放列表">
+        <div class="drawer-head">
+          <h2 class="drawer-title">播放队列</h2>
+          <button class="ghost-btn" id="closeDrawer" aria-label="关闭">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="queue" id="queue">
+          <div class="queue-empty">队列为空<br/>搜索歌曲后即可播放</div>
+        </div>
+      </aside>
+
+      <div class="toast" id="toast"></div>
+    </main>
+
+    <script>
+      /* ================================================================
+       * 第一性原理推导的状态机与数据流
+       *
+       * 不可再分状态：idle → searching → loading → ready → playing/paused
+       * 硬约束：无 url 不能播放（loading → ready 需 url 就绪）
+       * 软约束：pic/lyric 可降级，不阻塞播放
+       * 因果链：搜索→曲目标识→url(阻塞)+pic(并行)+lyric(并行)→播放
+       * 缓存：避免耗尽 50次/5分钟 频率限制
+       * 声场：AnalyserNode 真实音频频率驱动，全 0 时降级为伪能量
+       * ================================================================ */
+
+      const API_BASE = 'https://music-api.gdstudio.xyz/api.php';
+      const cache = new Map();
+      const fmt = sec => {
+        if (!sec || !isFinite(sec)) return '0:00';
+        const m = Math.floor(sec / 60);
+        const s = Math.floor(sec % 60);
+        return `${m}:${String(s).padStart(2, '0')}`;
+      };
+
+      /* ---------- API 层：四个不可再分的接口 ---------- */
+      async function apiSearch(keyword, source, count = 20, page = 1) {
+        const url = `${API_BASE}?types=search&source=${source}&name=${encodeURIComponent(keyword)}&count=${count}&pages=${page}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`搜索失败 (${res.status})`);
+        return res.json();
+      }
+      async function apiUrl(source, id, br = 320) {
+        const key = `url:${source}:${id}`;
+        if (cache.has(key)) return cache.get(key);
+        const url = `${API_BASE}?types=url&source=${source}&id=${id}&br=${br}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`获取播放链接失败 (${res.status})`);
+        const data = await res.json();
+        if (data.url) cache.set(key, data);
+        return data;
+      }
+      async function apiPic(source, picId, size = 300) {
+        const key = `pic:${source}:${picId}`;
+        if (cache.has(key)) return cache.get(key);
+        const url = `${API_BASE}?types=pic&source=${source}&id=${picId}&size=${size}`;
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        const data = await res.json();
+        if (data.url) cache.set(key, data);
+        return data;
+      }
+      async function apiLyric(source, lyricId) {
+        const key = `lyric:${source}:${lyricId}`;
+        if (cache.has(key)) return cache.get(key);
+        const url = `${API_BASE}?types=lyric&source=${source}&id=${lyricId}`;
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        const data = await res.json();
+        if (data.lyric) cache.set(key, data);
+        return data;
+      }
+
+      /* ---------- LRC 解析：唯一目的是按时间定位当前行 ---------- */
+      function parseLRC(lrcText) {
+        if (!lrcText) return [];
+        const lines = lrcText.split('\n');
+        const result = [];
+        const timeRe = /\[(\d+):(\d+(?:\.\d+)?)\]/g;
+        for (const line of lines) {
+          const text = line.replace(timeRe, '').trim();
+          if (!text) continue;
+          if (/^\[(ti|ar|al|by|offset):/i.test(line)) continue;
+          let m;
+          timeRe.lastIndex = 0;
+          while ((m = timeRe.exec(line)) !== null) {
+            const time = parseInt(m[1]) * 60 + parseFloat(m[2]);
+            result.push({ time, text });
+          }
+        }
+        return result.sort((a, b) => a.time - b.time);
+      }
+
+      /* ---------- 全局状态 ---------- */
+      const state = {
+        status: 'idle',
+        queue: [],
+        currentIndex: -1,
+        currentTrack: null,
+        source: 'netease',
+        volume: 0.7,
+        muted: false,
+        lastVolume: 0.7,
+        lyrics: [],
+        audioCtx: null,
+        analyser: null,
+        freqData: null,
+        analyserReady: false,
+      };
+
+      const audio = document.getElementById('audio');
+      audio.volume = state.volume;
+
+      /* ---------- DOM 引用 ---------- */
+      const $ = id => document.getElementById(id);
+      const els = {
+        canvas: $('fieldCanvas'), ctx: $('fieldCanvas').getContext('2d'),
+        fieldCore: $('fieldCore'), coreHint: $('coreHint'), coreSpinner: $('coreSpinner'),
+        hintPlay: $('hintPlay'), hintPause: $('hintPause'), hintSearch: $('hintSearch'),
+        ripple: $('ripple'),
+        statusPill: $('statusPill'), statusText: $('statusText'),
+        searchWrap: $('searchWrap'), searchTrigger: $('searchTrigger'), searchInput: $('searchInput'),
+        searchResults: $('searchResults'),
+        cover: $('cover'), trackEyebrow: $('trackEyebrow'),
+        trackTitle: $('trackTitle'), trackArtist: $('trackArtist'),
+        progressTrack: $('progressTrack'), progressFill: $('progressFill'), progressThumb: $('progressThumb'),
+        currentTime: $('currentTime'), totalTime: $('totalTime'),
+        playBtn: $('playBtn'), btnPlay: $('btnPlay'), btnPause: $('btnPause'),
+        prevBtn: $('prevBtn'), nextBtn: $('nextBtn'),
+        volumeSlider: $('volumeSlider'), volumeFill: $('volumeFill'), volumeThumb: $('volumeThumb'),
+        muteBtn: $('muteBtn'),
+        lyricsScroll: $('lyricsScroll'), lyricsEmpty: $('lyricsEmpty'),
+        drawer: $('drawer'), drawerOverlay: $('drawerOverlay'),
+        queueBtn: $('queueBtn'), closeDrawer: $('closeDrawer'), queue: $('queue'),
+        toast: $('toast'),
+      };
+
+      /* ---------- Toast ---------- */
+      let toastTimer = null;
+      function toast(msg) {
+        els.toast.textContent = msg;
+        els.toast.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => els.toast.classList.remove('show'), 3000);
+      }
+
+      /* ---------- 状态机：唯一的状态转换入口 ---------- */
+      function setStatus(status) {
+        state.status = status;
+        els.statusPill.className = 'status-pill ' + status;
+        const labels = { idle: 'Ready', searching: 'Searching', loading: 'Loading', ready: 'Ready', playing: 'Playing', paused: 'Paused', error: 'Error' };
+        els.statusText.textContent = labels[status] || status;
+
+        if (status === 'loading') {
+          els.fieldCore.classList.add('loading');
+          els.hintSearch.style.display = 'none';
+          els.hintPlay.style.display = 'none';
+          els.hintPause.style.display = 'none';
+        } else {
+          els.fieldCore.classList.remove('loading');
+        }
+      }
+
+      /* ---------- 声场粒子：3D 蓬松爱心（Puffy Heart Volume）----------
+       *
+       * 第一性原理：
+       *   真正的立体爱心不是"壳"也不是"板"，而是一个"中心蓬松、边缘渐薄、
+       *   表面略密集、内部有填充"的 3D 光体——像一颗充气爱心气球或毛绒爱心。
+       *
+       * 用户反馈的因果修正：
+       *   1. "侧面像厚度板" → 旧版 z 厚度只沿边界分布，侧面只剩一条线；
+       *      新版让 z 厚度从中心向边缘连续递减，侧面呈圆润的凸透镜截面。
+       *   2. "颜色偏暗偏冷" → 从洋红系切回暖粉/珊瑚/金粉系。
+       *   3. "内部不完全是空的" → 密度从边界高峰向内渐降至非零谷底，
+       *      形成"表面壳层亮、内部有柔和填充"的体积感。
+       *
+       * v11 算法：
+       *   1. 高分辨率参数曲线 + 轻量平滑，保留经典爱心剪影
+       *   2. 计算每点相对于爱心质心的距离 r，以及到边界距离 d
+       *   3. z 厚度 = maxZ * √(1 - (r/Rmax)²)  → 中心最厚，边缘最薄，侧面圆润
+       *   4. 密度 = innerDensity + shellBoost * exp(-(d/shellWidth)²)
+       *      → 边界有明亮壳层，内部有柔和填充，不完全空心
+       *   5. 外侧少量光晕粒子，边缘自然飘散
+       */
+
+      const particles = [];
+
+      // 1. 构建高分辨率爱心曲线（轻量平滑，保留顶部 cleft）
+      const HEART_SAMPLES = 1200;
+      const rawHeart = [];
+      for (let i = 0; i < HEART_SAMPLES; i++) {
+        const t = (i / HEART_SAMPLES) * Math.PI * 2;
+        const px = 16 * Math.pow(Math.sin(t), 3);
+        const py = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+        // 调整比例：x 略收，y 略放，让爱心更接近图标比例（宽/高 ≈ 1.25）
+        rawHeart.push({ x: px / 16 * 0.9, y: py / 16 * 1.12 + 0.42 });
+      }
+
+      const heartCurve = rawHeart.map((p, i) => {
+        let sx = 0, sy = 0, w = 0;
+        for (let k = -3; k <= 3; k++) {
+          const idx = (i + k + HEART_SAMPLES) % HEART_SAMPLES;
+          const weight = Math.exp(-k * k * 0.25);
+          sx += rawHeart[idx].x * weight;
+          sy += rawHeart[idx].y * weight;
+          w += weight;
+        }
+        return { x: sx / w, y: sy / w };
+      });
+
+      // 2. 计算爱心质心（用于 3D 厚度中心）
+      let centroidX = 0, centroidY = 0;
+      for (const p of heartCurve) { centroidX += p.x; centroidY += p.y; }
+      centroidX /= HEART_SAMPLES;
+      centroidY /= HEART_SAMPLES;
+
+      // 估算最大半径 Rmax（用于归一化 z 厚度）
+      let Rmax = 0;
+      for (const p of heartCurve) {
+        const r = Math.hypot(p.x - centroidX, p.y - centroidY);
+        if (r > Rmax) Rmax = r;
+      }
+
+      // 3. 点在多边形内测试
+      function inHeart(x, y) {
+        let inside = false;
+        for (let i = 0, j = HEART_SAMPLES - 1; i < HEART_SAMPLES; j = i++) {
+          const xi = heartCurve[i].x, yi = heartCurve[i].y;
+          const xj = heartCurve[j].x, yj = heartCurve[j].y;
+          if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi + 1e-10) + xi)) {
+            inside = !inside;
+          }
+        }
+        return inside;
+      }
+
+      // 4. 到边界的最近距离（内部为正，外部为负）
+      function signedDistToBoundary(x, y) {
+        let minDist = Infinity;
+        for (const p of heartCurve) {
+          const dx = x - p.x;
+          const dy = y - p.y;
+          const d = dx * dx + dy * dy;
+          if (d < minDist) minDist = d;
+        }
+        const dist = Math.sqrt(minDist);
+        return inHeart(x, y) ? dist : -dist;
+      }
+
+      // 5. 3D 蓬松爱心采样
+      function sampleHeart(scale, maxThick, count, layer) {
+        const result = [];
+        const maxAttempts = count * 80;
+        let attempts = 0;
+
+        const shellWidth = 0.12;      // 壳层宽度
+        const shellBoost = 0.75;      // 边界密度加成
+        const innerDensity = 0.22;    // 内部填充密度（非空）
+        const haloWidth = 0.18;       // 外侧光晕宽度
+        const haloDensity = 0.28;     // 光晕相对密度
+
+        while (result.length < count && attempts < maxAttempts) {
+          attempts++;
+          const x = (Math.random() * 2 - 1) * 1.35;
+          const y = (Math.random() * 2 - 1) * 1.45;
+
+          const d = signedDistToBoundary(x, y);
+          let keepProb;
+          let zMax;
+          let scattered = false;
+          let membership = 0;
+
+          if (d >= 0) {
+            // 内部：边界壳层 + 内部填充
+            const r = Math.hypot(x - centroidX, y - centroidY);
+            const rNorm = Math.min(1, r / Rmax);
+            // z 厚度：中心最厚，边缘变薄 → 侧面呈圆润凸透镜
+            zMax = maxThick * Math.sqrt(Math.max(0, 1 - rNorm * rNorm));
+            // 密度：边界高峰，内部谷底但非零
+            membership = innerDensity + shellBoost * Math.exp(-(d / shellWidth) * (d / shellWidth));
+            keepProb = membership;
+          } else {
+            // 外部：光晕，向外衰减
+            zMax = maxThick * 0.25;
+            membership = haloDensity * Math.exp(-(d / haloWidth) * (d / haloWidth));
+            keepProb = membership;
+            scattered = true;
+          }
+
+          if (Math.random() > keepProb) continue;
+
+          // 轻微扰动，让粒子分布更自然
+          const jitter = 0.015 * (1 + Math.random());
+          const angle = Math.random() * Math.PI * 2;
+          const sx = x + Math.cos(angle) * jitter;
+          const sy = y + Math.sin(angle) * jitter;
+
+          const z = (Math.random() * 2 - 1) * zMax;
+
+          result.push({
+            x: sx * scale,
+            y: -sy * scale, // y 翻转，尖角朝下
+            z: z * scale,
+            layer: layer,
+            phase: Math.random() * Math.PI * 2,
+            twinkleSpeed: 0.4 + Math.random() * 1.6,
+            seed: Math.random(),
+            membership: membership, // 边界附近高，内部低，外部光晕低
+            scattered: scattered
+          });
+        }
+        return result;
+      }
+
+      // 外壳：蓬松体积，表面壳层亮，内部有填充
+      particles.push(...sampleHeart(1.0, 0.55, 2600, 2));
+      // 内云：稍小一层，增加体积层次
+      particles.push(...sampleHeart(0.8, 0.4, 450, 1));
+      // 核心：心跳核，播放时可见
+      particles.push(...sampleHeart(0.38, 0.24, 120, 0));
+
+      function resize() {
+        const ratio = window.devicePixelRatio || 1;
+        els.canvas.width = Math.floor(window.innerWidth * ratio);
+        els.canvas.height = Math.floor(window.innerHeight * ratio);
+        els.canvas.style.width = `${window.innerWidth}px`;
+        els.canvas.style.height = `${window.innerHeight}px`;
+        els.ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      }
+
+      /* 爱心色温映射：能量驱动颜色从暖暗粉到珊瑚金粉的必然旅程
+       *   0.0  暖暗粉   [60, 30, 45]     — 静息心跳
+       *   0.25 玫瑰粉   [170, 65, 100]   — 心跳加速
+       *   0.5  珊瑚粉   [235, 110, 125]  — 生命涌动
+       *   0.7  暖粉橘   [255, 160, 120]  — 激情释放
+       *   1.0  金粉白   [255, 225, 185]  — 全力跳动
+       */
+      function lerp(a, b, t) { return a + (b - a) * t; }
+
+      function rgbToHsl(r, g, b) {
+        r /= 255; g /= 255; b /= 255;
+        const max = Math.max(r, g, b), min = Math.min(r, g, b);
+        let h, s, l = (max + min) / 2;
+        if (max === min) { h = s = 0; }
+        else {
+          const d = max - min;
+          s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+          switch (max) {
+            case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+            case g: h = (b - r) / d + 2; break;
+            case b: h = (r - g) / d + 4; break;
+          }
+          h /= 6;
+        }
+        return [h * 360, s, l];
+      }
+      function hslToRgb(h, s, l) {
+        h /= 360;
+        let r, g, b;
+        if (s === 0) { r = g = b = l; }
+        else {
+          const hue2rgb = (p, q, t) => {
+            if (t < 0) t += 1; if (t > 1) t -= 1;
+            if (t < 1/6) return p + (q - p) * 6 * t;
+            if (t < 1/2) return q;
+            if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+            return p;
+          };
+          const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+          const p = 2 * l - q;
+          r = hue2rgb(p, q, h + 1/3);
+          g = hue2rgb(p, q, h);
+          b = hue2rgb(p, q, h - 1/3);
+        }
+        return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+      }
+
+      function stellarColor(energy, depth, seed, hueShift) {
+        const isSeed = seed > 0.85;
+        const e = Math.max(0, Math.min(1, isSeed ? energy * 1.35 : energy));
+
+        let r, g, b;
+        if (e < 0.3) {
+          const t = e / 0.3;
+          r = lerp(60, 170, t);  g = lerp(30, 65, t);  b = lerp(45, 100, t);
+        } else if (e < 0.6) {
+          const t = (e - 0.3) / 0.3;
+          r = lerp(170, 235, t);  g = lerp(65, 110, t);  b = lerp(100, 125, t);
+        } else if (e < 0.8) {
+          const t = (e - 0.6) / 0.2;
+          r = lerp(235, 255, t);  g = lerp(110, 160, t);  b = lerp(125, 120, t);
+        } else {
+          const t = (e - 0.8) / 0.2;
+          r = lerp(255, 255, t);  g = lerp(160, 225, t);  b = lerp(120, 185, t);
+        }
+
+        if (hueShift && e > 0.15) {
+          const [h, sat, l] = rgbToHsl(r, g, b);
+          const [nr, ng, nb] = hslToRgb(h + hueShift, sat, l);
+          r = nr; g = ng; b = nb;
+        }
+
+        const depthMul = 0.55 + depth * 0.45;
+        r *= depthMul; g *= depthMul; b *= depthMul;
+
+        return [Math.round(r), Math.round(g), Math.round(b)];
+      }
+
+      /* AnalyserNode 初始化（第一性原理 v2）：
+       *
+       * 核心需求：声场必须跟随真实歌曲旋律——这是核心功能，不是可选增强。
+       *
+       * 之前放弃 Analyser 的原因（无声）重新审视：
+       *   1. CORS → 已验证 CDN 返回 access-control-allow-origin: *，已加 crossorigin
+       *   2. AudioContext suspended → 之前 resume() 未 await，context 可能未 running
+       *   3. 路由切换竞态 → createMediaElementSource 在 context 未 running 时接管
+       *
+       * 正确因果链：
+       *   audio.play() 成功（用户交互已发生）
+       *   → 创建 AudioContext（此时用户交互已激活，context 直接 running 或可 resume）
+       *   → await resume() 确保 running
+       *   → createMediaElementSource 接管
+       *   → analyser.connect(destination)
+       *   → 声音从 Web Audio 图输出（context running，连接已建立）
+       *
+       * 降级策略：如果任何步骤失败，analyserReady=false，伪能量兜底，播放不受影响
+       */
+      let analyserInitAttempted = false; // createMediaElementSource 只能调用一次，防止重试
+      async function initAnalyser() {
+        if (state.analyserReady || analyserInitAttempted) return;
+        analyserInitAttempted = true;
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          // 关键：await resume()，确保 context 进入 running 后再接管
+          if (ctx.state === 'suspended') {
+            await ctx.resume();
+          }
+          if (ctx.state !== 'running') {
+            throw new Error('AudioContext 无法启动');
+          }
+
+          const analyser = ctx.createAnalyser();
+          analyser.fftSize = 1024;              // 512 bins，足够细的频率分辨率
+          analyser.smoothingTimeConstant = 0.82; // 内置时间平滑，减少高频抖动
+          const freqData = new Uint8Array(analyser.frequencyBinCount);
+
+          const src = ctx.createMediaElementSource(audio);
+          src.connect(analyser);
+          analyser.connect(ctx.destination);
+
+          state.audioCtx = ctx;
+          state.analyser = analyser;
+          state.freqData = freqData;
+          state.analyserReady = true;
+        } catch (e) {
+          state.analyserReady = false;
+          // 降级：伪能量兜底，不影响播放
+        }
+      }
+
+      /* 声场能量系统 v4：自适应律动引擎
+       *
+       * 第一性原理诊断"只能满足部分场景"的根因：
+       *   1. 固定阈值 → 安静民谣 bass 到不了 0.35，无节拍无波纹；电子乐 bass 常态 0.6+，无律动
+       *   2. 节拍只看 bass → 民谣/古典以 mid 为主，漏检
+       *   3. 固定 attack/release → 慢歌余韵太短，快歌两鼓点间包络没回落完
+       *   4. 线性映射 → 违反韦伯-费希纳定律，安静段无反应，响亮段变化不明显
+       *   5. 无动态范围归一化 → 不同歌曲同样的 0.5 含义完全不同
+       *
+       * v4 核心创新：
+       *   A. 运行时动态范围追踪（EMA min/max）→ 自适应阈值
+       *   B. 多频段节拍检测（bass + lowMid + mid 都可触发）
+       *   C. 节拍间隔自适应包络 release
+       *   D. 感知映射（平方根压缩，模拟韦伯-费希纳）
+       *   E. 能量差分驱动（包络 - 平滑 = 律动偏离量，与绝对值无关）
+       */
+      let smoothBass = 0, smoothMid = 0, smoothTreble = 0, smoothLowMid = 0;
+      let targetBass = 0, targetMid = 0, targetTreble = 0, targetLowMid = 0;
+      let envBass = 0, envLowMid = 0, envMid = 0, envTreble = 0;
+      let prevEnvBass = 0, prevEnvMid = 0, prevEnvLowMid = 0;
+      let rotationAccum = 0;
+      let lastFrameTime = 0;
+      let pulseRings = [];
+      let beatImpulse = 0;
+      let lastBeatTime = 0;
+      let hueDrift = 0;
+
+      // 自适应动态范围：每频段追踪运行时 min/max（EMA）
+      // 因果：每首歌的"安静"和"响亮"不同，必须从数据中学习
+      const dynRange = {
+        bass:    { min: 0.5, max: 0.5 },
+        lowMid:  { min: 0.5, max: 0.5 },
+        mid:     { min: 0.5, max: 0.5 },
+        treble:  { min: 0.5, max: 0.5 }
+      };
+      const DYN_EMA = 0.003; // 极慢 EMA，~5 分钟收敛，适配整首歌
+
+      // 节拍间隔自适应
+      let beatIntervals = []; // 记录最近节拍间隔
+      let avgBeatInterval = 0.5; // 平均节拍间隔，驱动 release
+
+      function getInstantEnergy() {
+        if (!state.analyserReady || !state.analyser) return null;
+        state.analyser.getByteFrequencyData(state.freqData);
+        const n = state.freqData.length;
+        const bassEnd = 6, lowMidEnd = 12, midEnd = 93, trebleEnd = Math.min(186, n);
+        let bass = 0, lowMid = 0, mid = 0, treble = 0;
+        for (let i = 0; i < bassEnd; i++) bass += state.freqData[i];
+        for (let i = bassEnd; i < lowMidEnd; i++) lowMid += state.freqData[i];
+        for (let i = lowMidEnd; i < midEnd; i++) mid += state.freqData[i];
+        for (let i = midEnd; i < trebleEnd; i++) treble += state.freqData[i];
+        return {
+          bass: bass / bassEnd / 255,
+          lowMid: lowMid / (lowMidEnd - bassEnd) / 255,
+          mid: mid / (midEnd - lowMidEnd) / 255,
+          treble: treble / (trebleEnd - midEnd) / 255
+        };
+      }
+
+      // 感知映射：平方根压缩（韦伯-费希纳定律）
+      // 人耳对响度的感知是对数的，sqrt 近似模拟，让安静段也有可见反应
+      function perceptual(v) {
+        return Math.sqrt(Math.max(0, Math.min(1, v)));
+      }
+
+      // 动态范围归一化：将值映射到 [0,1] 基于运行时 min/max
+      function normalize(v, range) {
+        const span = range.max - range.min;
+        if (span < 0.01) return 0.5; // 动态范围太小，给中间值
+        return Math.max(0, Math.min(1, (v - range.min) / span));
+      }
+
+      // 更新动态范围追踪
+      function updateDynRange(range, v) {
+        // EMA 追踪 min/max，极慢收敛
+        if (v < range.min) range.min += (v - range.min) * 0.5;
+        else range.min += (v - range.min) * DYN_EMA;
+        if (v > range.max) range.max += (v - range.max) * 0.5;
+        else range.max += (v - range.max) * DYN_EMA;
+        // 防止 min/max 收敛到同一点
+        if (range.max - range.min < 0.02) range.max = range.min + 0.02;
+      }
+
+      // 包络跟随器：attack/release 由节拍间隔自适应
+      function updateEnvelope(env, target, dt, interval) {
+        // attack 固定快速；release 与节拍间隔成正比，慢歌长余韵，快歌短余韵
+        const attack = Math.min(1, 0.45 * dt * 60);
+        // release = 间隔的 60%，保证两个节拍间包络能回落到约 30%
+        const releaseCoeff = Math.min(1, (0.6 / Math.max(0.2, interval)) * dt);
+        if (target > env) {
+          env += (target - env) * attack;
+        } else {
+          env += (target - env) * releaseCoeff;
+        }
+        return env;
+      }
+
+      // 多频段节拍检测：bass/lowMid/mid 任一频段都可触发
+      // 因果：民谣节奏在 mid（吉他扫弦），古典在 lowMid（大提琴），电子在 bass（鼓点）
+      function detectBeat(s, envs, prevEnvs, dt) {
+        const minInterval = 0.22; // 最小节拍间隔（~270BPM 上限）
+        if (s - lastBeatTime < minInterval) return false;
+
+        const bands = ['bass', 'lowMid', 'mid'];
+        for (const band of bands) {
+          const env = envs[band];
+          const prev = prevEnvs[band];
+          const slope = (env - prev) / Math.max(0.001, dt);
+
+          // 自适应阈值：该频段动态范围的中点 + slope 要求
+          const range = dynRange[band];
+          const span = range.max - range.min;
+          const threshold = range.min + span * 0.55; // 动态范围 55% 以上才算"冲击"
+          const slopeThreshold = span * 2.0;        // slope 与动态范围成正比
+
+          if (env > threshold && slope > slopeThreshold) {
+            // 记录节拍间隔
+            if (lastBeatTime > 0) {
+              beatIntervals.push(s - lastBeatTime);
+              if (beatIntervals.length > 12) beatIntervals.shift();
+              // 更新平均节拍间隔
+              avgBeatInterval = beatIntervals.reduce((a, b) => a + b, 0) / beatIntervals.length;
+            }
+            return env; // 返回触发能量
+          }
+        }
+        return false;
+      }
+
+      function pseudoEnergy(s) {
+        if (s - lastBeatTime > (0.46 + Math.random() * 0.16)) {
+          beatImpulse = 1.0;
+          lastBeatTime = s;
+        }
+        const bassBeat = beatImpulse * 0.7 + Math.sin(s * 1.6) * 0.12;
+        const midWave = Math.sin(s * 0.8) * 0.3 + Math.sin(s * 1.9) * 0.15;
+        const trebleWave = Math.sin(s * 5.2) * 0.2 + Math.sin(s * 7.1) * 0.15 + Math.sin(s * 11.3) * 0.1;
+        return {
+          bass: Math.max(0, 0.45 + bassBeat * 0.3 + Math.sin(s * 1.6) * 0.08),
+          lowMid: Math.max(0, 0.38 + Math.sin(s * 1.2) * 0.15),
+          mid: Math.max(0, 0.4 + midWave * 0.2),
+          treble: Math.max(0, 0.35 + trebleWave * 0.25)
+        };
+      }
+
+      function draw(time) {
+        const s = time / 1000;
+        const dt = lastFrameTime ? (time - lastFrameTime) / 1000 : 0.016;
+        lastFrameTime = time;
+
+        // 色相慢漂移：~40 秒一个周期，±8 度，防止色彩适应
+        hueDrift = Math.sin(s * 0.157) * 8;
+
+        const w = window.innerWidth, h = window.innerHeight;
+        const cx = w / 2, cy = h * 0.46;
+        const baseR = Math.min(w * 0.19, 220);
+
+        // --- 确定目标能量 ---
+        const playing = state.status === 'playing';
+        let eBass, eLowMid, eMid, eTreble;
+        const inst = getInstantEnergy();
+        if (playing) {
+          if (inst) {
+            // 更新动态范围（在归一化之前，用原始值学习这首歌的特征）
+            updateDynRange(dynRange.bass, inst.bass);
+            updateDynRange(dynRange.lowMid, inst.lowMid);
+            updateDynRange(dynRange.mid, inst.mid);
+            updateDynRange(dynRange.treble, inst.treble);
+
+            // 归一化 + 感知映射：任何歌曲都能映射到 [0,1] 的有感知的区间
+            eBass = perceptual(normalize(inst.bass, dynRange.bass));
+            eLowMid = perceptual(normalize(inst.lowMid, dynRange.lowMid));
+            eMid = perceptual(normalize(inst.mid, dynRange.mid));
+            eTreble = perceptual(normalize(inst.treble, dynRange.treble));
+          } else {
+            const pe = pseudoEnergy(s);
+            eBass = pe.bass; eLowMid = pe.lowMid; eMid = pe.mid; eTreble = pe.treble;
+          }
+        } else if (state.status === 'loading') {
+          eBass = 0.22; eLowMid = 0.2; eMid = 0.2; eTreble = 0.15;
+        } else {
+          eBass = 0.08; eLowMid = 0.07; eMid = 0.07; eTreble = 0.05;
+        }
+        targetBass = eBass; targetLowMid = eLowMid; targetMid = eMid; targetTreble = eTreble;
+
+        // smooth：对称低通滤波
+        smoothBass += (targetBass - smoothBass) * 0.06;
+        smoothLowMid += (targetLowMid - smoothLowMid) * 0.05;
+        smoothMid += (targetMid - smoothMid) * 0.04;
+        smoothTreble += (targetTreble - smoothTreble) * 0.1;
+
+        // envelope：攻击/释放包络，release 自适应节拍间隔
+        prevEnvBass = envBass;
+        prevEnvLowMid = envLowMid;
+        prevEnvMid = envMid;
+        envBass = updateEnvelope(envBass, targetBass, dt, avgBeatInterval);
+        envLowMid = updateEnvelope(envLowMid, targetLowMid, dt, avgBeatInterval);
+        envMid = updateEnvelope(envMid, targetMid, dt, avgBeatInterval);
+        envTreble = updateEnvelope(envTreble, targetTreble, dt, avgBeatInterval);
+
+        // 多频段节拍检测
+        const beatResult = playing ? detectBeat(s,
+          { bass: envBass, lowMid: envLowMid, mid: envMid },
+          { bass: prevEnvBass, lowMid: prevEnvLowMid, mid: prevEnvMid },
+          dt) : false;
+        if (beatResult !== false) {
+          beatImpulse = Math.min(1, beatResult * 1.3);
+          lastBeatTime = s;
+        }
+
+        // 节拍冲击衰减
+        beatImpulse *= Math.pow(0.002, dt);
+
+        const smoothEnergy = (smoothBass + smoothLowMid + smoothMid + smoothTreble) / 4;
+
+        // --- 视觉维度分配（每个维度有明确的驱动源和因果）---
+        // 旋转：smoothMid 驱动，旋律决定运动基调，不跳变
+        const rotSpeed = (playing ? 0.14 : 0.04) + smoothMid * 0.06;
+        rotationAccum += rotSpeed * dt;
+        const rotY = rotationAccum;
+        const rotX = -0.15 + Math.sin(s * 0.18) * 0.012 + envTreble * 0.025;
+
+        // 呼吸：律动偏离量驱动（envBass - smoothBass = 节奏相对于平均值的偏离）
+        // 因果：无论歌曲绝对能量如何，"偏离平均值"这个量在任何歌曲中都有同样的律动含义
+        const bassDeviation = Math.max(0, envBass - smoothBass); // 只取正向偏离（鼓点冲击）
+        const breath = 1 + Math.sin(s * 0.9) * 0.006 + bassDeviation * 0.12 + beatImpulse * 0.014;
+        const sphereR = baseR * 0.62 * breath; // 爱心坐标范围 ~1.5，需缩小补偿
+
+        const ctx = els.ctx;
+
+        // --- 运动模糊 ---
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = `rgba(7, 8, 13, ${0.12 + envBass * 0.06})`;
+        ctx.fillRect(0, 0, w, h);
+
+        // --- 中心辉光（心跳辐射场，双层：内层亮核 + 外层柔光）---
+        const bassMidpoint = dynRange.bass.min + (dynRange.bass.max - dynRange.bass.min) * 0.35;
+        if (envBass > bassMidpoint) {
+          // 外层柔光：大半径低透明度，制造体积光晕
+          const outerR = baseR * (0.6 + envBass * 0.45);
+          const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, outerR);
+          const [gr, gg, gb] = stellarColor(smoothEnergy, 1, 0.5, hueDrift);
+          const glowAlpha = 0.07 * envBass + beatImpulse * 0.04;
+          grad.addColorStop(0, `rgba(${gr},${gg},${gb},${glowAlpha})`);
+          grad.addColorStop(0.35, `rgba(${gr},${gg},${gb},${glowAlpha * 0.45})`);
+          grad.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = grad;
+          ctx.fillRect(cx - outerR, cy - outerR, outerR * 2, outerR * 2);
+
+          // 内层亮核：小半径高透明度，模拟心脏核心亮光
+          const innerR = baseR * 0.25;
+          const grad2 = ctx.createRadialGradient(cx, cy, 0, cx, cy, innerR);
+          grad2.addColorStop(0, `rgba(255, 230, 200, ${0.08 * envBass + beatImpulse * 0.1})`);
+          grad2.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = grad2;
+          ctx.fillRect(cx - innerR, cy - innerR, innerR * 2, innerR * 2);
+        }
+
+        // --- 加法混合 ---
+        ctx.globalCompositeOperation = 'lighter';
+
+        const cyR = Math.cos(rotY), syR = Math.sin(rotY);
+        const cxR = Math.cos(rotX), sxR = Math.sin(rotX);
+
+        // 投影 + 深度排序
+        const projected = [];
+        for (const p of particles) {
+          if (p.layer === 0 && envBass < bassMidpoint) continue;
+
+          const rx = p.x * cyR - p.z * syR;
+          const rz = p.x * syR + p.z * cyR;
+          const ry = p.y * cxR - rz * sxR;
+          const fz = p.y * sxR + rz * cxR;
+
+          const depth = (fz + 1) / 2;
+          const persp = 0.8 + depth * 0.22;
+
+          // 分群湍流：envTreble 驱动——跟随镲片/高频闪烁
+          const tribe = Math.floor(p.seed * 4);
+          const turbFreq = [1.0, 1.7, 2.4, 3.6][tribe];
+          const turbAmp = 0.3 + envTreble * 1.4 + beatImpulse * 0.6;
+          const turb = Math.sin(s * turbFreq + p.phase) * turbAmp;
+
+          const x = cx + rx * sphereR * persp + turb;
+          const y = cy + ry * sphereR * persp + turb * 0.3;
+
+          projected.push({ p, x, y, depth, tribe });
+        }
+        projected.sort((a, b) => a.depth - b.depth);
+
+        // 绘制粒子
+        for (const it of projected) {
+          const p = it.p;
+          const depth = it.depth;
+          const tribe = it.tribe;
+
+          // 个体闪烁：envTreble 驱动高频闪烁，壳层粒子闪烁更强烈
+          const twinkleFreq = [1.8, 2.5, 3.4, 4.8][tribe];
+          // membership：边界壳层高，内部填充中等，外侧光晕低
+          const m = p.membership ?? 0.5;
+          const twinkle = 0.55 + Math.sin(s * twinkleFreq + p.phase) * 0.25 + envTreble * 0.22;
+
+          let size, alpha;
+          if (p.layer === 0) {
+            // 核心：envBass 驱动——跟随鼓点点燃/熄灭
+            size = 0.5 + depth * 0.8 + beatImpulse * 0.4;
+            alpha = envBass * 0.6 * twinkle;
+          } else if (p.layer === 1) {
+            // 内云：envLowMid 驱动——跟随人声/和声起伏
+            size = 0.4 + depth * 0.6;
+            alpha = (0.05 + envLowMid * 0.25) * twinkle;
+          } else if (p.scattered) {
+            // 外侧光晕：大、透明、弥散，制造朦胧炸开效果
+            size = 1.2 + depth * 1.1 + envTreble * 0.5;
+            alpha = (0.025 + envTreble * 0.06) * twinkle;
+          } else if (m > 0.72) {
+            // 边界壳层：小、亮、密，定义清晰心形剪影
+            size = 0.45 + depth * 0.55;
+            alpha = (0.1 + depth * 0.3 + smoothEnergy * 0.15) * twinkle;
+          } else if (m > 0.35) {
+            // 内部蓬松填充：中等、暖、可见，不完全空心
+            size = 0.65 + depth * 0.6;
+            alpha = (0.04 + smoothEnergy * 0.12) * twinkle;
+          } else {
+            // 深内部：柔和微光，增加体积深度
+            size = 0.8 + depth * 0.45;
+            alpha = (0.025 + smoothEnergy * 0.07) * twinkle;
+          }
+
+          // 色温由综合能量驱动，叠加 hueDrift 防色彩适应
+          const [r, g, b] = stellarColor(smoothEnergy, depth, p.seed, hueDrift);
+
+          ctx.globalAlpha = Math.min(1, alpha);
+          ctx.fillStyle = `rgb(${r},${g},${b})`;
+          ctx.beginPath();
+          ctx.arc(it.x, it.y, size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // --- 爱心波纹：节拍冲击触发的能量释放 ---
+        // 因果：波纹不是圆，是爱心轮廓的传播痕迹——与粒子形态同源
+        // 形态：爱心参数方程描边，沿径向指数扩散
+        // 质感：三层叠加——柔光带 + 主波带 + 散射微粒
+        if (playing && beatImpulse > 0.6) {
+          pulseRings.push({ birth: s, strength: beatImpulse });
+        }
+        for (let i = pulseRings.length - 1; i >= 0; i--) {
+          const ring = pulseRings[i];
+          const age = s - ring.birth;
+          if (age > 3.2) { pulseRings.splice(i, 1); continue; }
+
+          const progress = 1 - Math.exp(-age * 1.8);
+          const ringScale = (1.0 + progress * 1.8) * baseR / 17;
+          const decay = Math.exp(-age * 1.2);
+          const baseAlpha = ring.strength * decay * 0.18;
+
+          if (baseAlpha < 0.003) continue;
+
+          const [rr, rg, rb] = stellarColor(0.75, 1, 0.5, hueDrift);
+          const ringColor = `${rr},${rg},${rb}`;
+
+          // 爱心轮廓路径生成函数
+          const sparkPhase = ring.birth * 7.3;
+          function traceHeart(scale, offsetR) {
+            ctx.beginPath();
+            const steps = 64;
+            for (let k = 0; k <= steps; k++) {
+              const t = (k / steps) * Math.PI * 2;
+              const hx = 16 * Math.pow(Math.sin(t), 3);
+              const hy = 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t);
+              // 沿径向方向加偏移
+              const r = Math.sqrt(hx*hx + hy*hy) || 1;
+              const px = cx + (hx * scale) + (hx / r) * offsetR;
+              const py = cy + (-hy * scale) + (-hy / r) * offsetR; // y 翻转（canvas y 向下）
+              if (k === 0) ctx.moveTo(px, py);
+              else ctx.lineTo(px, py);
+            }
+          }
+
+          // 层 1：内侧柔光带
+          ctx.globalAlpha = baseAlpha * 0.4;
+          ctx.strokeStyle = `rgba(${ringColor},1)`;
+          ctx.lineWidth = 6 + decay * 4;
+          traceHeart(ringScale, -3);
+
+          // 层 2：主波带
+          ctx.globalAlpha = baseAlpha;
+          ctx.lineWidth = 1.2;
+          traceHeart(ringScale, 0);
+
+          // 层 3：散射微粒（沿爱心轮廓分布）
+          const sparkCount = 32;
+          ctx.globalAlpha = baseAlpha * 1.8;
+          ctx.fillStyle = `rgb(${ringColor})`;
+          for (let j = 0; j < sparkCount; j++) {
+            const t = (j / sparkCount) * Math.PI * 2;
+            const hx = 16 * Math.pow(Math.sin(t), 3);
+            const hy = 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t);
+            const offset = Math.sin(j * 12.7 + sparkPhase * 3) * 4;
+            const r = Math.sqrt(hx*hx + hy*hy) || 1;
+            const sx = cx + hx * ringScale + (hx / r) * offset;
+            const sy = cy - hy * ringScale + (-hy / r) * offset;
+            const sparkSize = 0.6 + Math.sin(j * 5.3 + sparkPhase) * 0.4 + decay * 0.8;
+            ctx.beginPath();
+            ctx.arc(sx, sy, Math.max(0.3, sparkSize), 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = 'source-over';
+        window.requestAnimationFrame(draw);
+      }
+
+      resize();
+      window.addEventListener('resize', resize);
+      window.requestAnimationFrame(draw);
+
+      /* ---------- 播放/暂停 UI 同步 ---------- */
+      function syncPlayUI(playing) {
+        els.btnPlay.style.display = playing ? 'none' : 'block';
+        els.btnPause.style.display = playing ? 'block' : 'none';
+        els.hintPlay.style.display = (!playing && state.status !== 'idle' && state.status !== 'loading') ? 'block' : 'none';
+        els.hintPause.style.display = playing ? 'block' : 'none';
+        els.hintSearch.style.display = state.status === 'idle' ? 'block' : 'none';
+        if (playing) {
+          els.fieldCore.classList.remove('paused');
+        } else if (state.status !== 'idle' && state.status !== 'loading') {
+          els.fieldCore.classList.add('paused');
+        } else {
+          els.fieldCore.classList.remove('paused');
+        }
+      }
+
+      function fireRipple() {
+        els.ripple.classList.remove('go');
+        void els.ripple.offsetWidth;
+        els.ripple.classList.add('go');
+      }
+
+      /* ---------- 搜索逻辑 ---------- */
+      let searchTimer = null;
+      function handleSearchInput() {
+        clearTimeout(searchTimer);
+        const keyword = els.searchInput.value.trim();
+        if (!keyword) {
+          els.searchResults.innerHTML = '<div class="search-status">输入关键词搜索</div>';
+          return;
+        }
+        els.searchResults.innerHTML = '<div class="search-status">搜索中…</div>';
+        searchTimer = setTimeout(() => doSearch(keyword), 400);
+      }
+
+      async function doSearch(keyword) {
+        setStatus('searching');
+        try {
+          const results = await apiSearch(keyword, state.source, 20, 1);
+          state.queue = results || [];
+          renderSearchResults(state.queue);
+          renderQueue();
+          setStatus(state.currentTrack ? (audio.paused ? 'paused' : 'playing') : 'idle');
+        } catch (e) {
+          els.searchResults.innerHTML = '<div class="search-status">搜索失败，请稍后重试</div>';
+          setStatus(state.currentTrack ? (audio.paused ? 'paused' : 'playing') : 'idle');
+          toast('搜索失败：' + e.message);
+        }
+      }
+
+      function renderSearchResults(results) {
+        if (!results || results.length === 0) {
+          els.searchResults.innerHTML = '<div class="search-status">未找到结果</div>';
+          return;
+        }
+        els.searchResults.innerHTML = results.map((track, i) => `
+          <div class="result-item ${i === state.currentIndex ? 'active' : ''}" data-index="${i}">
+            <div class="result-info">
+              <div class="result-name">${escapeHtml(track.name)}</div>
+              <div class="result-artist">${escapeHtml(track.artist ? track.artist.join(' / ') : '未知艺术家')}</div>
+            </div>
+            <span class="result-source">${track.source || state.source}</span>
+          </div>
+        `).join('');
+        els.searchResults.querySelectorAll('.result-item').forEach(item => {
+          item.addEventListener('click', () => {
+            const idx = parseInt(item.dataset.index);
+            selectTrack(idx);
+          });
+        });
+      }
+
+      /* ---------- 选曲 → 加载 → 播放（因果主链）---------- */
+      async function selectTrack(index) {
+        if (index < 0 || index >= state.queue.length) return;
+        state.currentIndex = index;
+        const track = state.queue[index];
+        state.currentTrack = track;
+
+        // 切歌时重置动态范围学习——不同歌曲的频谱特征完全不同
+        for (const band of Object.values(dynRange)) { band.min = 0.5; band.max = 0.5; }
+        beatIntervals = [];
+        avgBeatInterval = 0.5;
+
+        // 关闭搜索面板：搜索动作已完成
+        els.searchWrap.classList.remove('open');
+        els.searchTrigger.setAttribute('aria-label', '展开搜索');
+
+        // 更新身份信息（即时反馈，不等网络）
+        els.trackTitle.textContent = track.name;
+        els.trackTitle.classList.remove('idle');
+        els.trackArtist.textContent = track.artist ? track.artist.join(' / ') : '未知艺术家';
+        els.trackEyebrow.textContent = `${track.source || state.source} · ${track.album || ''}`;
+
+        setStatus('loading');
+        syncPlayUI(false);
+
+        try {
+          // 硬阻塞：获取播放链接
+          const urlData = await apiUrl(track.source || state.source, track.id, 320);
+          if (!urlData || !urlData.url) {
+            throw new Error('该音源暂无此歌曲版权');
+          }
+
+          // 因果顺序：先设置 src 并播放，让 <audio> 原生通路发声（可靠）
+          // Analyser 是观察者，必须在播放成功后建立，绝不能成为声音通路的瓶颈
+          audio.src = urlData.url;
+          audio.volume = state.muted ? 0 : state.volume;
+
+          setStatus('ready');
+          renderSearchResults(state.queue);
+          renderQueue();
+
+          await audio.play();
+
+          // 播放成功后初始化 Analyser——await 确保 context running 再接管
+          // 失败则降级伪能量，不影响播放
+          await initAnalyser();
+
+          // 软约束：并行加载封面和歌词，不阻塞播放
+          loadCover(track);
+          loadLyrics(track);
+
+        } catch (e) {
+          setStatus('error');
+          if (e.name === 'NotAllowedError') {
+            toast('请点击播放按钮启动音频');
+            setStatus('ready');
+          } else {
+            toast(e.message || '播放失败');
+          }
+        }
+      }
+
+      async function loadCover(track) {
+        try {
+          const source = track.source || state.source;
+          if (!track.pic_id) return;
+          const picData = await apiPic(source, track.pic_id, 300);
+          if (picData && picData.url) {
+            const img = new Image();
+            img.onload = () => {
+              // 确认封面仍属于当前曲目
+              if (state.currentTrack === track) {
+                let existing = els.cover.querySelector('img');
+                if (existing) existing.remove();
+                img.classList.add('loaded');
+                els.cover.appendChild(img);
+              }
+            };
+            img.src = picData.url;
+          }
+        } catch (e) { /* 封面降级，静默 */ }
+      }
+
+      async function loadLyrics(track) {
+        try {
+          const source = track.source || state.source;
+          if (!track.lyric_id) {
+            renderLyrics([]);
+            return;
+          }
+          const lyricData = await apiLyric(source, track.lyric_id);
+          const lrcText = lyricData ? lyricData.lyric : '';
+          state.lyrics = parseLRC(lrcText);
+          renderLyrics(state.lyrics);
+        } catch (e) {
+          renderLyrics([]);
+        }
+      }
+
+      function renderLyrics(lyrics) {
+        // 切歌时重置高亮索引，否则新歌第一行无法触发（idx===lastLyricIndex 的守卫会跳过）
+        lastLyricIndex = -1;
+        if (!lyrics || lyrics.length === 0) {
+          els.lyricsScroll.innerHTML = '<div class="lyrics-empty">暂无歌词</div>';
+          return;
+        }
+        els.lyricsScroll.innerHTML = lyrics.map((line, i) =>
+          `<p class="lyric-line" data-time="${line.time}" data-index="${i}">${escapeHtml(line.text)}</p>`
+        ).join('');
+        els.lyricsScroll.querySelectorAll('.lyric-line').forEach(line => {
+          line.addEventListener('click', () => {
+            const t = parseFloat(line.dataset.time);
+            if (isFinite(t)) audio.currentTime = t;
+          });
+        });
+      }
+
+      /* 歌词高亮：第一性原理重写
+       *
+       * 基本事实：
+       *   歌词滚动的唯一目的是"让用户看到当前正在唱的那一行"
+       *
+       * 因果链：
+       *   当前时间 → 当前行索引
+       *   行索引不变 → 什么都不做（这是之前 bug 的根因：每帧都 scrollTo）
+       *   行索引变化 → 高亮转移 + 滚动到视野中心（仅此一次）
+       *
+       * 去掉的假设：不再每帧调用 scrollTo。只在行切换时滚动一次。
+       */
+      let lastLyricIndex = -1;
+
+      function updateLyricHighlight(currentTime) {
+        if (state.lyrics.length === 0) return;
+        // 二分查找当前行（歌词按时间升序，二分比线性扫描更高效且必然正确）
+        let lo = 0, hi = state.lyrics.length - 1, idx = -1;
+        while (lo <= hi) {
+          const mid = (lo + hi) >> 1;
+          if (state.lyrics[mid].time <= currentTime) { idx = mid; lo = mid + 1; }
+          else { hi = mid - 1; }
+        }
+        if (idx < 0) return;
+        // 因果核心：行索引没变就不做任何事
+        if (idx === lastLyricIndex) return;
+        lastLyricIndex = idx;
+
+        const lines = els.lyricsScroll.querySelectorAll('.lyric-line');
+        lines.forEach((l, i) => l.classList.toggle('current', i === idx));
+        const active = lines[idx];
+        if (active) {
+          const top = active.offsetTop - els.lyricsScroll.clientHeight / 2 + active.clientHeight / 2;
+          els.lyricsScroll.scrollTo({ top, behavior: 'smooth' });
+        }
+      }
+
+      /* ---------- 播放列表抽屉 ---------- */
+      function renderQueue() {
+        if (state.queue.length === 0) {
+          els.queue.innerHTML = '<div class="queue-empty">队列为空<br/>搜索歌曲后即可播放</div>';
+          return;
+        }
+        els.queue.innerHTML = state.queue.map((track, i) => `
+          <div class="queue-item ${i === state.currentIndex ? 'active' : ''}" data-index="${i}">
+            <div class="queue-thumb"></div>
+            <div class="queue-meta">
+              <div class="queue-song">${escapeHtml(track.name)}</div>
+              <div class="queue-artist">${escapeHtml(track.artist ? track.artist.join(' / ') : '未知艺术家')}</div>
+            </div>
+          </div>
+        `).join('');
+        els.queue.querySelectorAll('.queue-item').forEach(item => {
+          item.addEventListener('click', () => {
+            const idx = parseInt(item.dataset.index);
+            selectTrack(idx);
+          });
+        });
+      }
+
+      /* ---------- 音频事件绑定 ---------- */
+      audio.addEventListener('play', () => {
+        // 确保 AudioContext running（浏览器可能在后台挂起 context）
+        if (state.audioCtx && state.audioCtx.state === 'suspended') {
+          state.audioCtx.resume();
+        }
+        setStatus('playing');
+        syncPlayUI(true);
+        fireRipple();
+      });
+      audio.addEventListener('pause', () => {
+        if (audio.ended) return;
+        setStatus('paused');
+        syncPlayUI(false);
+      });
+      audio.addEventListener('ended', () => {
+        nextTrack();
+      });
+      audio.addEventListener('timeupdate', () => {
+        if (!isFinite(audio.duration) || audio.duration === 0) return;
+        const ratio = audio.currentTime / audio.duration;
+        if (!pDragging) {
+          els.progressFill.style.width = `${ratio * 100}%`;
+          els.progressThumb.style.left = `${ratio * 100}%`;
+        }
+        els.currentTime.textContent = fmt(audio.currentTime);
+        updateLyricHighlight(audio.currentTime);
+      });
+      audio.addEventListener('durationchange', () => {
+        els.totalTime.textContent = fmt(audio.duration);
+      });
+      audio.addEventListener('error', () => {
+        if (state.status === 'loading') {
+          setStatus('error');
+          toast('音频加载失败，可能版权受限');
+        }
+      });
+
+      /* ---------- 播放控制 ---------- */
+      function togglePlay() {
+        if (state.status === 'idle') {
+          els.searchWrap.classList.add('open');
+          els.searchTrigger.setAttribute('aria-label', '收起搜索');
+          els.searchInput.focus();
+          return;
+        }
+        if (state.status === 'loading') return;
+        if (audio.paused) {
+          // 恢复播放时确保 AudioContext running（浏览器可能挂起）
+          if (state.audioCtx && state.audioCtx.state === 'suspended') {
+            state.audioCtx.resume();
+          }
+          audio.play();
+        } else {
+          audio.pause();
+        }
+      }
+
+      function prevTrack() {
+        if (state.currentIndex > 0) selectTrack(state.currentIndex - 1);
+      }
+      function nextTrack() {
+        if (state.currentIndex < state.queue.length - 1) selectTrack(state.currentIndex + 1);
+        else { audio.pause(); setStatus('idle'); syncPlayUI(false); }
+      }
+
+      els.fieldCore.addEventListener('click', togglePlay);
+      els.playBtn.addEventListener('click', togglePlay);
+      els.prevBtn.addEventListener('click', prevTrack);
+      els.nextBtn.addEventListener('click', nextTrack);
+
+      /* ---------- 进度条拖拽 ---------- */
+      let pDragging = false;
+      function progressRatio(e) {
+        const rect = els.progressTrack.getBoundingClientRect();
+        const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+        return Math.max(0, Math.min(1, x / rect.width));
+      }
+      els.progressTrack.addEventListener('mousedown', e => {
+        if (!state.currentTrack) return;
+        pDragging = true; els.progressTrack.classList.add('dragging');
+        const r = progressRatio(e);
+        els.progressFill.style.width = `${r * 100}%`;
+        els.progressThumb.style.left = `${r * 100}%`;
+      });
+      els.progressTrack.addEventListener('touchstart', e => {
+        if (!state.currentTrack) return;
+        pDragging = true; els.progressTrack.classList.add('dragging');
+        const r = progressRatio(e);
+        els.progressFill.style.width = `${r * 100}%`;
+        els.progressThumb.style.left = `${r * 100}%`;
+      }, { passive: true });
+      window.addEventListener('mousemove', e => {
+        if (!pDragging) return;
+        const r = progressRatio(e);
+        els.progressFill.style.width = `${r * 100}%`;
+        els.progressThumb.style.left = `${r * 100}%`;
+      });
+      window.addEventListener('touchmove', e => {
+        if (!pDragging) return;
+        const r = progressRatio(e.touches[0]);
+        els.progressFill.style.width = `${r * 100}%`;
+        els.progressThumb.style.left = `${r * 100}%`;
+      }, { passive: true });
+      window.addEventListener('mouseup', e => {
+        if (!pDragging) return;
+        pDragging = false; els.progressTrack.classList.remove('dragging');
+        if (isFinite(audio.duration) && audio.duration > 0) {
+          audio.currentTime = progressRatio(e) * audio.duration;
+        }
+      });
+      window.addEventListener('touchend', e => {
+        if (!pDragging) return;
+        pDragging = false; els.progressTrack.classList.remove('dragging');
+        if (isFinite(audio.duration) && audio.duration > 0 && e.changedTouches[0]) {
+          const rect = els.progressTrack.getBoundingClientRect();
+          const x = e.changedTouches[0].clientX - rect.left;
+          audio.currentTime = Math.max(0, Math.min(1, x / rect.width)) * audio.duration;
+        }
+      });
+
+      /* ---------- 音量 ---------- */
+      function setVolume(ratio) {
+        state.volume = Math.max(0, Math.min(1, ratio));
+        if (!state.muted) audio.volume = state.volume;
+        els.volumeFill.style.width = `${state.volume * 100}%`;
+        els.volumeThumb.style.left = `${state.volume * 100}%`;
+      }
+      let vDragging = false;
+      function volumeRatio(e) {
+        const rect = els.volumeSlider.getBoundingClientRect();
+        const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+        return Math.max(0, Math.min(1, x / rect.width));
+      }
+      els.volumeSlider.addEventListener('mousedown', e => { vDragging = true; els.volumeSlider.classList.add('dragging'); setVolume(volumeRatio(e)); });
+      els.volumeSlider.addEventListener('touchstart', e => { vDragging = true; els.volumeSlider.classList.add('dragging'); setVolume(volumeRatio(e)); }, { passive: true });
+      window.addEventListener('mousemove', e => { if (vDragging) setVolume(volumeRatio(e)); });
+      window.addEventListener('touchmove', e => { if (vDragging) setVolume(volumeRatio(e.touches[0])); }, { passive: true });
+      window.addEventListener('mouseup', () => { vDragging = false; els.volumeSlider.classList.remove('dragging'); });
+      window.addEventListener('touchend', () => { vDragging = false; els.volumeSlider.classList.remove('dragging'); });
+      els.muteBtn.addEventListener('click', () => {
+        state.muted = !state.muted;
+        audio.volume = state.muted ? 0 : state.volume;
+        if (state.muted) { els.volumeFill.style.opacity = '0.3'; }
+        else { els.volumeFill.style.opacity = '1'; }
+      });
+
+      /* ---------- 搜索面板 ---------- */
+      els.searchTrigger.addEventListener('click', e => {
+        e.stopPropagation();
+        const open = els.searchWrap.classList.toggle('open');
+        els.searchTrigger.setAttribute('aria-label', open ? '收起搜索' : '展开搜索');
+        if (open) els.searchInput.focus();
+      });
+      els.searchInput.addEventListener('click', e => e.stopPropagation());
+      els.searchInput.addEventListener('input', handleSearchInput);
+      els.searchInput.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+          els.searchWrap.classList.remove('open');
+          els.searchTrigger.setAttribute('aria-label', '展开搜索');
+        }
+        if (e.key === 'Enter') {
+          clearTimeout(searchTimer);
+          const keyword = els.searchInput.value.trim();
+          if (keyword) doSearch(keyword);
+        }
+      });
+      document.addEventListener('click', e => {
+        if (els.searchWrap.classList.contains('open') && !els.searchWrap.contains(e.target)) {
+          els.searchWrap.classList.remove('open');
+          els.searchTrigger.setAttribute('aria-label', '展开搜索');
+        }
+      });
+
+      /* ---------- 音源切换 ---------- */
+      document.querySelectorAll('.source-chip').forEach(chip => {
+        chip.addEventListener('click', e => {
+          e.stopPropagation();
+          document.querySelectorAll('.source-chip').forEach(c => c.classList.remove('active'));
+          chip.classList.add('active');
+          state.source = chip.dataset.source;
+          const keyword = els.searchInput.value.trim();
+          if (keyword) doSearch(keyword);
+        });
+      });
+
+      /* ---------- 播放列表抽屉 ---------- */
+      els.queueBtn.addEventListener('click', () => { els.drawer.classList.add('open'); els.drawerOverlay.classList.add('open'); });
+      els.closeDrawer.addEventListener('click', () => { els.drawer.classList.remove('open'); els.drawerOverlay.classList.remove('open'); });
+      els.drawerOverlay.addEventListener('click', () => { els.drawer.classList.remove('open'); els.drawerOverlay.classList.remove('open'); });
+
+      /* ---------- 工具 ---------- */
+      function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+      }
+
+      /* ---------- 初始状态 ---------- */
+      syncPlayUI(false);
+    </script>
+  </body>
+</html>

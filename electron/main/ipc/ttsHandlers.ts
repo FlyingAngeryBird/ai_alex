@@ -1,6 +1,5 @@
 import { createRequire } from 'node:module'
 import {
-  createUnavailableStreamingTtsProvider,
   RealtimeVoiceError,
   type StreamingTtsProvider,
   type StreamingTtsPushPayload,
@@ -8,6 +7,7 @@ import {
   type StreamingTtsStopPayload,
   type TtsSpeakPayload
 } from '../providers/realtimeVoiceProvider.js'
+import { createVolcengineTtsProvider, VolcengineTtsError } from '../providers/volcengineTtsProvider.js'
 
 type AppResult<T> =
   | {
@@ -81,14 +81,16 @@ function isStreamingStopPayload(payload: unknown): payload is StreamingTtsStopPa
 
 function normalizeTtsError(error: unknown, fallback: string): AppResult<never> {
   return fail(
-    error instanceof RealtimeVoiceError ? error.code : 'STREAMING_TTS_FAILED',
+    error instanceof RealtimeVoiceError || error instanceof VolcengineTtsError
+      ? error.code
+      : 'STREAMING_TTS_FAILED',
     error instanceof Error ? error.message : fallback
   )
 }
 
 export function registerTtsHandlers(
   ipc: IpcMainLike = getIpcMain(),
-  provider: StreamingTtsProvider = createUnavailableStreamingTtsProvider()
+  provider: StreamingTtsProvider = createVolcengineTtsProvider()
 ): void {
   ipc.handle('tts.speak', async (_event, payload) => {
     if (!isSpeakPayload(payload)) {

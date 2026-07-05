@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import type { AppResult, LingliChannel } from '@/types/electron-api'
+import { invokeWithTimeout } from '../utils/invokeWithTimeout'
 
 type TranscriptionResult = {
   text: string
@@ -57,19 +58,26 @@ export function useKeyboardRecorder(options: KeyboardRecorderOptions = {}) {
     }
 
     errorMessage.value = ''
-    const mediaDevices = getMediaDevices(options)
-    stream = await mediaDevices.getUserMedia({ audio: true })
-    recorder = options.createMediaRecorder?.(stream) ?? new MediaRecorder(stream)
-    chunks = []
+    try {
+      getLingliApi(options)
+      const mediaDevices = getMediaDevices(options)
+      stream = await mediaDevices.getUserMedia({ audio: true })
+      recorder = options.createMediaRecorder?.(stream) ?? new MediaRecorder(stream)
+      chunks = []
 
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        chunks.push(event.data)
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunks.push(event.data)
+        }
       }
-    }
 
-    recorder.start()
-    isRecording.value = true
+      recorder.start()
+      isRecording.value = true
+    } catch (error) {
+      errorMessage.value = error instanceof Error ? error.message : '语音输入没有启动成功'
+      cleanup()
+      throw error
+    }
   }
 
   async function stopAndTranscribe(): Promise<TranscriptionResult> {
@@ -86,13 +94,21 @@ export function useKeyboardRecorder(options: KeyboardRecorderOptions = {}) {
       activeRecorder.stop()
     })
 
-    const audio = await audioBlob.arrayBuffer()
-    const response = await getLingliApi(options).invoke<TranscriptionResult>('voice.stopAndTranscribe', {
-      audio,
-      mimeType: audioBlob.type
-    })
+    let response: AppResult<TranscriptionResult>
 
-    cleanup()
+    try {
+      const audio = await audioBlob.arrayBuffer()
+      response = await invokeWithTimeout(
+        getLingliApi(options).invoke<TranscriptionResult>('voice.stopAndTranscribe', {
+          audio,
+          mimeType: audioBlob.type
+        }),
+        15000,
+        '语音识别响应超时。'
+      )
+    } finally {
+      cleanup()
+    }
 
     if (!response.ok) {
       errorMessage.value = response.error.message
