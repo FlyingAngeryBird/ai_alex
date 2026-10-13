@@ -12,6 +12,7 @@ import type { R1Conversations } from '../r1/conversations.js'
 import type { R1PersonaStore } from '../r1/persona.js'
 import type { R1PromptAssets } from '../r1/promptAssets.js'
 import type { R1MemoryStore } from '../r1/memory.js'
+import type { R1SessionMode } from '../r1/sessionMode.js'
 
 type AppResult<T> =
   | {
@@ -122,12 +123,15 @@ export function registerChatHandlers(
   conversations?: R1Conversations,
   personaStore?: R1PersonaStore,
   promptAssets?: R1PromptAssets,
-  memoryStore?: R1MemoryStore
+  memoryStore?: R1MemoryStore,
+  sessionMode?: R1SessionMode
 ): void {
   clearMemory()
   let activeSystemPrompt: string | null = null
   let activePersonaVersion: number | null = null
+  let activeDeletionEpoch: number | null = null
   let temporary = false
+  if (sessionMode) sessionMode.temporary = false
   let sessionId = conversations?.start(false) ?? null
   let sessionEpoch = 0
 
@@ -142,7 +146,9 @@ export function registerChatHandlers(
   function getSystemPrompt(): string {
     if (personaStore && promptAssets) {
       const persona = personaStore.get()
-      if (activePersonaVersion !== null && activePersonaVersion !== persona.version) {
+      const deletionEpoch = memoryStore?.currentDeletionEpoch() ?? 0
+      if ((activePersonaVersion !== null && activePersonaVersion !== persona.version) ||
+        (activeDeletionEpoch !== null && activeDeletionEpoch !== deletionEpoch)) {
         clearMemory()
         sessionEpoch += 1
         if (conversations && sessionId) {
@@ -151,13 +157,14 @@ export function registerChatHandlers(
         }
       }
       activePersonaVersion = persona.version
+      activeDeletionEpoch = deletionEpoch
       return promptAssets.compose(persona, {
         sessionId, sessionGeneration: sessionEpoch + 1, turnId: null,
         currentTime: new Date().toISOString(),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         temporary, contextVersion: sessionEpoch + 1,
         personaVersion: persona.version,
-        deletionEpoch: memoryStore?.currentDeletionEpoch() ?? 0,
+        deletionEpoch,
         selectedEntity: null, availableToolAliases: [], loadedSkillIds: ['SK01'],
         recentTurns: [], memories: [], activeTasks: []
       })
@@ -187,6 +194,7 @@ export function registerChatHandlers(
     sessionEpoch += 1
     if (sessionId) conversations.end(sessionId)
     temporary = enabled
+    if (sessionMode) sessionMode.temporary = enabled
     sessionId = conversations.start(temporary)
     return ok({ temporary })
   })

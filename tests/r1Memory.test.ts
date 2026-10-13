@@ -4,6 +4,32 @@ import { R1Conversations } from '../electron/main/r1/conversations'
 import { R1MemoryStore } from '../electron/main/r1/memory'
 
 describe('R1 memory source and forgetting boundary', () => {
+  it('keeps manual memory provenance separate from normal chat and enforces edit versions', () => {
+    const db = openR1Database(':memory:')
+    try {
+      const memory = new R1MemoryStore(db)
+      const saved = memory.addManual({ content: '周末喜欢安静的地方', category: 'preference' })
+      expect(memory.list().entries).toEqual([saved])
+      expect(memory.list({ query: '安静', page: 0, scope: 'about' }).entries).toEqual([saved])
+      expect(memory.sources(saved.memoryId)).toMatchObject([{ body: '周末喜欢安静的地方' }])
+      expect(new R1Conversations(db).listPersistentSessions()).toEqual([])
+      const merged = memory.addManual({ content: '周末喜欢安静的地方', category: 'preference' })
+      expect(merged.memoryId).toBe(saved.memoryId)
+      expect(merged.version).toBe(2)
+      expect(memory.sources(saved.memoryId)).toHaveLength(2)
+      const corrected = memory.update({ memoryId: saved.memoryId, expectedVersion: merged.version,
+        content: '周末喜欢安静的公园', category: 'preference' })
+      expect(corrected.version).toBe(3)
+      expect(memory.sources(saved.memoryId)).toMatchObject([{ body: '周末喜欢安静的地方' },
+        { body: '周末喜欢安静的地方' }])
+      expect(() => memory.update({ memoryId: saved.memoryId, expectedVersion: 1,
+        content: '过期修改', category: 'preference' })).toThrow('VERSION_CONFLICT')
+      memory.forget(corrected.memoryId, corrected.version)
+      expect(memory.list().entries).toEqual([])
+      expect(() => memory.sources(saved.memoryId)).toThrow('MEMORY_NOT_FOUND')
+    } finally { db.close() }
+  })
+
   it('saves only a persistent user source, excludes temporary recall, and suppresses forgotten memory', () => {
     const db = openR1Database(':memory:')
     try {

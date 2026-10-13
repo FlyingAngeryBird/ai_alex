@@ -3,6 +3,7 @@ import type { CredentialPatch, CredentialStatus } from '../main/r1/credentials.j
 import type { ReminderDueEvent } from '../main/r1/reminderScheduler.js'
 import type { SearchResult } from '../main/providers/braveSearchProvider.js'
 import type { R1Persona, R1PersonaStore } from '../main/r1/persona.js'
+import type { R1Memory, R1MemoryPage, R1MemorySource, R1MemoryStore } from '../main/r1/memory.js'
 
 export type R1Result<T> =
   | { ok: true; data: T }
@@ -15,6 +16,13 @@ export type R1Api = {
   persona: {
     get(): Promise<R1Result<R1Persona>>
     update(input: Parameters<R1PersonaStore['update']>[0]): Promise<R1Result<R1Persona>>
+  }
+  memory: {
+    list(input?: Parameters<R1MemoryStore['list']>[0]): Promise<R1Result<R1MemoryPage>>
+    addManual(input: Parameters<R1MemoryStore['addManual']>[0]): Promise<R1Result<R1Memory>>
+    update(input: Parameters<R1MemoryStore['update']>[0]): Promise<R1Result<R1Memory>>
+    sources(memoryId: string): Promise<R1Result<R1MemorySource[]>>
+    forget(memoryId: string, expectedVersion: number): Promise<R1Result<{ memoryId: string; deletionEpoch: number }>>
   }
   items: {
     list(): Promise<R1Result<Item[]>>

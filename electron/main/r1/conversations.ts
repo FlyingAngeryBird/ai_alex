@@ -87,7 +87,8 @@ export class R1Conversations {
   }
 
   listPersistentSessions(): string[] {
-    return (this.db.prepare('SELECT session_id FROM sessions WHERE temporary = 0 ORDER BY created_at DESC')
+    return (this.db.prepare(`SELECT session_id FROM sessions WHERE temporary = 0
+      AND status <> 'memory_source' ORDER BY created_at DESC`)
       .all() as { session_id: string }[]).map((row) => row.session_id)
   }
 }

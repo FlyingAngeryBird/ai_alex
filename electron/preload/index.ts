@@ -23,6 +23,11 @@ export const exposedChannels = [
   'r1.items.list',
   'r1.persona.get',
   'r1.persona.update',
+  'r1.memory.list',
+  'r1.memory.addManual',
+  'r1.memory.update',
+  'r1.memory.sources',
+  'r1.memory.forget',
   'r1.items.create',
   'r1.items.complete',
   'r1.items.deletionPreview',
@@ -113,6 +118,13 @@ function exposeLingliApi(
     persona: {
       get: () => invokeR1('r1.persona.get'),
       update: (input) => invokeR1('r1.persona.update', input)
+    },
+    memory: {
+      list: (input) => invokeR1('r1.memory.list', input),
+      addManual: (input) => invokeR1('r1.memory.addManual', input),
+      update: (input) => invokeR1('r1.memory.update', input),
+      sources: (memoryId) => invokeR1('r1.memory.sources', { memoryId }),
+      forget: (memoryId, expectedVersion) => invokeR1('r1.memory.forget', { memoryId, expectedVersion })
     },
     items: {
       list: () => invokeR1('r1.items.list'),

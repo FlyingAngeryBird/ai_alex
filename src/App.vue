@@ -4,6 +4,7 @@ import MiniPlayer from '@/components/MiniPlayer.vue'
 import MusicImmersiveView from '@/components/MusicImmersiveView.vue'
 import ParticleSphere from '@/components/ParticleSphere.vue'
 import R1SettingsPanel from '@/components/R1SettingsPanel.vue'
+import R1MemoryPanel from '@/components/R1MemoryPanel.vue'
 import ItemsPanel from '@/components/ItemsPanel.vue'
 import SearchPanel from '@/components/SearchPanel.vue'
 import R1CompanionHome from '@/components/R1CompanionHome.vue'
@@ -881,10 +882,7 @@ onBeforeUnmount(() => {
     />
     <ItemsPanel v-if="itemsOpen" :temporary-mode="temporaryMode" @close="closePanels" />
     <SearchPanel v-if="searchEverOpened" v-show="searchOpen" :temporary-mode="temporaryMode" @close="closePanels" />
-    <aside v-if="memoryOpen" class="r1-basic-side" aria-label="记忆">
-      <header><div><small>SEAMO / PERSONAL SPACE</small><h2>关于你的记忆</h2></div><button aria-label="关闭侧栏" @click="closePanels"><X :size="19" /></button></header>
-      <div class="r1-basic-content"><p>关于我 · 持续话题</p><p>记忆的来源、更正和忘记功能仍在接入。这里暂不展示未经验证的示例资料。</p></div>
-    </aside>
+    <R1MemoryPanel v-if="memoryOpen" :temporary="temporaryMode" @close="closePanels" />
     <aside v-if="historyOpen" class="r1-basic-side" aria-label="历史对话">
       <header><div><small>SEAMO / PERSONAL SPACE</small><h2>聊过的话</h2></div><button aria-label="关闭侧栏" @click="closePanels"><X :size="19" /></button></header>
       <div class="r1-basic-content"><p>当前已加载的对话</p>
