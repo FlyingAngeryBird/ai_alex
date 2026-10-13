@@ -1,0 +1,211 @@
+{
+  "releaseId": "seamo-ai-r1-agent-assets-1.0.1",
+  "composition": {
+    "realtime": [
+      "PR01",
+      "PR02",
+      "PR03",
+      "SK01",
+      "app-context"
+    ],
+    "textOnly": [
+      "PR01",
+      "PR02",
+      "PR03",
+      "SK01",
+      "app-context"
+    ],
+    "task": [
+      "PR01",
+      "PR02",
+      "PR04"
+    ],
+    "memoryExtraction": [
+      "PR01",
+      "PR05"
+    ],
+    "summary": [
+      "PR01",
+      "PR06"
+    ],
+    "taskDelivery": [
+      "PR07"
+    ],
+    "taskSteering": [
+      "PR08"
+    ],
+    "reminderDelivery": [
+      "PR09"
+    ],
+    "repair": [
+      "PR01",
+      "PR10"
+    ]
+  },
+  "entries": [
+    {
+      "id": "PR01",
+      "name": "shared-policy",
+      "path": "prompts/shared-policy.md",
+      "version": "1.0.1",
+      "description": "所有对话与任务共用的产品边界",
+      "variables": [],
+      "variableSchemas": {},
+      "modelRoles": [
+        "M01",
+        "M02"
+      ]
+    },
+    {
+      "id": "PR02",
+      "name": "persona",
+      "path": "prompts/persona.md",
+      "version": "1.0.0",
+      "description": "人格配置覆盖层",
+      "variables": [
+        "persona_json"
+      ],
+      "variableSchemas": {
+        "persona_json": "persona"
+      },
+      "modelRoles": [
+        "M01",
+        "M02"
+      ]
+    },
+    {
+      "id": "PR03",
+      "name": "conversation",
+      "path": "prompts/conversation.md",
+      "version": "1.0.0",
+      "description": "实时交流和纯文字交流的决策指令",
+      "variables": [
+        "skill_index_json"
+      ],
+      "variableSchemas": {
+        "skill_index_json": "skill-index"
+      },
+      "modelRoles": [
+        "M01",
+        "M02"
+      ]
+    },
+    {
+      "id": "PR04",
+      "name": "task-harness",
+      "path": "prompts/task-harness.md",
+      "version": "1.0.1",
+      "description": "后台任务目标驱动循环",
+      "variables": [
+        "skill_index_json",
+        "task_input_json"
+      ],
+      "variableSchemas": {
+        "skill_index_json": "skill-index",
+        "task_input_json": "task-input"
+      },
+      "modelRoles": [
+        "M02"
+      ]
+    },
+    {
+      "id": "PR05",
+      "name": "memory-extract",
+      "path": "prompts/memory-extract.md",
+      "version": "1.0.0",
+      "description": "授权后的事实候选提取",
+      "variables": [
+        "memory_input_json"
+      ],
+      "variableSchemas": {
+        "memory_input_json": "memory-input"
+      },
+      "modelRoles": [
+        "M03"
+      ]
+    },
+    {
+      "id": "PR06",
+      "name": "context-summary",
+      "path": "prompts/context-summary.md",
+      "version": "1.0.0",
+      "description": "保留来源和未完成目标的上下文压缩",
+      "variables": [
+        "summary_input_json"
+      ],
+      "variableSchemas": {
+        "summary_input_json": "summary-input"
+      },
+      "modelRoles": [
+        "M03"
+      ]
+    },
+    {
+      "id": "PR07",
+      "name": "task-delivery",
+      "path": "prompts/task-delivery.md",
+      "version": "1.0.0",
+      "description": "有效任务结果的口头呈现事件",
+      "variables": [
+        "delivery_json"
+      ],
+      "variableSchemas": {
+        "delivery_json": "task-delivery-input"
+      },
+      "modelRoles": [
+        "M01",
+        "M02"
+      ]
+    },
+    {
+      "id": "PR08",
+      "name": "task-steer",
+      "path": "prompts/task-steer.md",
+      "version": "1.0.0",
+      "description": "目标更新后的任务事件",
+      "variables": [
+        "steer_json"
+      ],
+      "variableSchemas": {
+        "steer_json": "task-steer-input"
+      },
+      "modelRoles": [
+        "M02"
+      ]
+    },
+    {
+      "id": "PR09",
+      "name": "reminder-delivery",
+      "path": "prompts/reminder-delivery.md",
+      "version": "1.0.0",
+      "description": "提醒及专注完成的呈现事件",
+      "variables": [
+        "reminder_delivery_json"
+      ],
+      "variableSchemas": {
+        "reminder_delivery_json": "reminder-delivery-input"
+      },
+      "modelRoles": [
+        "M01",
+        "M02"
+      ]
+    },
+    {
+      "id": "PR10",
+      "name": "schema-repair",
+      "path": "prompts/schema-repair.md",
+      "version": "1.0.0",
+      "description": "一次结构化输出修复",
+      "variables": [
+        "repair_json"
+      ],
+      "variableSchemas": {
+        "repair_json": "repair-input"
+      },
+      "modelRoles": [
+        "M02",
+        "M03"
+      ]
+    }
+  ]
+}

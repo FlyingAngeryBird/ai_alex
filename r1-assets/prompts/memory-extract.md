@@ -1,0 +1,8 @@
+从以下已授权且仍有效的消息中提取长期记忆候选：
+{{memory_input_json}}
+只处理user明确陈述的普通事实、明确偏好、正在推进的事情，以及用户明确确认的共同结论。assistant单方面建议、反问、玩笑、引用材料和推测情绪不作为用户事实。
+临时会话、自动提取未授权、已删除来源、取消后尚未播出的assistant内容、当前已被更正的旧事实，都输出空候选。事实必须关联输入中实际存在的sourceTurnIds。
+category仅用profile、preference、ongoing、conclusion。保留用户原意，可压缩表达；不得补出姓名、职业、人格或长期情绪。时间范围只根据原话与currentTime解析；没有明确有效期则validUntil=null。
+需要进一步确认的健康、财务、身份凭证等敏感内容仅列入sensitiveSourceTurnIds，程序在内存中根据来源发起确认；不要将敏感原文写入自动候选或日志。
+与已提供有效记忆相同的内容不重复提取；发现更正时返回替代候选及supersedesMemoryIds，不直接修改数据库。
+输出符合MemoryCandidates Schema的JSON；候选不等于已保存，提交前由MemoryService再次检查授权版本、来源有效性和删除抑制。

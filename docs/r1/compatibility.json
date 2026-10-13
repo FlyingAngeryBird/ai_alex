@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "baselineCommit": "08554b7",
+  "date": "2026-10-13",
+  "runtime": {
+    "nodeOnHost": "24.14.0",
+    "nodeInElectron": "24.17.0",
+    "electronPackage": "42.5.0"
+  },
+  "checks": [
+    { "id": "baseline-build", "status": "passed", "evidence": "npm run build; R1 snapshot worktree" },
+    { "id": "baseline-unit", "status": "passed", "evidence": "npm test; 31 files / 203 tests" },
+    { "id": "asset-static", "status": "passed", "evidence": "validate_assets.py and check_contract_examples.py; fixture only" },
+    { "id": "ark-chat", "status": "passed", "evidence": "one real chat completion; response contained two Chinese characters", "modelProfile": "local-env", "protocolVersion": "chat-completions-v3" },
+    { "id": "ark-tool-call", "status": "passed", "evidence": "one real call returned HTTP 200 with one structured tool call", "modelProfile": "local-env", "protocolVersion": "chat-completions-v3" },
+    { "id": "tts-one-shot", "status": "passed", "evidence": "one real synthesis returned 8493 audio bytes; playback not verified", "modelProfile": "local-env" },
+    { "id": "music-search", "status": "passed", "evidence": "one real GD Studio netease search returned five tracks; URL/playback not verified" },
+    { "id": "native-realtime-voice", "status": "not_run", "reason": "R1 realtime model/resource credentials and protocol configuration not present in current local env" },
+    { "id": "realtime-tool-result", "status": "not_run", "reason": "Depends on native realtime resource" },
+    { "id": "search-provider", "status": "not_run", "reason": "Search resource/permission not configured" },
+    { "id": "music-playback", "status": "not_run", "reason": "Search result does not prove URL can play" },
+    { "id": "macos-permissions", "status": "not_run", "reason": "Requires installed app and microphone/notification manual test" },
+    { "id": "voice-latency", "status": "not_run", "reason": "Requires repeated microphone-to-speaker measurements on a real device" }
+  ],
+  "conclusion": "G0 remains open. Real smoke checks only establish the listed endpoints; no full R1 capability or performance claim is made."
+}

@@ -1,0 +1,19 @@
+{
+  "status": "completed",
+  "goalVersion": 1,
+  "replyBrief": "已整理成三项优先事项，详情在结果卡。",
+  "sourceRefs": [],
+  "receiptActionIds": [],
+  "artifacts": [
+    {
+      "kind": "plan",
+      "title": "本周优先事项",
+      "content": "一、明确目标。二、整理已有材料。三、确定下一步。",
+      "baseArtifactId": null,
+      "baseArtifactVersion": null,
+      "sourceRefs": []
+    }
+  ],
+  "candidates": [],
+  "unresolved": []
+}

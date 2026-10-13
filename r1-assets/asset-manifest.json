@@ -1,0 +1,301 @@
+{
+  "releaseId": "seamo-ai-r1-agent-assets-1.0.1",
+  "version": "1.0.1",
+  "files": [
+    {
+      "path": ".gitignore",
+      "bytes": 19,
+      "sha256": "862263fa1f46c20f0d1e4dac5ffcc75abd55c08211b2c3864c5f8764b9d87793"
+    },
+    {
+      "path": "AGENTS.md",
+      "bytes": 2480,
+      "sha256": "114768a22d559005bda513b5cdaebe57778b6e809a770a1451ad2bd5f3a9fc57"
+    },
+    {
+      "path": "CODEX_TASK.md",
+      "bytes": 2289,
+      "sha256": "3acd6c69afa15a53c644ecaa6672a9cb33c847308569e1cb8d33e156f12c6b8b"
+    },
+    {
+      "path": "README.md",
+      "bytes": 2298,
+      "sha256": "248b22ddfb31e6c3b62861717df0cd4b8332bdcb37f8f7dd41701ce6c1cdaec5"
+    },
+    {
+      "path": "config/prompt-registry.json",
+      "bytes": 4431,
+      "sha256": "e430eb5fb048fc94175829de1c5432c3a8b4560deab0a58d66bce2341b56bac1"
+    },
+    {
+      "path": "config/runtime.defaults.json",
+      "bytes": 4919,
+      "sha256": "f0cced7d8abaa1a314716c9a4fea72a52237dc9e32ce0bee249af4d7e1e4de1d"
+    },
+    {
+      "path": "config/skill-registry.json",
+      "bytes": 4143,
+      "sha256": "87091e719bcd726f629ffcd4e4cd0c281f303c227a74c26b4e64ae3be2735dd2"
+    },
+    {
+      "path": "contracts/tool-catalog.json",
+      "bytes": 202737,
+      "sha256": "f8ea97a07c05796d197d8784a1868454b193ba9794b732776286fbe699ec76cd"
+    },
+    {
+      "path": "docs/AGENT_ASSET_APPENDIX.md",
+      "bytes": 94390,
+      "sha256": "c5aa535d15e0c32250efb1ff85141f3b673957eeda90c54495773c524bb652dc"
+    },
+    {
+      "path": "docs/ARCHITECTURE_CONTRACT.md",
+      "bytes": 9687,
+      "sha256": "25a073c3abd63410a8838cba2bcbe6f00942acb89e0e8f8ccc9bc030d08ad616"
+    },
+    {
+      "path": "docs/AUDIT.md",
+      "bytes": 4586,
+      "sha256": "edf5d9e992b8f10e130c92fecc121cf84ab04b55439a74be8aa8b9983a2fb42e"
+    },
+    {
+      "path": "docs/CHANGE_POLICY.md",
+      "bytes": 3763,
+      "sha256": "0854e6b266f9d15d6bc672ff5968109d31273c1379ee9ec576ed7f7a7e357e9a"
+    },
+    {
+      "path": "docs/DETAIL_SPEC.md",
+      "bytes": 12941,
+      "sha256": "c7e41a41135bfe023bb66f77e7fc1be1adfc4fcec1ca0d7cb4f65933b70ec199"
+    },
+    {
+      "path": "docs/PRD_BASE_v0.5.1.md",
+      "bytes": 174252,
+      "sha256": "f2c6ec710c24659512ab005149e5f7ec8d1c1185454d4efaaf08fa7098ed23ac"
+    },
+    {
+      "path": "docs/Seamo_AI_R1_PRD_v0.5.1.md",
+      "bytes": 268643,
+      "sha256": "02f37ab0496412d6047db482dacac0ec4382aba043a7b57c6a2b9dddff75ade0"
+    },
+    {
+      "path": "evals/behavior-cases.jsonl",
+      "bytes": 6016,
+      "sha256": "d37e01eeed88f8a2b82e0c474300797d48a7a306d36d9501eaebe1a189469275"
+    },
+    {
+      "path": "evals/task-draft.valid.json",
+      "bytes": 482,
+      "sha256": "17269d8ce9447b4c9bfe31484906d0e658fac1b00d51c7ddaf09854674c4991c"
+    },
+    {
+      "path": "prompts/context-summary.md",
+      "bytes": 908,
+      "sha256": "3de86a84e59d07de5a882151e1b67e11fe7bd18676636cfa6491e08a737e028c"
+    },
+    {
+      "path": "prompts/conversation.md",
+      "bytes": 1814,
+      "sha256": "8e829da5ef89f028805696f5f573dec895ee073909f3b9f42871e5df3e3bd659"
+    },
+    {
+      "path": "prompts/memory-extract.md",
+      "bytes": 1272,
+      "sha256": "a1aa0d45c326f0fce9e43ed5f2d40031c8086c0ee7820e9e1a6b189325d7f102"
+    },
+    {
+      "path": "prompts/persona.md",
+      "bytes": 449,
+      "sha256": "d3b51df9a9153c7db4c30d3b2f303290359c2b8e9f43893d2d0e90045f30311b"
+    },
+    {
+      "path": "prompts/reminder-delivery.md",
+      "bytes": 595,
+      "sha256": "88b0426a531c1b619f6b75d460c573292116da3a7ed2e4c48aa968b7d421a2e0"
+    },
+    {
+      "path": "prompts/schema-repair.md",
+      "bytes": 519,
+      "sha256": "486e6bb73dee303c2efca405bbc80851ae338f23a49b455c38be14713b885fd3"
+    },
+    {
+      "path": "prompts/shared-policy.md",
+      "bytes": 2293,
+      "sha256": "ca185cc773682698c530f49e529980d1298b54b466db33ca88f662224efa7812"
+    },
+    {
+      "path": "prompts/task-delivery.md",
+      "bytes": 763,
+      "sha256": "264baebf51b71087a220eaf25905fcdaec292dfcfe140f8bf749e33a41aa1d4c"
+    },
+    {
+      "path": "prompts/task-harness.md",
+      "bytes": 1963,
+      "sha256": "0d979aed9abf7934b4f19ad576abc997f68b2ad8484143039ee17d9ab9a7d837"
+    },
+    {
+      "path": "prompts/task-steer.md",
+      "bytes": 584,
+      "sha256": "312a698ad6317a7818c02e77e47f1ddf36080bf27d93ae80e163f4d26af4234e"
+    },
+    {
+      "path": "requirements-dev.txt",
+      "bytes": 151,
+      "sha256": "189daf7b05b3aff5b357d71c05d69858e8f440b0d51def61ca2cce090c64e214"
+    },
+    {
+      "path": "schemas/app-context.schema.json",
+      "bytes": 6436,
+      "sha256": "e8dd863434b8c2d5b94d653f2b2b34e534b674d4593df9f2a012e54d1c7654c2"
+    },
+    {
+      "path": "schemas/context-summary.schema.json",
+      "bytes": 2067,
+      "sha256": "c302ec354d66e0670381e180bdcda9482ccda1956d1345c9d796a66e0c3dc062"
+    },
+    {
+      "path": "schemas/memory-candidates.schema.json",
+      "bytes": 2084,
+      "sha256": "68c9d20f8f673bc074b512f3c49ce725e5e16d3e7dc257395f23f5a1a1443587"
+    },
+    {
+      "path": "schemas/memory-input.schema.json",
+      "bytes": 3042,
+      "sha256": "457a84f2a63e139ac6b29c8784534ae1499f09e53207336c616b4e58a62688d2"
+    },
+    {
+      "path": "schemas/persona.schema.json",
+      "bytes": 739,
+      "sha256": "b9d604ad8027a7d495da3def373735e1aceb900b63d3ccecd89f10ba9d8c9df2"
+    },
+    {
+      "path": "schemas/reminder-delivery-input.schema.json",
+      "bytes": 1479,
+      "sha256": "38ed69fa3b908978bb4aa064056fa7601b11b17baab79ce02218223d748b107f"
+    },
+    {
+      "path": "schemas/repair-input.schema.json",
+      "bytes": 952,
+      "sha256": "ef05e6f79a5d5062345c5b5c99e5775a0fddd5423a9a56ff58a523efced8b5bf"
+    },
+    {
+      "path": "schemas/skill-index.schema.json",
+      "bytes": 846,
+      "sha256": "14d80ff48072307eb83045a1db824b3e4b14c5cfa01f1a52dabd3d43ada0d7af"
+    },
+    {
+      "path": "schemas/summary-input.schema.json",
+      "bytes": 3839,
+      "sha256": "1ce53628385320fd3794a6781587e6e629a4f549f38b6f2ae0cca390e314ab3d"
+    },
+    {
+      "path": "schemas/task-delivery-input.schema.json",
+      "bytes": 2282,
+      "sha256": "f5b52f932b64c338d3081480f9f7fca3bba57379f970fb0a9c1558875b886128"
+    },
+    {
+      "path": "schemas/task-draft.schema.json",
+      "bytes": 3975,
+      "sha256": "e76ed6bed126d46b765a43af7e21c802d98cbaaa1d2f558ca4da9e3dca005b31"
+    },
+    {
+      "path": "schemas/task-input.schema.json",
+      "bytes": 3683,
+      "sha256": "6b00c0223c3b2b6de24bc47c5c0de3654fc12b678ffb282231ae38af95498afd"
+    },
+    {
+      "path": "schemas/task-steer-input.schema.json",
+      "bytes": 1239,
+      "sha256": "17acb0a98589988a8edbaecba2e5af9795dc09f8cc280156ff81f071a9b6815f"
+    },
+    {
+      "path": "schemas/tool-output.schema.json",
+      "bytes": 4234,
+      "sha256": "0bbe0eb536c15bcb0efd25f62333467c54bbf5f9dfa344b6728fe6e0fe161fc5"
+    },
+    {
+      "path": "scripts/check_contract_examples.py",
+      "bytes": 3270,
+      "sha256": "769cafbb6053dcf14242359c03f1ab71896c952894c1f497f3a16bab368d5391"
+    },
+    {
+      "path": "scripts/contract_schema_subset.py",
+      "bytes": 4225,
+      "sha256": "2250a621f9808594146db9a43cca6f0d08965b6658449a79c1b3a88de6747ae9"
+    },
+    {
+      "path": "scripts/rebuild_release.py",
+      "bytes": 5216,
+      "sha256": "57554aac2db1781046944fcfb70c3ea6be6a5357548fdc11c9d8db6a6745cb1c"
+    },
+    {
+      "path": "scripts/render_prompts.py",
+      "bytes": 2906,
+      "sha256": "7c59e49ad979cacf439d7cfa25ab455416649d893eb721f5a430c242acaeb5c2"
+    },
+    {
+      "path": "scripts/validate_assets.py",
+      "bytes": 3250,
+      "sha256": "9dfb96368ade39922549b5ae2573feec03fd520ae82d5c7a8bfb927ade52386c"
+    },
+    {
+      "path": "skills/capture-item/SKILL.md",
+      "bytes": 2729,
+      "sha256": "3b52609e69071b3a8123337520e424ecffeb8c50f241e03c8ab06314e9cec529"
+    },
+    {
+      "path": "skills/capture-item/references/examples.md",
+      "bytes": 417,
+      "sha256": "2bd4ea9e4577c666772384479bd2ed3f170657e8f4fbe7d69542cbb418aba573"
+    },
+    {
+      "path": "skills/companion-chat/SKILL.md",
+      "bytes": 2499,
+      "sha256": "3ad8b2394b711a21aeb88f06929642f10fb3893df50c27df23aaad7c12bbf03e"
+    },
+    {
+      "path": "skills/companion-chat/references/examples.md",
+      "bytes": 416,
+      "sha256": "18d4b30384261581b5766ec6ae2e4d560988b93b972950eda1c0317fa94d032c"
+    },
+    {
+      "path": "skills/music-companion/SKILL.md",
+      "bytes": 2750,
+      "sha256": "cb0e2a3a0d45d600e8db6443983ccdeab7b806d3cdffef1cb7e2d358119e2dfa"
+    },
+    {
+      "path": "skills/music-companion/references/examples.md",
+      "bytes": 360,
+      "sha256": "e2ce70c26b179b21d791b65347d4457a8d6f527df901c44a44c238b740b28d7c"
+    },
+    {
+      "path": "skills/reminder-focus/SKILL.md",
+      "bytes": 2570,
+      "sha256": "26fa83efd7f58db7bb0e565f3517bdf6bfe349f78a99c6756196f083e32bfb42"
+    },
+    {
+      "path": "skills/reminder-focus/references/examples.md",
+      "bytes": 436,
+      "sha256": "82823b2450cf18c0af26ec7d5e34a4df55bf5c4d94e8600bc61b5f24a698ccef"
+    },
+    {
+      "path": "skills/web-qa/SKILL.md",
+      "bytes": 3070,
+      "sha256": "ab7334827ca8cb556bb3a4493c30ab0d2c50f3973f62964b9274d1a8c7ff6be4"
+    },
+    {
+      "path": "skills/web-qa/references/examples.md",
+      "bytes": 435,
+      "sha256": "4e50aed138b2f08719b8395f166ed53f3f8c77ff42af85c2a3eef576a3ee060a"
+    },
+    {
+      "path": "skills/work-discussion/SKILL.md",
+      "bytes": 2695,
+      "sha256": "1c0553e07b8c20e35a33e801941268c78f828248237c9279435fee597faa0e3e"
+    },
+    {
+      "path": "skills/work-discussion/references/examples.md",
+      "bytes": 395,
+      "sha256": "748870ea8f49f560fddc2f842705e00b58c987e67027561ef06394a643da039b"
+    }
+  ]
+}
