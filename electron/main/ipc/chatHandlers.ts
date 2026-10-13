@@ -125,7 +125,8 @@ export function registerChatHandlers(
   personaStore?: R1PersonaStore,
   promptAssets?: R1PromptAssets,
   memoryStore?: R1MemoryStore,
-  sessionMode?: R1SessionMode
+  sessionMode?: R1SessionMode,
+  onSessionEnded: (sessionId: string, temporary: boolean) => void = () => undefined
 ): void {
   clearMemory()
   let activeSystemPrompt: string | null = null
@@ -134,7 +135,14 @@ export function registerChatHandlers(
   let temporary = false
   if (sessionMode) sessionMode.temporary = false
   let sessionId = conversations?.start(false) ?? null
+  if (sessionMode) sessionMode.sessionId = sessionId
   let sessionEpoch = 0
+  function endCurrentSession(): void {
+    if (conversations && sessionId) {
+      onSessionEnded(sessionId, temporary)
+      conversations.end(sessionId)
+    }
+  }
 
   function captureRequest() {
     return { epoch: sessionEpoch, personaVersion: personaStore?.get().version,
@@ -162,8 +170,9 @@ export function registerChatHandlers(
         clearMemory()
         sessionEpoch += 1
         if (conversations && sessionId) {
-          conversations.end(sessionId)
+          endCurrentSession()
           sessionId = conversations.start(temporary)
+          if (sessionMode) sessionMode.sessionId = sessionId
         }
       }
       activePersonaVersion = persona.version
@@ -186,8 +195,9 @@ export function registerChatHandlers(
       clearMemory()
       sessionEpoch += 1
       if (conversations && sessionId) {
-        conversations.end(sessionId)
+        endCurrentSession()
         sessionId = conversations.start(temporary)
+        if (sessionMode) sessionMode.sessionId = sessionId
       }
     }
 
@@ -203,10 +213,11 @@ export function registerChatHandlers(
     if (enabled === temporary) return ok({ temporary })
     clearMemory()
     sessionEpoch += 1
-    if (sessionId) conversations.end(sessionId)
+    endCurrentSession()
     temporary = enabled
     if (sessionMode) sessionMode.temporary = enabled
     sessionId = conversations.start(temporary)
+    if (sessionMode) sessionMode.sessionId = sessionId
     return ok({ temporary })
   })
 

@@ -7,6 +7,8 @@ import type { R1Memory, R1MemoryPage, R1MemorySource, R1MemoryStore } from '../m
 import type { HistoryPage, R1Conversations, SessionMessage } from '../main/r1/conversations.js'
 import type { FocusCommand, FocusEvent, FocusState, R1Focus } from '../main/r1/focus.js'
 import type { R1ServiceDiagnostics, ServiceCheckReport } from '../main/r1/serviceDiagnostics.js'
+import type { R1Task, TaskEvent } from '../main/r1/taskSupervisor.js'
+import type { Artifact, R1Artifacts } from '../main/r1/artifacts.js'
 
 export type R1Result<T> =
   | { ok: true; data: T }
@@ -16,6 +18,20 @@ type MethodInput<K extends keyof R1Items> = R1Items[K] extends (input: infer I) 
 type MethodOutput<K extends keyof R1Items> = R1Items[K] extends (...args: never[]) => infer O ? O : never
 
 export type R1Api = {
+  tasks: {
+    list(): Promise<R1Result<R1Task[]>>
+    get(taskId: string): Promise<R1Result<R1Task>>
+    pause(input: { taskId: string; expectedGoalVersion: number }): Promise<R1Result<R1Task>>
+    resume(input: { taskId: string; expectedGoalVersion: number }): Promise<R1Result<R1Task>>
+    cancel(input: { taskId: string; expectedGoalVersion: number }): Promise<R1Result<R1Task>>
+    onChanged(handler: (event: TaskEvent) => void): () => void
+  }
+  artifacts: {
+    get(input: { artifactId: string; version?: number }): Promise<R1Result<Artifact>>
+    revise(input: Omit<Parameters<R1Artifacts['revise']>[0], 'temporaryOwner'>): Promise<R1Result<Artifact>>
+    undo(input: Omit<Parameters<R1Artifacts['undo']>[0], 'temporaryOwner'>): Promise<R1Result<Artifact>>
+    save(input: Omit<Parameters<R1Artifacts['save']>[0], 'temporaryOwner'>): Promise<R1Result<ReturnType<R1Artifacts['save']>>>
+  }
   persona: {
     get(): Promise<R1Result<R1Persona>>
     update(input: Parameters<R1PersonaStore['update']>[0]): Promise<R1Result<R1Persona>>

@@ -1,1 +1,1 @@
-export type R1SessionMode = { temporary: boolean }
+export type R1SessionMode = { temporary: boolean; sessionId?: string | null }

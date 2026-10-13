@@ -1,8 +1,9 @@
-import { mkdirSync, readFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, readFileSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-export const R1_SCHEMA_VERSION = 3
+export const R1_SCHEMA_VERSION = 4
 
 export type R1Database = DatabaseSync
 
@@ -203,14 +204,17 @@ const SCHEMA_V2 = `
   );
 `
 
+let savepointSequence = 0
 export function inTransaction<T>(db: R1Database, action: () => T): T {
-  db.exec('BEGIN IMMEDIATE')
+  const savepoint = db.isTransaction ? `r1_transaction_${++savepointSequence}` : null
+  db.exec(savepoint ? `SAVEPOINT ${savepoint}` : 'BEGIN IMMEDIATE')
   try {
     const result = action()
-    db.exec('COMMIT')
+    db.exec(savepoint ? `RELEASE SAVEPOINT ${savepoint}` : 'COMMIT')
     return result
   } catch (error) {
-    db.exec('ROLLBACK')
+    if (savepoint) { db.exec(`ROLLBACK TO SAVEPOINT ${savepoint}`); db.exec(`RELEASE SAVEPOINT ${savepoint}`) }
+    else db.exec('ROLLBACK')
     throw error
   }
 }
@@ -230,6 +234,20 @@ export function openR1Database(databasePath: string): R1Database {
   if (row.user_version > R1_SCHEMA_VERSION) {
     db.close()
     throw new Error(`R1 database schema ${row.user_version} is newer than supported ${R1_SCHEMA_VERSION}`)
+  }
+  if (row.user_version > 0 && row.user_version < R1_SCHEMA_VERSION && databasePath !== ':memory:') {
+    const snapshot = `${databasePath}.pre-schema-${row.user_version}-to-${R1_SCHEMA_VERSION}-${randomUUID()}.sqlite`
+    try {
+      db.prepare('VACUUM INTO ?').run(snapshot)
+      chmodSync(snapshot, 0o600)
+      const copy = new DatabaseSync(snapshot, { readOnly: true })
+      try {
+        if ((copy.prepare('PRAGMA integrity_check').get() as { integrity_check: string }).integrity_check !== 'ok' ||
+          (copy.prepare('PRAGMA user_version').get() as { user_version: number }).user_version !== row.user_version) {
+          throw new Error('MIGRATION_SNAPSHOT_INVALID')
+        }
+      } finally { copy.close() }
+    } catch (error) { db.close(); throw error }
   }
   if (row.user_version < 1) {
     inTransaction(db, () => {
@@ -266,6 +284,13 @@ export function openR1Database(databasePath: string): R1Database {
       if (!columns.has('end_target_track_key')) db.exec('ALTER TABLE focus ADD COLUMN end_target_track_key TEXT')
       db.exec('CREATE UNIQUE INDEX IF NOT EXISTS focus_one_active ON focus((1)) WHERE state IN (\'running\', \'paused\')')
       db.exec('PRAGMA user_version = 3')
+    })
+  }
+  if (migratedVersion < 4) {
+    inTransaction(db, () => {
+      const columns = new Set((db.prepare('PRAGMA table_info(artifact_versions)').all() as { name: string }[]).map(row => row.name))
+      if (!columns.has('metadata_json')) db.exec("ALTER TABLE artifact_versions ADD COLUMN metadata_json TEXT NOT NULL DEFAULT '{}'")
+      db.exec('PRAGMA user_version = 4')
     })
   }
   return db

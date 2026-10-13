@@ -35,6 +35,15 @@ export const exposedChannels = [
   'r1.focus.pause',
   'r1.focus.resume',
   'r1.focus.stop',
+  'r1.tasks.list',
+  'r1.tasks.get',
+  'r1.tasks.pause',
+  'r1.tasks.resume',
+  'r1.tasks.cancel',
+  'r1.artifacts.get',
+  'r1.artifacts.revise',
+  'r1.artifacts.undo',
+  'r1.artifacts.save',
   'r1.items.create',
   'r1.items.update',
   'r1.items.complete',
@@ -68,7 +77,8 @@ export const eventChannels = [
   'tts.streamAudio',
   'r1.reminderDue',
   'r1.memoryInvalidated',
-  'r1.focusChanged'
+  'r1.focusChanged',
+  'r1.taskChanged'
 ] as const
 
 export type ExposedEventChannel = (typeof eventChannels)[number]
@@ -127,6 +137,24 @@ function exposeLingliApi(
     return renderer.invoke(channel, payload) as Promise<R1Result<T>>
   }
   const r1Api: R1Api = {
+    tasks: {
+      list: () => invokeR1('r1.tasks.list'),
+      get: taskId => invokeR1('r1.tasks.get', { taskId }),
+      pause: input => invokeR1('r1.tasks.pause', input),
+      resume: input => invokeR1('r1.tasks.resume', input),
+      cancel: input => invokeR1('r1.tasks.cancel', input),
+      onChanged: handler => {
+        const listener = (_event: unknown, payload: unknown) => handler(payload as Parameters<typeof handler>[0])
+        renderer.on('r1.taskChanged', listener)
+        return () => renderer.removeListener('r1.taskChanged', listener)
+      }
+    },
+    artifacts: {
+      get: input => invokeR1('r1.artifacts.get', input),
+      revise: input => invokeR1('r1.artifacts.revise', input),
+      undo: input => invokeR1('r1.artifacts.undo', input),
+      save: input => invokeR1('r1.artifacts.save', input)
+    },
     persona: {
       get: () => invokeR1('r1.persona.get'),
       update: (input) => invokeR1('r1.persona.update', input)

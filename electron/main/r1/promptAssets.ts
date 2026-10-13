@@ -21,7 +21,7 @@ type PromptRegistry = { releaseId: string; composition: Record<string, string[]>
 type ToolCatalog = { schemaVersion: string; businessTools: R1ToolDefinition[]; internalTools: R1ToolDefinition[] }
 type Runtime = { releaseId: string; schemaVersion: string; activation: {
   preloadedSkills: string[]; alwaysAllowedRealtimeTools: string[]; alwaysAllowedTaskTools: string[]
-} }
+}; limits: Record<string, number> }
 export type R1CompiledPrompt = { text: string; sha256: string; releaseId: string;
   promptIds: string[]; skillIds: string[] }
 export type R1PromptAssets = {
@@ -32,6 +32,13 @@ export type R1PromptAssets = {
   composeTask(persona: R1Persona, taskInput: Record<string, unknown>): R1CompiledPrompt
   validateStructured(schema: 'task-input' | 'task-draft' | 'tool-output', input: unknown): void
   structuredSchema(schema: 'task-draft'): Record<string, unknown>
+  toolDefinition(alias: string): R1ToolDefinition
+  validateToolOutput(alias: string, input: unknown): void
+  taskBudget(complexity: 'light' | 'complex'): { decisionsRemaining: number; toolsRemaining: number;
+    activeMsRemaining: number; searchQueriesRemaining: number; pagesRemaining: number }
+  readSkillFile(filePath: string, offset?: number, limit?: number): {
+    data: { path: string; content: string; offset: number; hasMore: boolean; assetReleaseId: string }; loadedSkillId: string | null
+  }
   compile(mode: string, variables: Record<string, unknown>, loadedSkillIds?: string[]): R1CompiledPrompt
   exposeTools(input: { channel: 'realtime' | 'task'; loadedSkillIds: string[];
     authorizedAliases: string[]; temporary: boolean }): R1ModelTool[]
@@ -108,8 +115,9 @@ export function loadR1PromptAssets(root: string): R1PromptAssets {
   }
   const toolByAlias = new Map(tools.map(tool => [tool.alias, tool]))
   const toolValidators = new Map(tools.map(tool => [tool.alias, ajv.compile(tool.input_schema)]))
+  const outputValidators = new Map(tools.map(tool => [tool.alias, ajv.compile(tool.output_data_schema)]))
   const skillIndex = skills.entries.map(({ skillId, name, description, version, path }) =>
-    ({ skillId, name, description, version, path }))
+    ({ skillId, name, description, version, path: `/${path}` }))
   validate('skill-index', skillIndex)
   for (const entry of skills.entries) {
     if (entry.allowedTools.some(name => !tools.some(tool => tool.name === name))) {
@@ -188,6 +196,43 @@ export function loadR1PromptAssets(root: string): R1PromptAssets {
     },
     validateStructured(schema, input) { validate(schema, input) },
     structuredSchema(schema) { return JSON.parse(readVerified(`schemas/${schema}.schema.json`)) as Record<string, unknown> },
+    toolDefinition(alias) {
+      const tool = toolByAlias.get(alias)
+      if (!tool) throw new Error('MODEL_TOOL_ALIAS_UNKNOWN')
+      return structuredClone(tool)
+    },
+    taskBudget(complexity) {
+      if (!['light', 'complex'].includes(complexity)) throw new Error('TASK_COMPLEXITY_INVALID')
+      const limits = runtime.limits
+      const budget = { decisionsRemaining: limits[complexity === 'light' ? 'lightTaskDecisions' : 'complexTaskDecisions'],
+        toolsRemaining: limits[complexity === 'light' ? 'lightTaskTools' : 'complexTaskTools'], activeMsRemaining: limits.complexTaskActiveMs,
+        searchQueriesRemaining: limits[complexity === 'light' ? 'simpleSearchQueries' : 'complexSearchQueries'],
+        pagesRemaining: limits[complexity === 'light' ? 'simpleSearchPages' : 'complexSearchPages'] }
+      if (Object.values(budget).some(value => !Number.isSafeInteger(value) || value < 1)) throw new Error('TASK_BUDGET_CONFIG_INVALID')
+      return budget
+    },
+    validateToolOutput(alias, input) {
+      const tool = toolByAlias.get(alias)
+      if (!tool) throw new Error('MODEL_TOOL_ALIAS_UNKNOWN')
+      validate('tool-output', input)
+      const value = input as { kind: string; tool?: string; status: string; data: Record<string, unknown> }
+      if (value.kind === 'receipt' && value.tool !== tool.name) throw new Error('MODEL_TOOL_OUTPUT_OWNER_INVALID')
+      const required = (value.kind === 'task_control' && value.status !== 'failed') ||
+        (value.kind === 'receipt' && (value.status === 'succeeded' || Object.keys(value.data).length > 0))
+      if (required && !outputValidators.get(alias)!(value.data)) throw new Error('MODEL_TOOL_OUTPUT_DATA_INVALID')
+    },
+    readSkillFile(filePath, offset = 0, limit = 2000) {
+      if (typeof filePath !== 'string' || !Number.isSafeInteger(offset) || offset < 0 ||
+        !Number.isSafeInteger(limit) || limit < 1 || limit > 2000) throw new Error('SKILL_FILE_INPUT_INVALID')
+      const entry = skills.entries.find(skill => [`/${skill.path}`, ...skill.resourcePaths.map(path => `/${path}`)].includes(filePath))
+      if (!entry) throw new Error('SKILL_FILE_SCOPE_INVALID')
+      const lines = readVerified(filePath.slice(1)).split('\n')
+      const content = lines.slice(offset, offset + limit).join('\n')
+      if ([...content].length > 20000) throw new Error('SKILL_FILE_SLICE_TOO_LARGE')
+      const hasMore = offset + limit < lines.length
+      return { data: { path: filePath, content, offset, hasMore, assetReleaseId: manifest.releaseId },
+        loadedSkillId: filePath === `/${entry.path}` && offset === 0 && !hasMore ? entry.skillId : null }
+    },
     exposeTools({ channel, loadedSkillIds, authorizedAliases, temporary }) {
       if (!['realtime', 'task'].includes(channel)) throw new Error('MODEL_TOOL_CHANNEL_UNKNOWN')
       checkedSkills(loadedSkillIds)

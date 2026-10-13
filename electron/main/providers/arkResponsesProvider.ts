@@ -5,6 +5,7 @@ export type ArkModelBoundary = {
   readonly systemText: string
   finalize(messages: ChatMessage[]): { messages: ChatMessage[]; tools: R1ModelTool[] }
   validateToolCall(alias: string, input: unknown): void
+  validateHistoricalToolCall?(alias: string, input: unknown): void
   assertCurrent?(): void
   readonly outputFormat?: { name: string; schema: Record<string, unknown> }
 }
@@ -26,7 +27,7 @@ export class ArkResponsesError extends Error {
 }
 function invalid(code: string): never { throw new ArkResponsesError(code) }
 
-function checkedOutput(value: unknown, boundary: ArkModelBoundary): ArkOutputItem[] {
+function checkedOutput(value: unknown, boundary: ArkModelBoundary, historical = false): ArkOutputItem[] {
   if (!Array.isArray(value) || value.length > 100) invalid('ARK_OUTPUT_INVALID')
   if (JSON.stringify(value).length > 1_048_576) invalid('ARK_OUTPUT_TOO_LARGE')
   const output = value as ArkOutputItem[]
@@ -41,7 +42,10 @@ function checkedOutput(value: unknown, boundary: ArkModelBoundary): ArkOutputIte
       calls.add(item.call_id)
       let args: unknown
       try { args = JSON.parse(item.arguments) } catch { invalid('ARK_TOOL_ARGUMENTS_INVALID') }
-      try { boundary.validateToolCall(item.name, args) } catch { invalid('ARK_TOOL_SCOPE_OR_SCHEMA_INVALID') }
+      try {
+        if (historical && boundary.validateHistoricalToolCall) boundary.validateHistoricalToolCall(item.name, args)
+        else boundary.validateToolCall(item.name, args)
+      } catch { invalid('ARK_TOOL_SCOPE_OR_SCHEMA_INVALID') }
     } else if (item.type === 'message') {
       if (item.role !== 'assistant' || !Array.isArray(item.content) ||
         item.content.some(part => !part || part.type !== 'output_text' || typeof part.text !== 'string')) invalid('ARK_MESSAGE_INVALID')
@@ -72,7 +76,7 @@ export function createArkResponsesProvider(options: { env?: Environment;
       const rounds = input.rounds ?? []
       if (rounds.length > 12) invalid('ARK_TOO_MANY_ROUNDS')
       for (const round of rounds) {
-        const output = checkedOutput(round.output, input.boundary)
+        const output = checkedOutput(round.output, input.boundary, true)
         const calls = output.filter((item): item is ArkFunctionCall => item.type === 'function_call')
         if (!Array.isArray(round.results) || round.results.length !== calls.length ||
           new Set(round.results.map(result => result.callId)).size !== calls.length ||

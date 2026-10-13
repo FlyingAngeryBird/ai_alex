@@ -20,6 +20,7 @@ describe('R1 released prompt assets', () => {
       expect(text).toContain('"assistantName":"Alex"')
       expect(text).toContain('"userAddress":"海"')
       expect(text).toContain('APP_CONTEXT_DATA')
+      expect(text).toContain('"path":"/skills/work-discussion/SKILL.md"')
       expect(text).not.toMatch(/\{\{[a-z_]+\}\}/)
     } finally { db.close() }
   })
@@ -50,5 +51,18 @@ describe('R1 released prompt assets', () => {
     expect(() => assets.validateToolInput('memory_recall', { query: '偏好', extra: 'escape' }))
       .toThrow('MODEL_TOOL_INPUT_INVALID')
     expect(() => assets.validateToolInput('memory_recall', { query: '偏好' })).not.toThrow()
+  })
+  it('validates actual tool output owner and domain data, preserving failure and UI-wait lifecycles', () => {
+    const assets = loadR1PromptAssets(resolve('r1-assets'))
+    const receipt = { kind: 'receipt', actionId: 'action', tool: 'memory.recall', status: 'succeeded',
+      entityId: null, entityVersion: null, data: { matchStatus: 'no_match', memories: [] }, errorCode: null, retryable: false, runId: null }
+    expect(() => assets.validateToolOutput('memory_recall', receipt)).not.toThrow()
+    expect(() => assets.validateToolOutput('memory_recall', { ...receipt, tool: 'notes.create' })).toThrow('MODEL_TOOL_OUTPUT_OWNER_INVALID')
+    expect(() => assets.validateToolOutput('memory_recall', { ...receipt, data: {} })).toThrow('MODEL_TOOL_OUTPUT_DATA_INVALID')
+    expect(() => assets.validateToolOutput('memory_recall', { ...receipt, status: 'failed', data: {}, errorCode: 'UNAVAILABLE' })).not.toThrow()
+    expect(() => assets.validateToolOutput('start_task', { kind: 'task_control', taskId: 'task', status: 'failed',
+      goalVersion: 1, queuePosition: null, data: {}, errorCode: 'TASK_QUEUE_FULL' })).not.toThrow()
+    expect(() => assets.validateToolOutput('notes_export', { kind: 'ui_action', uiActionId: 'ui', status: 'awaiting_user',
+      action: 'export', data: { requestedFormat: 'md' } })).not.toThrow()
   })
 })

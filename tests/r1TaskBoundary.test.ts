@@ -90,4 +90,17 @@ describe('registered M02 task request boundary', () => {
     expect(() => assets.validateStructured('task-draft', { ...draft, artifacts: [{ ...draft.artifacts[0], content: '海'.repeat(8001) }] }))
       .toThrow('PROMPT_ASSET_VARIABLE_INVALID:task-draft')
   })
+  it('keeps paired past tool results when no budget remains for new tool calls', async () => {
+    const base = fixture()
+    const { boundary } = fixture({ budget: { ...base.input.budget, toolsRemaining: 0 } })
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ id: 'final', status: 'completed', output: [
+      { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '{}' }] }
+    ] })))
+    const result = await createArkResponsesProvider({ env: { VOLCENGINE_ARK_API_KEY: 'key', VOLCENGINE_ARK_MODEL: 'model' }, fetch: fetcher })
+      .request({ boundary, messages: [{ role: 'user', content: '整理讨论稿' }], rounds: [{ output: [
+        { type: 'function_call', call_id: 'past', name: 'read_file', arguments: '{"file_path":"/skills/work-discussion/SKILL.md"}' }
+      ], results: [{ callId: 'past', output: { status: 'succeeded' } }] }] })
+    expect(result.text).toBe('{}')
+    expect(() => boundary.validateToolCall('read_file', { file_path: '/skills/work-discussion/SKILL.md' })).toThrow('MODEL_TOOL_NOT_EXPOSED')
+  })
 })

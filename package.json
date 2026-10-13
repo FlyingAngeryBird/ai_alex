@@ -7,7 +7,7 @@
     "dev": "npm run start",
     "dev:vite": "vite --configLoader runner --host 127.0.0.1 --port 5173",
     "dist:mac": "npm run build && node scripts/package-mac.mjs",
-    "build": "vue-tsc --noEmit && tsc --target ES2022 --module NodeNext --moduleResolution NodeNext --rootDir electron --outDir dist-electron --strict --skipLibCheck electron/main/index.ts electron/preload/index.ts electron/main/ipc/appHandlers.ts electron/main/r1/taskBoundary.ts && vite build --configLoader runner --outDir dist-electron/renderer",
+    "build": "vue-tsc --noEmit && tsc --target ES2022 --module NodeNext --moduleResolution NodeNext --rootDir electron --outDir dist-electron --strict --skipLibCheck electron/main/index.ts electron/preload/index.ts electron/main/ipc/appHandlers.ts electron/main/r1/taskBoundary.ts electron/main/r1/taskToolExecutor.ts && vite build --configLoader runner --outDir dist-electron/renderer",
     "start": "npm run build && electron .",
     "test": "vitest run --passWithNoTests --configLoader runner",
     "test:watch": "vitest",

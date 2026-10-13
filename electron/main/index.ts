@@ -28,6 +28,9 @@ import { R1Focus } from './r1/focus.js'
 import { registerFocusHandlers } from './ipc/focusHandlers.js'
 import { R1ServiceDiagnostics } from './r1/serviceDiagnostics.js'
 import { registerServiceHandlers } from './ipc/serviceHandlers.js'
+import { R1TaskSupervisor } from './r1/taskSupervisor.js'
+import { R1Artifacts } from './r1/artifacts.js'
+import { registerTaskHandlers } from './ipc/taskHandlers.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 let r1Database: R1Database | null = null
@@ -35,6 +38,9 @@ let reminderScheduler: ReminderScheduler | null = null
 let r1PromptAssets: R1PromptAssets | null = null
 let r1Focus: R1Focus | null = null
 let r1Diagnostics: R1ServiceDiagnostics | null = null
+let r1Tasks: R1TaskSupervisor | null = null
+let r1Artifacts: R1Artifacts | null = null
+let r1Conversations: R1Conversations | null = null
 const r1SessionMode: R1SessionMode = { temporary: false }
 
 // R1 keeps its data separate from every legacy lingmo build. The old directory
@@ -88,11 +94,29 @@ void app.whenReady().then(async () => {
   try {
     r1Database = openR1Database(join(app.getPath('userData'), 'r1.sqlite'))
     r1PromptAssets = loadR1PromptAssets(join(app.getAppPath(), 'r1-assets'))
+    r1Conversations = new R1Conversations(r1Database)
+    const memory = new R1MemoryStore(r1Database)
+    r1Artifacts = new R1Artifacts(r1Database)
+    r1Tasks = new R1TaskSupervisor(r1Database, r1PromptAssets, () => memory.currentDeletionEpoch(), {
+      temporarySource: messageId => {
+        const sessionId = r1SessionMode.temporary && r1SessionMode.sessionId
+        if (!sessionId || !r1Conversations?.isTemporary(sessionId)) return undefined
+        const source = r1Conversations.messages(sessionId).find(message => message.messageId === messageId && message.role === 'user')
+        return source ? { ...source, temporary: true, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } : undefined
+      }
+    })
+    registerTaskHandlers(r1Tasks, r1Artifacts, r1SessionMode)
+    r1Tasks.onChanged(event => {
+      if (!r1Tasks?.list(r1SessionMode.temporary ? r1SessionMode.sessionId || '__missing__' : null)
+        .some(task => task.taskId === event.task.taskId)) return
+      for (const window of BrowserWindow.getAllWindows()) window.webContents.send('r1.taskChanged', event)
+    })
     const vault = new CredentialVault(join(app.getPath('userData'), 'credentials.bin'))
     vault.load()
     importLegacyJson(r1Database, join(app.getPath('appData'), 'lingli'), 'lingli-json')
     importLegacyJson(r1Database, join(app.getPath('appData'), 'lingmo'), 'lingmo-json')
     registerR1Handlers(r1Database, undefined, r1SessionMode, deletionEpoch => {
+      r1Tasks?.invalidateContext()
       for (const window of BrowserWindow.getAllWindows()) {
         window.webContents.send('r1.memoryInvalidated', { deletionEpoch })
       }
@@ -107,6 +131,8 @@ void app.whenReady().then(async () => {
     })
     powerMonitor.on('suspend', () => r1Focus?.suspend())
     powerMonitor.on('resume', () => r1Focus?.wake())
+    powerMonitor.on('suspend', () => r1Tasks?.suspend())
+    powerMonitor.on('resume', () => r1Tasks?.wake())
   } catch (error) {
     const { dialog } = await import('electron')
     dialog.showErrorBox(
@@ -122,9 +148,11 @@ void app.whenReady().then(async () => {
   await getDefaultConfigStore().loadConfig()
   await getDefaultMusicStore().loadLibrary()
   if (r1Database) {
-    registerChatHandlers(undefined, undefined, undefined, new R1Conversations(r1Database),
+    registerChatHandlers(undefined, undefined, undefined, r1Conversations ?? undefined,
       new R1PersonaStore(r1Database), r1PromptAssets ?? undefined,
-      new R1MemoryStore(r1Database), r1SessionMode)
+      new R1MemoryStore(r1Database), r1SessionMode, (sessionId, temporary) => {
+        if (temporary) { r1Tasks?.endTemporary(sessionId); r1Artifacts?.endTemporary(sessionId) }
+      })
   }
   if (r1Database && !existsSync(configPath)) {
     const persona = r1Database.prepare('SELECT voice_id FROM persona WHERE id = 1')
@@ -158,6 +186,7 @@ void app.whenReady().then(async () => {
 })
 
 app.on('before-quit', () => {
+  r1Tasks?.close()
   r1Diagnostics?.close()
   r1Focus?.close()
   reminderScheduler?.stop()

@@ -24,12 +24,14 @@ export class R1TaskRequestBoundary implements ArkModelBoundary {
     promptIds: readonly string[]; toolAliases: readonly string[]; taskId: string; runId: string; goalVersion: number }>
   private readonly tools: R1ModelTool[]
   private readonly snapshot: R1TaskInput
+  private readonly authorizedAliases: string[]
   get outputFormat(): { name: string; schema: Record<string, unknown> } {
     return { name: 'seamo_task_draft_v2', schema: this.assets.structuredSchema('task-draft') }
   }
   constructor(private readonly assets: R1PromptAssets, persona: R1Persona, input: R1TaskInput,
     authorizedAliases: string[], private readonly current: () => R1TaskAuthority) {
     this.snapshot = structuredClone(input)
+    this.authorizedAliases = [...authorizedAliases]
     assets.validateStructured('task-input', this.snapshot)
     if (input.status !== 'running') throw new Error('TASK_NOT_RUNNING')
     if (input.budget.decisionsRemaining < 1 || input.budget.activeMsRemaining < 1) throw new Error('TASK_BUDGET_EXHAUSTED')
@@ -71,6 +73,12 @@ export class R1TaskRequestBoundary implements ArkModelBoundary {
   validateToolCall(alias: string, input: unknown): void {
     this.assertCurrent()
     if (!this.tools.some(tool => tool.function.name === alias)) throw new Error('MODEL_TOOL_NOT_EXPOSED')
+    this.assets.validateToolInput(alias, input)
+  }
+  validateHistoricalToolCall(alias: string, input: unknown): void {
+    this.assertCurrent()
+    if (!this.authorizedAliases.includes(alias) || !this.current().authorizedAliases.includes(alias) ||
+      !this.assets.toolDefinition(alias).contexts.includes('task')) throw new Error('MODEL_TOOL_NOT_EXPOSED')
     this.assets.validateToolInput(alias, input)
   }
 }
