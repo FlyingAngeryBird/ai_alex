@@ -4,6 +4,7 @@ import { ArrowUp, ChevronDown, MessageCircle, Mic, ShieldCheck, Square } from 'l
 import type { AutoListenState } from '@/types/app'
 
 const props = defineProps<{
+  assistantName: string
   autoListenState: AutoListenState
   busy: boolean
   isListening: boolean
@@ -60,7 +61,7 @@ function toggleVoice(): void {
         @click="toggleVoice">
         <Square v-if="isListening" :size="17" /><Mic v-else :size="19" />
       </button>
-      <input ref="inputElement" v-model="draft" aria-label="对话输入" placeholder="和 Seamo AI 说点什么…"
+      <input ref="inputElement" v-model="draft" aria-label="对话输入" :placeholder="`和 ${assistantName} 说点什么…`"
         autocomplete="off" @keydown.enter="onEnter" />
       <button v-if="busy" type="button" class="r1-stop" aria-label="停止朗读" @click="emit('stopSpeech')"><Square :size="15" /></button>
       <button class="r1-send" type="submit" aria-label="发送消息" :disabled="!draft.trim() || busy || isListening"><ArrowUp :size="20" /></button>

@@ -125,6 +125,10 @@ cpSync(join(projectRoot, 'dist-electron'), join(appDir, 'dist-electron'), {
   recursive: true
 })
 cpSync(join(projectRoot, 'package.json'), join(appDir, 'package.json'))
+cpSync(join(projectRoot, 'r1-assets'), join(appDir, 'r1-assets'), {
+  dereference: true,
+  recursive: true
+})
 for (const moduleName of requiredRuntimeModules) {
   copyRequiredModule(moduleName)
 }

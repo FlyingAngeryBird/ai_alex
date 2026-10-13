@@ -129,7 +129,6 @@ export function useMusic(options: UseMusicOptions = {}) {
   let removeAudioListeners: (() => void) | null = null
   let audioLevelTimer: ReturnType<typeof globalThis.setInterval> | undefined
   let activePlayRequestId = 0
-  let fallbackBeatMemory = 0
   let silentAnalysisTicks = 0
 
   const hasActiveTrack = computed(() => playback.value.track !== null)
@@ -140,7 +139,6 @@ export function useMusic(options: UseMusicOptions = {}) {
     audioEnergyRanges.bass = createEnergyRange(0.14)
     audioEnergyRanges.mid = createEnergyRange(0.14)
     audioEnergyRanges.treble = createEnergyRange(0.12)
-    fallbackBeatMemory = 0
     silentAnalysisTicks = 0
   }
 
@@ -150,39 +148,9 @@ export function useMusic(options: UseMusicOptions = {}) {
     return normalized * normalized * (3 - 2 * normalized)
   }
 
-  function emitFallbackAudioBands(): void {
-    if (playback.value.status !== 'playing') {
-      audioLevel.value = 0.14
-      audioBands.value = createInitialAudioBands()
-      return
-    }
-
-    const audioSeconds = audioElement?.currentTime ?? Number.NaN
-    const seconds = Number.isFinite(audioSeconds) && audioSeconds >= 0
-      ? audioSeconds
-      : performance.now() / 1000
-    const beatCarrier = (Math.sin(seconds * Math.PI * 1.72 - Math.PI / 2) + 1) / 2
-    const beat = Math.pow(beatCarrier, 4)
-    const phrase = (Math.sin(seconds * 0.74 + 0.6) + 1) / 2
-    const shimmer = (Math.sin(seconds * 5.8 + Math.sin(seconds * 0.9)) + 1) / 2
-    const flux = Math.max(0, beat - fallbackBeatMemory)
-
-    fallbackBeatMemory = beat
-    audioLevel.value = Math.min(0.82, 0.24 + beat * 0.28 + phrase * 0.18)
-    audioBands.value = {
-      bass: Math.min(0.78, 0.24 + beat * 0.42),
-      beat: Math.min(0.86, beat * 0.72 + flux * 0.28),
-      centroid: 0.34 + shimmer * 0.18,
-      flux: Math.min(0.62, flux * 1.8),
-      mid: Math.min(0.72, 0.26 + phrase * 0.34 + beat * 0.08),
-      treble: Math.min(0.62, 0.18 + shimmer * 0.24 + flux * 0.16)
-    }
-  }
-
-  function startFallbackAudioLevelTimer(): void {
-    clearAudioLevelTimer()
-    emitFallbackAudioBands()
-    audioLevelTimer = globalThis.setInterval(emitFallbackAudioBands, 80)
+  function setUnmeasuredAudioBands(): void {
+    audioLevel.value = 0.14
+    audioBands.value = createInitialAudioBands()
   }
 
   function getTrackKey(track: MusicTrack | null): string {
@@ -351,7 +319,7 @@ export function useMusic(options: UseMusicOptions = {}) {
       if (rawAverage < 0.003) {
         silentAnalysisTicks += 1
         if (silentAnalysisTicks >= 6) {
-          emitFallbackAudioBands()
+          setUnmeasuredAudioBands()
           previousFrequencyData = new Uint8Array(frequencyData)
           return
         }
@@ -399,7 +367,8 @@ export function useMusic(options: UseMusicOptions = {}) {
     audioContext = audioContext ?? createAudioContext()
 
     if (!audioContext) {
-      startFallbackAudioLevelTimer()
+      clearAudioLevelTimer()
+      setUnmeasuredAudioBands()
       return
     }
 
@@ -416,7 +385,8 @@ export function useMusic(options: UseMusicOptions = {}) {
       startAudioLevelTimer()
     } catch {
       stopAudioAnalysis()
-      startFallbackAudioLevelTimer()
+      clearAudioLevelTimer()
+      setUnmeasuredAudioBands()
     }
   }
 

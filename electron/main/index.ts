@@ -19,11 +19,15 @@ import { registerSearchHandlers } from './ipc/searchHandlers.js'
 import { CredentialVault } from './r1/credentials.js'
 import { createElectronReminderScheduler, type ReminderScheduler } from './r1/reminderScheduler.js'
 import { R1Conversations } from './r1/conversations.js'
+import { R1PersonaStore } from './r1/persona.js'
+import { R1MemoryStore } from './r1/memory.js'
+import { loadR1PromptAssets, type R1PromptAssets } from './r1/promptAssets.js'
 import type { MusicTrack } from './music/gdstudioMusicProvider.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 let r1Database: R1Database | null = null
 let reminderScheduler: ReminderScheduler | null = null
+let r1PromptAssets: R1PromptAssets | null = null
 
 // R1 keeps its data separate from every legacy lingmo build. The old directory
 // is only read by the explicit migration path; opening R1 never writes to it.
@@ -66,6 +70,7 @@ registerSearchHandlers()
 void app.whenReady().then(async () => {
   try {
     r1Database = openR1Database(join(app.getPath('userData'), 'r1.sqlite'))
+    r1PromptAssets = loadR1PromptAssets(join(app.getAppPath(), 'r1-assets'))
     const vault = new CredentialVault(join(app.getPath('userData'), 'credentials.bin'))
     vault.load()
     importLegacyJson(r1Database, join(app.getPath('appData'), 'lingli'), 'lingli-json')
@@ -87,7 +92,9 @@ void app.whenReady().then(async () => {
   await getDefaultConfigStore().loadConfig()
   await getDefaultMusicStore().loadLibrary()
   if (r1Database) {
-    registerChatHandlers(undefined, undefined, undefined, new R1Conversations(r1Database))
+    registerChatHandlers(undefined, undefined, undefined, new R1Conversations(r1Database),
+      new R1PersonaStore(r1Database), r1PromptAssets ?? undefined,
+      new R1MemoryStore(r1Database))
   }
   if (r1Database && !existsSync(configPath)) {
     const persona = r1Database.prepare('SELECT voice_id FROM persona WHERE id = 1')

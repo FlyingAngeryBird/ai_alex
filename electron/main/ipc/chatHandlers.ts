@@ -9,6 +9,9 @@ import {
 import { getDefaultConfigStore, type ConfigStore } from '../config/configStore.js'
 import { randomUUID } from 'node:crypto'
 import type { R1Conversations } from '../r1/conversations.js'
+import type { R1PersonaStore } from '../r1/persona.js'
+import type { R1PromptAssets } from '../r1/promptAssets.js'
+import type { R1MemoryStore } from '../r1/memory.js'
 
 type AppResult<T> =
   | {
@@ -116,10 +119,14 @@ export function registerChatHandlers(
   ipc: IpcMainLike = getIpcMain(),
   provider: LlmProvider = createVolcengineLlmProvider(),
   configStore: ConfigStore = getDefaultConfigStore(),
-  conversations?: R1Conversations
+  conversations?: R1Conversations,
+  personaStore?: R1PersonaStore,
+  promptAssets?: R1PromptAssets,
+  memoryStore?: R1MemoryStore
 ): void {
   clearMemory()
   let activeSystemPrompt: string | null = null
+  let activePersonaVersion: number | null = null
   let temporary = false
   let sessionId = conversations?.start(false) ?? null
   let sessionEpoch = 0
@@ -133,6 +140,28 @@ export function registerChatHandlers(
   }
 
   function getSystemPrompt(): string {
+    if (personaStore && promptAssets) {
+      const persona = personaStore.get()
+      if (activePersonaVersion !== null && activePersonaVersion !== persona.version) {
+        clearMemory()
+        sessionEpoch += 1
+        if (conversations && sessionId) {
+          conversations.end(sessionId)
+          sessionId = conversations.start(temporary)
+        }
+      }
+      activePersonaVersion = persona.version
+      return promptAssets.compose(persona, {
+        sessionId, sessionGeneration: sessionEpoch + 1, turnId: null,
+        currentTime: new Date().toISOString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        temporary, contextVersion: sessionEpoch + 1,
+        personaVersion: persona.version,
+        deletionEpoch: memoryStore?.currentDeletionEpoch() ?? 0,
+        selectedEntity: null, availableToolAliases: [], loadedSkillIds: ['SK01'],
+        recentTurns: [], memories: [], activeTasks: []
+      })
+    }
     const systemPrompt = configStore.getConfig().persona.systemPrompt
 
     if (activeSystemPrompt !== null && activeSystemPrompt !== systemPrompt) {

@@ -526,7 +526,6 @@ describe('UI prototype state', () => {
     expect(types).toContain('beat?: number')
     expect(music).toContain('const rawBeat')
     expect(music).toContain('beat: clamp01(rawBeat)')
-    expect(music).toContain('beat: Math.min(0.86')
     expect(particle).toContain('visualBeatRelease')
     expect(particle).toContain('luminousCore')
     expect(particle).toContain('orbitalDrift')
@@ -1160,7 +1159,7 @@ describe('UI prototype state', () => {
     vi.useRealTimers()
   })
 
-  it('falls back to a time-based rhythm when Web Audio analysis is silent', async () => {
+  it('does not invent a rhythm when Web Audio analysis is silent', async () => {
     vi.useFakeTimers()
     const audio = createFakeAudioElement()
     const audioContext = createFakeAudioContext([0, 0, 0, 0])
@@ -1198,9 +1197,8 @@ describe('UI prototype state', () => {
     vi.advanceTimersByTime(80)
 
     expect(audioContext.createAnalyser).toHaveBeenCalledTimes(1)
-    expect(firstFallbackBands.bass).toBeGreaterThan(0.2)
-    expect(music.audioBands.value.bass).not.toBe(firstFallbackBands.bass)
-    expect(music.audioBands.value.mid).not.toBe(firstFallbackBands.mid)
+    expect(firstFallbackBands.bass).toBe(0.14)
+    expect(music.audioBands.value).toEqual(firstFallbackBands)
 
     vi.useRealTimers()
   })

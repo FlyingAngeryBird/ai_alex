@@ -2,8 +2,33 @@ import { describe, expect, it, vi } from 'vitest'
 import { registerChatHandlers } from '../electron/main/ipc/chatHandlers'
 import { openR1Database } from '../electron/main/r1/database'
 import { R1Conversations } from '../electron/main/r1/conversations'
+import { R1PersonaStore } from '../electron/main/r1/persona'
 
 describe('chat IPC handlers', () => {
+  it('uses the current versioned persona on the next conversation turn', async () => {
+    const db = openR1Database(':memory:')
+    try {
+      const handlers = new Map<string, (_event: unknown, payload?: unknown) => Promise<unknown> | unknown>()
+      const ipc = { handle: (channel: string, handler: (_event: unknown, payload?: unknown) => unknown) => {
+        handlers.set(channel, handler)
+      } }
+      const provider = { sendMessage: vi.fn(async (_messages: unknown[]) => ({ intent: 'chat' as const,
+        music: null, reply: '你好' })), streamMessage: vi.fn() }
+      const persona = new R1PersonaStore(db)
+      registerChatHandlers(ipc, provider, undefined, new R1Conversations(db), persona,
+        { releaseId: 'test', toolAliases: [],
+          compose: (current) => `PERSONA:${current.assistantName}:${current.version}` })
+      await handlers.get('chat.sendMessage')?.(null, { text: '你好' })
+      expect(provider.sendMessage.mock.calls[0]?.[0]?.[0]).toMatchObject({
+        role: 'system', content: 'PERSONA:Seamo AI:1'
+      })
+      persona.update({ expectedVersion: 1, assistantName: 'Alex' })
+      await handlers.get('chat.sendMessage')?.(null, { text: '你叫什么' })
+      expect(provider.sendMessage.mock.calls[1]?.[0]?.[0]).toMatchObject({
+        role: 'system', content: 'PERSONA:Alex:2'
+      })
+    } finally { db.close() }
+  })
   it('generates a greeting without saving its internal instruction as user history', async () => {
     const db = openR1Database(':memory:')
     try {

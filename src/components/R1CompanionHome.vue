@@ -4,6 +4,7 @@ import { ArrowRight, Globe, History, MessageCircle } from 'lucide-vue-next'
 import type { ParticleState, UiMessage } from '@/types/app'
 
 const props = defineProps<{
+  assistantName: string
   messages: UiMessage[]
   partialText: string
   state: ParticleState
@@ -31,14 +32,14 @@ const statusLabel: Record<ParticleState, string> = {
 <template>
   <section class="r1-conversation" :data-expanded="replyExpanded || expanded" aria-label="当前对话">
     <div class="r1-conversation-copy" aria-live="polite">
-      <span class="r1-presence"><i :data-state="state" />{{ temporaryMode ? '临时对话' : statusLabel[state] }}<b>/</b>Seamo AI</span>
+      <span class="r1-presence"><i :data-state="state" />{{ temporaryMode ? '临时对话' : statusLabel[state] }}<b>/</b>{{ assistantName }}</span>
       <button v-if="recentMessages.length > 2" class="r1-recent-toggle" type="button"
         :aria-expanded="expanded" @click="expanded = !expanded">
         <History :size="13" />{{ expanded ? '收起最近对话' : '查看最近对话' }}
       </button>
       <div v-if="expanded" class="r1-recent-dialogue">
         <p v-for="message in recentMessages" :key="message.id">
-          <small>{{ message.role === 'user' ? '你' : 'Seamo AI' }}</small>{{ message.text }}
+          <small>{{ message.role === 'user' ? '你' : assistantName }}</small>{{ message.text }}
         </p>
         <button type="button" @click="emit('openHistory')">查看全部对话 <ArrowRight :size="13" /></button>
       </div>

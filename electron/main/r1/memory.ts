@@ -26,6 +26,14 @@ function view(row: MemoryRow): R1Memory {
 export class R1MemoryStore {
   constructor(private readonly db: R1Database) {}
 
+  currentDeletionEpoch(): number {
+    const memory = (this.db.prepare('SELECT MAX(deletion_epoch) AS epoch FROM memory')
+      .get() as { epoch: number | null }).epoch ?? 0
+    const suppression = (this.db.prepare('SELECT MAX(deletion_epoch) AS epoch FROM source_suppression')
+      .get() as { epoch: number | null }).epoch ?? 0
+    return Math.max(memory, suppression)
+  }
+
   remember(input: { content: string; category: R1Memory['category']; sourceMessageIds: string[];
     expiresAt?: string | null }): R1Memory {
     if (typeof input.content !== 'string' || !input.content.trim() || [...input.content].length > 1000) {

@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import MiniPlayer from '@/components/MiniPlayer.vue'
 import MusicImmersiveView from '@/components/MusicImmersiveView.vue'
 import ParticleSphere from '@/components/ParticleSphere.vue'
-import SettingsView from '@/components/SettingsView.vue'
+import R1SettingsPanel from '@/components/R1SettingsPanel.vue'
 import ItemsPanel from '@/components/ItemsPanel.vue'
 import SearchPanel from '@/components/SearchPanel.vue'
 import R1CompanionHome from '@/components/R1CompanionHome.vue'
@@ -18,7 +18,9 @@ import { useRealtimeVoiceRecorder } from '@/composables/useRealtimeVoiceRecorder
 import { createAutoListenSession } from '@/services/autoListenSession'
 import { evaluateAutoListenTranscript } from '@/services/autoListenTranscriptGate'
 import type { VoiceActivityDiagnostics } from '@/services/voiceActivity'
-import type { AppConfig, AutoListenState, ConfigPatch, ParticleState, VoiceInputMode, VoiceLatencyTrace } from '@/types/app'
+import type { AutoListenState, ParticleState, VoiceInputMode, VoiceLatencyTrace } from '@/types/app'
+import type { R1Persona } from '../electron/main/r1/persona'
+import type { CredentialStatus } from '../electron/main/r1/credentials'
 import { invokeWithTimeout } from './utils/invokeWithTimeout'
 
 const conversation = useConversation()
@@ -60,7 +62,8 @@ const memoryOpen = ref(false)
 const historyOpen = ref(false)
 const textBusy = ref(false)
 const composer = ref<InstanceType<typeof R1Composer> | null>(null)
-const credentialStatus = ref<{ VOLCENGINE_ARK_API_KEY: boolean; VOLCENGINE_ARK_MODEL: boolean } | null>(null)
+const credentialStatus = ref<CredentialStatus | null>(null)
+const persona = ref<R1Persona | null>(null)
 const currentDate = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())
 const hasSidePanel = computed(() => settingsOpen.value || itemsOpen.value || memoryOpen.value || historyOpen.value)
 const serviceLabel = computed(() => credentialStatus.value?.VOLCENGINE_ARK_API_KEY &&
@@ -85,10 +88,6 @@ function closePanels(): void {
 const temporaryMode = ref(false)
 const reminderNotice = ref<{ body: string; dueAtUtc: string; systemRequested: boolean } | null>(null)
 let stopReminderNotice: (() => void) | null = null
-const appConfig = ref<AppConfig>({
-  persona: { systemPrompt: '' },
-  voice: { voices: [], activeVoiceId: '' }
-})
 const voicePreviewing = ref(false)
 let currentAssistantAudio: HTMLAudioElement | null = null
 let currentAssistantAudioTimer: number | null = null
@@ -358,7 +357,7 @@ async function speakAssistantReply(text?: string, voiceOverride?: string): Promi
     return
   }
 
-  const voiceId = voiceOverride?.trim() || appConfig.value.voice.activeVoiceId.trim()
+  const voiceId = voiceOverride?.trim() || persona.value?.voiceId.trim() || ''
 
   try {
     markVoiceTrace('tts_first_push')
@@ -696,42 +695,6 @@ async function endPushToTalk(): Promise<void> {
   await finishActiveVoiceCapture()
 }
 
-async function loadAppConfig(): Promise<void> {
-  const api = window.lingli
-
-  if (!api) {
-    return
-  }
-
-  const result = await invokeWithTimeout(
-    api.invoke<AppConfig>('config.get'),
-    6000,
-    '配置加载超时。'
-  )
-
-  if (result.ok) {
-    appConfig.value = result.data
-  }
-}
-
-async function handleSaveConfig(patch: ConfigPatch): Promise<void> {
-  const api = window.lingli
-
-  if (!api) {
-    return
-  }
-
-  const result = await invokeWithTimeout(
-    api.invoke<AppConfig>('config.update', patch),
-    6000,
-    '配置保存超时。'
-  )
-
-  if (result.ok) {
-    appConfig.value = result.data
-  }
-}
-
 async function handleSendText(text: string, complete?: (accepted: boolean) => void): Promise<void> {
   if (textBusy.value || conversation.isListening.value ||
     conversation.particleState.value === 'thinking') {
@@ -790,10 +753,12 @@ async function handlePreviewVoice(voiceId: string): Promise<void> {
 }
 
 onMounted(() => {
-  void window.seamoR1?.credentials.status().then((result) => {
-    if (!result.ok) return
-    credentialStatus.value = result.data
-    if (!result.data.VOLCENGINE_ARK_API_KEY || !result.data.VOLCENGINE_ARK_MODEL) return
+  void Promise.all([window.seamoR1.credentials.status(), window.seamoR1.persona.get()]).then(([credentials, currentPersona]) => {
+    if (credentials.ok) credentialStatus.value = credentials.data
+    if (currentPersona.ok) persona.value = currentPersona.data
+    else conversation.addSystemMessage('人格设置暂时无法读取，请重新启动应用。')
+    if (!credentials.ok || !currentPersona.ok ||
+      !credentials.data.VOLCENGINE_ARK_API_KEY || !credentials.data.VOLCENGINE_ARK_MODEL) return
     startupGreetingTimer = window.setTimeout(() => {
       void conversation.generateOpeningGreeting().then(() => {
         void speakAssistantReply(conversation.messages.value[0]?.text)
@@ -805,7 +770,6 @@ onMounted(() => {
   }) ?? null
   installDebugBridge()
   void music.loadLibrary()
-  void loadAppConfig()
   window.addEventListener('keydown', handleKeyDown)
   window.addEventListener('keyup', handleKeyUp)
 })
@@ -886,6 +850,7 @@ onBeforeUnmount(() => {
       />
       <R1CompanionHome
           v-else
+          :assistant-name="persona?.assistantName || 'Seamo AI'"
           :messages="conversation.messages.value"
           :state="conversationPanelState"
           :partial-text="conversationPartialText"
@@ -896,6 +861,7 @@ onBeforeUnmount(() => {
         />
     </Transition>
       <R1Composer ref="composer" :auto-listen-state="conversation.autoListenState.value"
+        :assistant-name="persona?.assistantName || 'Seamo AI'"
         :busy="textBusy || conversation.isListening.value || conversation.particleState.value === 'thinking' || assistantAudioPlaying"
         :is-listening="conversation.isListening.value" :temporary-mode="temporaryMode"
         :service-label="serviceLabel" :music-active="viewMode === 'music'"
@@ -904,13 +870,14 @@ onBeforeUnmount(() => {
         @stop-speech="releaseAssistantAudio(true)" />
     </section>
 
-    <SettingsView
+    <R1SettingsPanel
       v-if="settingsOpen"
-      :config="appConfig"
+      :persona="persona"
       :voice-previewing="voicePreviewing"
       @close="closePanels"
       @preview-voice="handlePreviewVoice"
-      @save="handleSaveConfig"
+      @saved="(saved) => { persona = saved }"
+      @credentials-changed="(status) => { credentialStatus = status }"
     />
     <ItemsPanel v-if="itemsOpen" :temporary-mode="temporaryMode" @close="closePanels" />
     <SearchPanel v-if="searchEverOpened" v-show="searchOpen" :temporary-mode="temporaryMode" @close="closePanels" />
