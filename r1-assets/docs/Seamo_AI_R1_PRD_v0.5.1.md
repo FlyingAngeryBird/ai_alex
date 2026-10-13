@@ -2225,10 +2225,10 @@ TaskDraft只交付草稿和引用，Artifact ID由程序创建；memory-extract�
 | notes.create | notes_create | type＊, title＊, content＊, mode＊, sourceRefs＊ | item | write |
 | notes.list | notes_list | type, query, completed, cursor, itemIds | items, nextCursor | read |
 | notes.update | notes_update | itemId＊, expectedVersion＊, patch＊ | item | write |
-| notes.complete | notes_complete | itemId＊, expectedVersion＊, completed＊ | item | write |
-| notes.delete | notes_delete | itemId＊, expectedVersion＊ | itemId, deleted, remainingReminderIds | write |
+| notes.complete | notes_complete | itemId＊, expectedVersion＊, completed＊ | item, reminderReceipts | write |
+| notes.delete | notes_delete | itemId＊, expectedVersion＊, reminderDisposition＊, confirmedReminders＊ | itemId, deleted, remainingReminderIds, reminderReceipts | write |
 | notes.export | notes_export | itemIds＊, artifactId＊, artifactVersion＊, format＊ | path, format, itemVersions, artifactId, artifactVersion, byteCount | ui_then_write |
-| reminders.create | reminders_create | content＊, dueAt＊, timezone＊, kind＊, itemId＊, sourceRefs＊ | reminder | write |
+| reminders.create | reminders_create | content＊, dueAt＊, timezone＊, kind＊, itemId＊, sourceRefs＊, linkPurpose＊ | reminder | write |
 | reminders.list | reminders_list | status, kind, from, to, cursor, reminderIds | items, nextCursor | read |
 | reminders.reschedule | reminders_reschedule | reminderId＊, expectedVersion＊, dueAt＊, timezone＊ | reminder | write |
 | reminders.cancel | reminders_cancel | reminderId＊, expectedVersion＊ | reminder | write |
@@ -2875,13 +2875,21 @@ patch：表达澄清或修错且行为合同不变。minor：在已批准范围�
 - 验证：运行静态资产校验、结构化合同样例与模板隔离检查，检查正式名称及默认配置一致性；真实模型称呼按人格与引导验收执行。
 - 回滚：按原资产版本绑定规则回退实现；正式产品名称仍采用Seamo AI，不覆盖用户已保存的自定义名称。
 
+#### DEC-R1-CONTRACT-002：最终 PRD 的事项与提醒合同
+- 原因与 Bad Case：旧工具合同写明完成待办不取消提醒，无法兑现最终 PRD 第 5.5 节；删除时也没有冻结关联提醒的确认字段。
+- 影响：F06b、F06c、F07a；notes.complete、notes.delete、reminders.create、music.play；工具合同和发布默认配置。
+- 版本：工具 schemaVersion 与资产 releaseId 升为 2.0.0；新增必填参数属于不兼容合同。现有活动 Task 不自动切换合同。
+- 行为：完成待办仅取消未投递的 todo_due 提醒；撤销只恢复本次取消且仍可调度的提醒。删除事项先预览关联提醒及版本，默认保留，取消需用户明确选择。点歌不会自动切换页面。
+- 验证：运行资产静态校验与事项事务测试；真实提醒调度和完整端到端验证仍是 G3 门槛。
+- 回滚：旧资产只用于旧代码/旧 Task；R1 数据库不降级打开，旧版目录独立。回滚安装旧版不会覆盖 R1 数据。
+
 
 ### 25.3 完整默认配置
 
 ```json
 {
-  "releaseId": "seamo-ai-r1-agent-assets-1.0.1",
-  "schemaVersion": "1.0.0",
+  "releaseId": "seamo-ai-r1-agent-assets-2.0.0",
+  "schemaVersion": "2.0.0",
   "providerPolicy": {
     "primary": "volcengine",
     "crossProviderFallback": false,

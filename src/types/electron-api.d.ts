@@ -4,6 +4,8 @@ export type AppError = {
   details?: unknown
 }
 
+import type { R1Api } from '../../electron/shared/r1Api'
+
 export type AppResult<T> =
   | {
       ok: true
@@ -31,6 +33,13 @@ export type LingliChannel =
   | 'music.resume'
   | 'music.search'
   | 'music.toggleFavorite'
+  | 'r1.items.list'
+  | 'r1.items.create'
+  | 'r1.items.complete'
+  | 'r1.items.deletionPreview'
+  | 'r1.items.delete'
+  | 'r1.reminders.list'
+  | 'r1.reminders.create'
   | 'tts.speak'
   | 'tts.startStreaming'
   | 'tts.pushText'
@@ -45,6 +54,7 @@ export type LingliEventChannel = 'chat.streamChunk' | 'tts.streamAudio'
 
 declare global {
   interface Window {
+    seamoR1: R1Api
     lingli: {
       invoke<T>(channel: LingliChannel, payload?: unknown): Promise<AppResult<T>>
       on<T>(channel: LingliEventChannel, handler: (payload: T) => void): () => void

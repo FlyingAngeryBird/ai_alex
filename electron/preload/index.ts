@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module'
+import type { R1Api, R1Result } from '../shared/r1Api.js'
 
 export const exposedChannels = [
   'app.getRuntimeState',
@@ -17,6 +18,13 @@ export const exposedChannels = [
   'music.resume',
   'music.search',
   'music.toggleFavorite',
+  'r1.items.list',
+  'r1.items.create',
+  'r1.items.complete',
+  'r1.items.deletionPreview',
+  'r1.items.delete',
+  'r1.reminders.list',
+  'r1.reminders.create',
   'tts.speak',
   'tts.startStreaming',
   'tts.pushText',
@@ -86,6 +94,24 @@ function exposeLingliApi(
       }
     }
   })
+  const invokeR1 = <T>(channel: ExposedChannel, payload?: unknown): Promise<R1Result<T>> => {
+    assertExposedChannel(channel)
+    return renderer.invoke(channel, payload) as Promise<R1Result<T>>
+  }
+  const r1Api: R1Api = {
+    items: {
+      list: () => invokeR1('r1.items.list'),
+      create: (input) => invokeR1('r1.items.create', input),
+      complete: (input) => invokeR1('r1.items.complete', input),
+      deletionPreview: (itemId) => invokeR1('r1.items.deletionPreview', { itemId }),
+      delete: (input) => invokeR1('r1.items.delete', input)
+    },
+    reminders: {
+      list: () => invokeR1('r1.reminders.list'),
+      create: (input) => invokeR1('r1.reminders.create', input)
+    }
+  }
+  bridge.exposeInMainWorld('seamoR1', r1Api)
 }
 
 if (process.versions.electron) {

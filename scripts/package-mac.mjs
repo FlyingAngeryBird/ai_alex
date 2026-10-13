@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const electronApp = join(projectRoot, 'node_modules/electron/dist/Electron.app')
-const outputAppRelative = 'release/lingmo-darwin-arm64/lingmo.app'
+const outputAppRelative = 'release/seamo-ai-r1-darwin-arm64/Seamo AI R1.app'
 const outputApp = join(projectRoot, outputAppRelative)
 const outputDir = dirname(outputApp)
 const resourcesDir = join(outputApp, 'Contents/Resources')
@@ -18,7 +18,7 @@ const frameworkResourcesDir = join(
 
 const requiredRuntimeModules = ['dotenv', 'ws']
 const requiredChromiumResourceFiles = ['icudtl.dat']
-const microphoneUsageDescription = 'lingmo 需要使用麦克风来完成语音对话和实时语音识别。'
+const microphoneUsageDescription = 'Seamo AI R1 需要使用麦克风来完成语音对话。'
 
 function copyRequiredModule(name) {
   const source = join(projectRoot, 'node_modules', name)
@@ -46,29 +46,21 @@ function copyRequiredChromiumResources() {
   }
 }
 
-function copyLocalEnvironmentFile() {
-  const envPath = join(projectRoot, '.env')
-
-  if (existsSync(envPath)) {
-    cpSync(envPath, join(appDir, '.env'))
-  }
-}
-
 function renameMainExecutable() {
   const electronExecutable = join(macOsDir, 'Electron')
-  const lingmoExecutable = join(macOsDir, 'lingmo')
+  const seamoExecutable = join(macOsDir, 'Seamo AI R1')
 
   if (!existsSync(electronExecutable)) {
     throw new Error('Electron executable was not found in the packaged app.')
   }
 
-  if (existsSync(lingmoExecutable)) {
-    rmSync(lingmoExecutable, {
+  if (existsSync(seamoExecutable)) {
+    rmSync(seamoExecutable, {
       force: true
     })
   }
 
-  renameSync(electronExecutable, lingmoExecutable)
+  renameSync(electronExecutable, seamoExecutable)
 }
 
 function patchInfoPlist() {
@@ -76,8 +68,8 @@ function patchInfoPlist() {
   let plist = readFileSync(plistPath, 'utf8')
 
   plist = plist
-    .replace(/<string>Electron<\/string>/g, '<string>lingmo</string>')
-    .replace(/<string>com\.github\.Electron<\/string>/g, '<string>com.lingmo.desktop</string>')
+    .replace(/<string>Electron<\/string>/g, '<string>Seamo AI R1</string>')
+    .replace(/<string>com\.github\.Electron<\/string>/g, '<string>com.seamo.ai.r1</string>')
 
   if (plist.includes('NSMicrophoneUsageDescription')) {
     plist = plist.replace(
@@ -133,8 +125,6 @@ cpSync(join(projectRoot, 'dist-electron'), join(appDir, 'dist-electron'), {
   recursive: true
 })
 cpSync(join(projectRoot, 'package.json'), join(appDir, 'package.json'))
-copyLocalEnvironmentFile()
-
 for (const moduleName of requiredRuntimeModules) {
   copyRequiredModule(moduleName)
 }

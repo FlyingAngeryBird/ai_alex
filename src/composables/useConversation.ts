@@ -30,7 +30,7 @@ type ChatAppResult =
     }
 
 const DEFAULT_USER_TEXT = '我想和你聊聊今天的心情'
-const CHAT_BRIDGE_UNAVAILABLE_MESSAGE = '对话通道不可用，请重新启动 lingmo 后再试。'
+const CHAT_BRIDGE_UNAVAILABLE_MESSAGE = '对话通道不可用，请重新启动 Seamo AI R1 后再试。'
 
 function wait(ms: number): Promise<void> {
   if (ms <= 0) {

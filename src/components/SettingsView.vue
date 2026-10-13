@@ -131,7 +131,7 @@ function save(): void {
 
         <section class="settings-section">
           <label class="settings-label">角色提示词</label>
-          <p class="settings-hint">定义 lingmo 的性格、语气与输出格式。保存后立即生效。</p>
+          <p class="settings-hint">定义 Seamo AI 的性格、语气与输出格式。保存后立即生效。</p>
           <textarea
             v-model="systemPrompt"
             class="settings-textarea"

@@ -46,11 +46,11 @@ describe('UI prototype state', () => {
 
     expect(result.intent).toBe('chat')
     expect(result.music).toBeNull()
-    expect(result.reply).toBe('对话通道不可用，请重新启动 lingmo 后再试。')
+    expect(result.reply).toBe('对话通道不可用，请重新启动 Seamo AI R1 后再试。')
     expect(conversation.messages.value.at(-1)).toEqual(
       expect.objectContaining({
         role: 'system',
-        text: '对话通道不可用，请重新启动 lingmo 后再试。'
+        text: '对话通道不可用，请重新启动 Seamo AI R1 后再试。'
       })
     )
   })

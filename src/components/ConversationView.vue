@@ -90,7 +90,7 @@ const autoListenText: Record<AutoListenState, string> = {
     <header v-if="!panelCollapsed" class="conversation-header">
       <div class="conversation-title">
         <p class="eyebrow">AI companion</p>
-        <h1>lingmo</h1>
+        <h1>Seamo AI</h1>
       </div>
       <div class="header-actions">
         <button class="panel-toggle" type="button" @click="$emit('openSettings')">设置</button>

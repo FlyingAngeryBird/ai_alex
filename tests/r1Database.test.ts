@@ -1,0 +1,77 @@
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
+import { importLegacyJson, openR1Database, R1_SCHEMA_VERSION } from '../electron/main/r1/database'
+
+const temporaryDirectories: string[] = []
+
+function makeDirectory(): string {
+  const directory = mkdtempSync(join(tmpdir(), 'seamo-r1-db-'))
+  temporaryDirectories.push(directory)
+  return directory
+}
+
+afterEach(() => {
+  for (const directory of temporaryDirectories.splice(0)) {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+describe('R1 database and legacy import', () => {
+  it('creates the versioned domain schema and opens it again without changing data', () => {
+    const path = join(makeDirectory(), 'r1.sqlite')
+    const db = openR1Database(path)
+    expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version)
+      .toBe(R1_SCHEMA_VERSION)
+    expect(db.prepare('SELECT assistant_name FROM persona WHERE id = 1').get())
+      .toMatchObject({ assistant_name: 'Seamo AI' })
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'receipts'").get())
+      .toMatchObject({ name: 'receipts' })
+    db.close()
+
+    const reopened = openR1Database(path)
+    expect(reopened.prepare('SELECT COUNT(*) AS count FROM persona').get()).toMatchObject({ count: 1 })
+    reopened.close()
+  })
+
+  it('rejects a future schema instead of silently rewriting it', () => {
+    const path = join(makeDirectory(), 'r1.sqlite')
+    const db = openR1Database(path)
+    db.exec('PRAGMA user_version = 99')
+    db.close()
+    expect(() => openR1Database(path)).toThrow('newer than supported')
+  })
+
+  it('imports old JSON once, preserves the old files, and does not import the old assistant name', () => {
+    const directory = makeDirectory()
+    const legacy = join(directory, 'legacy')
+    mkdirSync(legacy)
+    const configPath = join(legacy, 'config.json')
+    const musicPath = join(legacy, 'music.json')
+    const config = JSON.stringify({ persona: { systemPrompt: '你是 lingmo' }, voice: { activeVoiceId: 'voice-a' } })
+    const music = JSON.stringify({ favorites: [{ id: '1', source: 'netease', title: '晴天', artist: '周杰伦' }] })
+    writeFileSync(configPath, config)
+    writeFileSync(musicPath, music)
+    const db = openR1Database(join(directory, 'new', 'r1.sqlite'))
+
+    expect(importLegacyJson(db, legacy)).toEqual({ imported: true, favorites: 1, voiceId: 'voice-a' })
+    expect(importLegacyJson(db, legacy)).toEqual({ imported: false, favorites: 0, voiceId: null })
+    expect(db.prepare('SELECT COUNT(*) AS count FROM music_favorites').get()).toMatchObject({ count: 1 })
+    expect(db.prepare('SELECT assistant_name, voice_id FROM persona WHERE id = 1').get())
+      .toMatchObject({ assistant_name: 'Seamo AI', voice_id: 'voice-a' })
+    expect(readFileSync(configPath, 'utf8')).toBe(config)
+    expect(readFileSync(musicPath, 'utf8')).toBe(music)
+    db.close()
+  })
+
+  it('does not partially import when legacy JSON is invalid', () => {
+    const directory = makeDirectory()
+    mkdirSync(join(directory, 'legacy'))
+    writeFileSync(join(directory, 'legacy', 'config.json'), '{')
+    const db = openR1Database(join(directory, 'r1.sqlite'))
+    expect(() => importLegacyJson(db, join(directory, 'legacy'))).toThrow()
+    expect(db.prepare('SELECT COUNT(*) AS count FROM legacy_import').get()).toMatchObject({ count: 0 })
+    db.close()
+  })
+})

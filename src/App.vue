@@ -367,7 +367,7 @@ function getVoiceErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : typeof error === 'string' ? error : ''
 
   if (/denied|permission|not.?allowed|权限|授权|麦克风/i.test(message)) {
-    return '我还没有拿到麦克风权限。请在 macOS「系统设置 > 隐私与安全性 > 麦克风」里允许 lingmo 或 Electron 使用麦克风。'
+    return '我还没有拿到麦克风权限。请在 macOS「系统设置 > 隐私与安全性 > 麦克风」里允许 Seamo AI R1 使用麦克风。'
   }
 
   if (message) {
@@ -387,7 +387,7 @@ async function ensureMicrophoneAccess(): Promise<void> {
   const api = window.lingli
 
   if (!api) {
-    throw new Error('语音通道不可用，请确认从 lingmo 桌面应用启动。')
+    throw new Error('语音通道不可用，请确认从 Seamo AI R1 桌面应用启动。')
   }
 
   const result = await invokeWithTimeout(

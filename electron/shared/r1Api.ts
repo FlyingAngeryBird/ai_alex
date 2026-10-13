@@ -1,0 +1,24 @@
+import type { ActionReceipt, Item, R1Items, Reminder } from '../main/r1/items.js'
+
+export type R1Result<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: { code: string; message: string } }
+
+type MethodInput<K extends keyof R1Items> = R1Items[K] extends (input: infer I) => unknown ? I : never
+type MethodOutput<K extends keyof R1Items> = R1Items[K] extends (...args: never[]) => infer O ? O : never
+
+export type R1Api = {
+  items: {
+    list(): Promise<R1Result<Item[]>>
+    create(input: MethodInput<'create'>): Promise<R1Result<MethodOutput<'create'>>>
+    complete(input: MethodInput<'complete'>): Promise<R1Result<MethodOutput<'complete'>>>
+    deletionPreview(itemId: string): Promise<R1Result<MethodOutput<'deletionPreview'>>>
+    delete(input: MethodInput<'delete'>): Promise<R1Result<MethodOutput<'delete'>>>
+  }
+  reminders: {
+    list(): Promise<R1Result<Reminder[]>>
+    create(input: MethodInput<'createReminder'>): Promise<R1Result<MethodOutput<'createReminder'>>>
+  }
+}
+
+export type { Item, Reminder, ActionReceipt }

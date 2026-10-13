@@ -6,7 +6,7 @@ export function createMainWindowOptions(preloadPath: string): BrowserWindowConst
     height: 780,
     minWidth: 900,
     minHeight: 640,
-    title: 'lingmo',
+    title: 'Seamo AI R1',
     backgroundColor: '#080910',
     webPreferences: {
       preload: preloadPath,

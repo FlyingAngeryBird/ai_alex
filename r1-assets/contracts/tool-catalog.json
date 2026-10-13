@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "2.0.0",
   "businessTools": [
     {
       "name": "memory.recall",
@@ -1312,7 +1312,7 @@
     {
       "name": "notes.complete",
       "alias": "notes_complete",
-      "description": "完成或撤销完成todo；note不支持，关联Reminder不自动取消。",
+      "description": "完成或撤销完成todo；未投递的todo_due提醒随完成取消，撤销仅恢复本次联动取消且仍可调度的提醒；独立提醒不变。",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -1406,10 +1406,51 @@
               "updatedAt"
             ],
             "additionalProperties": false
+          },
+          "reminderReceipts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "actionId": {
+                  "type": "string",
+                  "maxLength": 160
+                },
+                "entityId": {
+                  "type": "string",
+                  "maxLength": 160
+                },
+                "entityVersion": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "succeeded",
+                    "unknown"
+                  ]
+                },
+                "detail": {
+                  "type": "string",
+                  "maxLength": 300
+                }
+              },
+              "required": [
+                "actionId",
+                "entityId",
+                "entityVersion",
+                "status",
+                "detail"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 50
           }
         },
         "required": [
-          "item"
+          "item",
+          "reminderReceipts"
         ],
         "additionalProperties": false
       },
@@ -1418,7 +1459,7 @@
     {
       "name": "notes.delete",
       "alias": "notes_delete",
-      "description": "明确删除一条Item；返回仍存在的关联提醒，不自动删除Reminder。",
+      "description": "删除Item前展示关联提醒及版本并要求确认；默认保留提醒，只有用户明确选择才一起取消。",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -1430,11 +1471,48 @@
           "expectedVersion": {
             "type": "integer",
             "minimum": 1
+          },
+          "reminderDisposition": {
+            "type": "string",
+            "enum": [
+              "keep",
+              "cancel"
+            ],
+            "description": "默认keep；必须由用户确认，不能由模型猜测"
+          },
+          "confirmedReminders": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "reminderId": {
+                  "type": "string",
+                  "maxLength": 160
+                },
+                "scheduleVersion": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "status": {
+                  "type": "string",
+                  "maxLength": 40
+                }
+              },
+              "required": [
+                "reminderId",
+                "scheduleVersion",
+                "status"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 50
           }
         },
         "required": [
           "itemId",
-          "expectedVersion"
+          "expectedVersion",
+          "reminderDisposition",
+          "confirmedReminders"
         ],
         "additionalProperties": false
       },
@@ -1464,12 +1542,53 @@
               "maxLength": 160
             },
             "maxItems": 50
+          },
+          "reminderReceipts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "actionId": {
+                  "type": "string",
+                  "maxLength": 160
+                },
+                "entityId": {
+                  "type": "string",
+                  "maxLength": 160
+                },
+                "entityVersion": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "succeeded",
+                    "unknown"
+                  ]
+                },
+                "detail": {
+                  "type": "string",
+                  "maxLength": 300
+                }
+              },
+              "required": [
+                "actionId",
+                "entityId",
+                "entityVersion",
+                "status",
+                "detail"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 50
           }
         },
         "required": [
           "itemId",
           "deleted",
-          "remainingReminderIds"
+          "remainingReminderIds",
+          "reminderReceipts"
         ],
         "additionalProperties": false
       },
@@ -1731,6 +1850,15 @@
               "maxLength": 160
             },
             "maxItems": 50
+          },
+          "linkPurpose": {
+            "type": "string",
+            "enum": [
+              "todo_due",
+              "independent",
+              "other"
+            ],
+            "description": "旧关联提醒无法证明目的时必须用independent"
           }
         },
         "required": [
@@ -1739,7 +1867,8 @@
           "timezone",
           "kind",
           "itemId",
-          "sourceRefs"
+          "sourceRefs",
+          "linkPurpose"
         ],
         "additionalProperties": false
       },
@@ -1807,6 +1936,36 @@
               },
               "deliveryScope": {
                 "const": "app_running_and_awake"
+              },
+              "linkPurpose": {
+                "type": "string",
+                "enum": [
+                  "todo_due",
+                  "independent",
+                  "other"
+                ]
+              },
+              "cancelReason": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "previousScheduleVersion": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [
@@ -1818,7 +1977,10 @@
               "kind",
               "scheduleVersion",
               "status",
-              "deliveryScope"
+              "deliveryScope",
+              "linkPurpose",
+              "cancelReason",
+              "previousScheduleVersion"
             ],
             "additionalProperties": false
           }
@@ -3061,7 +3223,7 @@
     {
       "name": "music.play",
       "alias": "music_play",
-      "description": "按稳定trackKey验证资源并真正开播；新请求使旧资源失效，播放器实际回执才表示成功。",
+      "description": "按稳定trackKey验证资源并真正开播；新请求使旧资源失效，播放器实际回执才表示成功。 成功仅更新播放器和迷你播放器，打开音乐页须独立UI事件。",
       "input_schema": {
         "type": "object",
         "properties": {

@@ -1,5 +1,5 @@
 {
-  "releaseId": "seamo-ai-r1-agent-assets-1.0.1",
+  "releaseId": "seamo-ai-r1-agent-assets-2.0.0",
   "version": "1.0.1",
   "files": [
     {
@@ -30,7 +30,7 @@
     {
       "path": "config/runtime.defaults.json",
       "bytes": 4919,
-      "sha256": "f0cced7d8abaa1a314716c9a4fea72a52237dc9e32ce0bee249af4d7e1e4de1d"
+      "sha256": "c27a352d86aef95bdf0c1f3556a643cfd16ba74500508c664465647261f137e6"
     },
     {
       "path": "config/skill-registry.json",
@@ -39,13 +39,13 @@
     },
     {
       "path": "contracts/tool-catalog.json",
-      "bytes": 202737,
-      "sha256": "f8ea97a07c05796d197d8784a1868454b193ba9794b732776286fbe699ec76cd"
+      "bytes": 207494,
+      "sha256": "34272d2f4eb81833d010f5117b54b483124b433bf4ac8f36dcaa267800f6eeba"
     },
     {
       "path": "docs/AGENT_ASSET_APPENDIX.md",
-      "bytes": 94390,
-      "sha256": "c5aa535d15e0c32250efb1ff85141f3b673957eeda90c54495773c524bb652dc"
+      "bytes": 95511,
+      "sha256": "86abcb299bc70edbdafa7705ac7728cff574ce760012b45423364e12bff885cd"
     },
     {
       "path": "docs/ARCHITECTURE_CONTRACT.md",
@@ -59,8 +59,8 @@
     },
     {
       "path": "docs/CHANGE_POLICY.md",
-      "bytes": 3763,
-      "sha256": "0854e6b266f9d15d6bc672ff5968109d31273c1379ee9ec576ed7f7a7e357e9a"
+      "bytes": 4783,
+      "sha256": "ad3ecc014db7488eafaa5066cf066c75c8cd3a11c1ceb60fa642f2dda7d7ff43"
     },
     {
       "path": "docs/DETAIL_SPEC.md",
@@ -74,8 +74,8 @@
     },
     {
       "path": "docs/Seamo_AI_R1_PRD_v0.5.1.md",
-      "bytes": 268643,
-      "sha256": "02f37ab0496412d6047db482dacac0ec4382aba043a7b57c6a2b9dddff75ade0"
+      "bytes": 269764,
+      "sha256": "0d962563af7b967d247f4f03cea79ef646280367a0da8af898facb8cee779727"
     },
     {
       "path": "evals/behavior-cases.jsonl",
