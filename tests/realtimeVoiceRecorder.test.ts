@@ -431,4 +431,38 @@ describe('realtime voice recorder', () => {
     expect(fakeTrack.stop).toHaveBeenCalledTimes(1)
     expect(audioContext.close).toHaveBeenCalledTimes(1)
   })
+
+  it('forwards partial transcripts via onPartialText and clears on cleanup', async () => {
+    const audioContext = new FakeAudioContext()
+    const fakeStream = {
+      getTracks: () => [{ stop: vi.fn() }]
+    } as unknown as MediaStream
+    const partials: string[] = []
+    const invoke = async <T>(channel: LingliChannel): Promise<AppResult<T>> => {
+      if (channel === 'voice.startRealtime') {
+        return { ok: true, data: { sessionId: 'asr-session-1' } as T }
+      }
+      if (channel === 'voice.pushRealtimeAudio') {
+        return { ok: true, data: { partialText: '你好' } as T }
+      }
+      if (channel === 'voice.stopRealtime') {
+        return { ok: true, data: { text: '你好 lingmo' } as T }
+      }
+      return { ok: true, data: {} as T }
+    }
+    const recorder = useRealtimeVoiceRecorder({
+      createAudioContext: () => audioContext as unknown as AudioContext,
+      lingli: { invoke },
+      mediaDevices: { getUserMedia: vi.fn(async () => fakeStream) },
+      onPartialText: (text) => partials.push(text)
+    })
+
+    await recorder.start()
+    audioContext.processor.emit(new Float32Array(4096).fill(0.2))
+    await recorder.flush()
+    await recorder.stopAndTranscribe()
+
+    expect(partials).toContain('你好')
+    expect(partials.at(-1)).toBe('')
+  })
 })

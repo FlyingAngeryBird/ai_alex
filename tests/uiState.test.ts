@@ -20,7 +20,8 @@ describe('UI prototype state', () => {
             },
             reply: '我给你找一首适合放松的音乐。'
           }
-        }))
+        })),
+        on: vi.fn(() => () => undefined)
       }
     })
     const conversation = useConversation({ delayMs: 0 })
@@ -160,7 +161,8 @@ describe('UI prototype state', () => {
             music: null,
             reply: '我听见了，我们慢慢聊。'
           }
-        }))
+        })),
+        on: vi.fn(() => () => undefined)
       }
     })
     const conversation = useConversation({ delayMs: 0 })
@@ -170,9 +172,59 @@ describe('UI prototype state', () => {
 
     expect(result.reply).toBe('我听见了，我们慢慢聊。')
     expect(conversation.messages.value.at(-1)?.text).toBe('我听见了，我们慢慢聊。')
-    expect(globalThis.window.lingli.invoke).toHaveBeenCalledWith('chat.sendMessage', {
+    expect(globalThis.window.lingli.invoke).toHaveBeenCalledWith('chat.streamMessage', {
       text: '我今天有点累'
     })
+  })
+
+  it('generates the opening greeting from the current persona instead of a hard-coded assistant name', () => {
+    const file = readFileSync('src/composables/useConversation.ts', 'utf8')
+
+    expect(file).toContain('请根据你的当前角色设定')
+    expect(file).not.toContain('为桌面语音伙伴 lingmo 生成')
+  })
+
+  it('uses whole-reply TTS for main voice playback instead of streaming TTS chunks', () => {
+    const file = readFileSync('src/App.vue', 'utf8')
+    const finishVoiceCapture = file.slice(
+      file.indexOf('async function finishVoiceCapture'),
+      file.indexOf('async function finishActiveVoiceCapture')
+    )
+
+    expect(finishVoiceCapture).not.toContain('streamingTts.begin')
+    expect(finishVoiceCapture).not.toContain('ttsController?.feed')
+    expect(finishVoiceCapture).toContain('await speakAssistantReply(result.reply)')
+    expect(finishVoiceCapture.indexOf("markVoiceTrace('llm_done')")).toBeLessThan(
+      finishVoiceCapture.indexOf('await speakAssistantReply(result.reply)')
+    )
+  })
+
+  it('records real audio playback start from the media playing event', () => {
+    const file = readFileSync('src/App.vue', 'utf8')
+    const speakAssistantReply = file.slice(
+      file.indexOf('async function speakAssistantReply'),
+      file.indexOf('function getVoiceErrorMessage')
+    )
+
+    expect(speakAssistantReply).toContain("markVoiceTrace('tts_play_invoked')")
+    expect(speakAssistantReply).toContain("markVoiceTrace('tts_play_start')")
+    expect(speakAssistantReply).toContain("addEventListener('playing'")
+    expect(speakAssistantReply.indexOf("addEventListener('playing'")).toBeLessThan(
+      speakAssistantReply.indexOf('await currentAssistantAudio.play()')
+    )
+    expect(speakAssistantReply.indexOf("markVoiceTrace('tts_play_invoked')")).toBeLessThan(
+      speakAssistantReply.indexOf('await currentAssistantAudio.play()')
+    )
+  })
+
+  it('documents diagnostic latency fields that separate raw provider timing from user-visible timing', () => {
+    const file = readFileSync('src/types/app.ts', 'utf8')
+
+    expect(file).toContain('llm_response_start?: number')
+    expect(file).toContain('llm_first_raw_delta?: number')
+    expect(file).toContain('llm_first_delta?: number')
+    expect(file).toContain('tts_play_invoked?: number')
+    expect(file).toContain('tts_play_start?: number')
   })
 
   it('does not expose demo music wording in the conversation controls', () => {
@@ -572,11 +624,11 @@ describe('UI prototype state', () => {
     expect(particle).toContain('ribbonSpark * 2.9')
   })
 
-  it('uses all music sources for the main play button so empty source urls can fall through', () => {
+  it('opens the music immersive view without auto-playing from the main play button', () => {
     const app = readFileSync('src/App.vue', 'utf8')
 
-    expect(app).toContain("music.playRequest('适合此刻的音乐', 'all')")
-    expect(app).not.toContain("music.playRequest('适合此刻的音乐')\n")
+    expect(app).toContain('music.openImmersive()')
+    expect(app).not.toContain("music.playRequest('适合此刻的音乐'")
   })
 
   it('can append user-visible system messages for business flow errors', () => {

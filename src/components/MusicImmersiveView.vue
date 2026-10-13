@@ -4,7 +4,10 @@ import type { MusicSourcePreference, MusicTrack, PlaybackState } from '@/types/a
 import { getCurrentLyricIndex } from '@/utils/musicLyrics'
 
 const props = defineProps<{
+  activeTab: 'search' | 'favorite'
+  favorites: MusicTrack[]
   playback: PlaybackState
+  searchHistory: string[]
   searchQuery: string
   searchResults: MusicTrack[]
   searchResultsVisible: boolean
@@ -13,12 +16,19 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   back: []
+  changeTab: [tab: 'search' | 'favorite']
+  clearHistory: []
   exit: []
   nextTrack: []
+  playAllFavorites: []
   previousTrack: []
+  removeHistory: [query: string]
   search: [query: string, sourcePreference: MusicSourcePreference]
+  selectFavorite: [track: MusicTrack]
+  selectHistory: [query: string]
   selectSearchResult: [track: MusicTrack]
   sourceChange: [sourcePreference: MusicSourcePreference]
+  toggleFavorite: [track: MusicTrack]
   togglePlayback: []
 }>()
 
@@ -107,14 +117,67 @@ const statusLabel = computed(() => {
 })
 
 const emptyTitle = computed(() => {
-  return props.playback.status === 'error' ? '没有播放成功' : '正在寻找'
+  if (props.playback.status === 'error') {
+    return '没有播放成功'
+  }
+
+  if (props.playback.status === 'loading') {
+    return '正在寻找'
+  }
+
+  return '听你想听'
 })
 
 const emptySubtitle = computed(() => {
-  return props.playback.status === 'error'
-    ? props.playback.errorMessage ?? '没有找到可播放的音乐，请换个关键词或音源再试试。'
-    : '给这一刻挑一首合适的歌'
+  if (props.playback.status === 'error') {
+    return props.playback.errorMessage ?? '没有找到可播放的音乐，请换个关键词或音源再试试。'
+  }
+
+  if (props.playback.status === 'loading') {
+    return '给这一刻挑一首合适的歌'
+  }
+
+  return ''
 })
+
+const showSearchHistory = computed(() => {
+  return (
+    props.activeTab === 'search' &&
+    props.searchResults.length === 0 &&
+    props.searchHistory.length > 0
+  )
+})
+
+function getTrackKey(track: MusicTrack): string {
+  return `${track.source ?? 'unknown'}:${track.id}`
+}
+
+function isTrackFavorite(track: MusicTrack): boolean {
+  return props.favorites.some((item) => getTrackKey(item) === getTrackKey(track))
+}
+
+const isCurrentFavorite = computed(() => {
+  const track = props.playback.track
+
+  return track ? isTrackFavorite(track) : false
+})
+
+function onToggleFavorite(track: MusicTrack): void {
+  console.log('[lingmo] onToggleFavorite click', track?.id, track?.title)
+  emit('toggleFavorite', track)
+}
+
+function onSelectFavorite(track: MusicTrack): void {
+  emit('selectFavorite', track)
+}
+
+function onToggleCurrentFavorite(): void {
+  const track = props.playback.track
+
+  if (track) {
+    emit('toggleFavorite', track)
+  }
+}
 
 const displayTrackTitle = computed(() => {
   const title = props.playback.track?.title ?? ''
@@ -189,52 +252,137 @@ function lyricStyle(distance: number): Record<string, string> {
         aria-label="歌曲搜索"
         @submit.prevent="submitSearch"
       >
-        <div class="search-row">
-          <input
-            v-model="searchInput"
-            class="search-field"
-            placeholder="搜索歌曲、歌手或专辑"
-            aria-label="搜索歌曲、歌手或专辑"
-          />
-          <button class="search-button" type="submit" aria-label="搜索歌曲">⌕</button>
-        </div>
-        <div class="source-row" aria-label="音源选择">
+        <div class="music-tabs">
           <button
-            v-for="source in sourceOptions"
-            :key="source.value"
-            class="source-chip"
-            :data-active="sourcePreference === source.value"
             type="button"
-            @click="selectSource(source.value)"
+            class="music-tab"
+            :data-active="activeTab === 'search'"
+            @click="emit('changeTab', 'search')"
           >
-            {{ source.label }}
+            搜索
+          </button>
+          <button
+            type="button"
+            class="music-tab"
+            :data-active="activeTab === 'favorite'"
+            @click="emit('changeTab', 'favorite')"
+          >
+            收藏 <span class="tab-count">{{ favorites.length }}</span>
           </button>
         </div>
-        <div v-if="searchResultsVisible" class="search-result-list" aria-label="搜索结果">
-          <button
-            v-for="track in searchResults"
-            :key="`${track.source ?? 'unknown'}-${track.id}`"
-            class="search-result-item"
-            type="button"
-            @click="selectSearchResult(track)"
-          >
-            <img
-              v-if="track.artworkUrl"
-              class="search-result-thumb search-result-thumb--image"
-              :src="track.artworkUrl"
-              alt=""
-              aria-hidden="true"
+
+        <div v-if="activeTab === 'search'">
+          <div class="search-row">
+            <input
+              v-model="searchInput"
+              class="search-field"
+              placeholder="搜索歌曲、歌手或专辑"
+              aria-label="搜索歌曲、歌手或专辑"
             />
-            <span v-else class="search-result-thumb" aria-hidden="true" />
-            <span class="search-result-copy">
-              <span class="search-result-title">{{ track.title }}</span>
-              <span class="search-result-meta">
-                {{ [track.artist, track.album].filter(Boolean).join(' · ') || '未知歌手' }}
+            <button class="search-button" type="submit" aria-label="搜索歌曲">⌕</button>
+          </div>
+          <div v-if="showSearchHistory" class="search-history">
+            <span class="history-label">最近搜索</span>
+            <button
+              v-for="query in searchHistory"
+              :key="query"
+              type="button"
+              class="history-chip"
+              @click="emit('selectHistory', query)"
+            >
+              {{ query }} <span class="x" @click.stop="emit('removeHistory', query)">×</span>
+            </button>
+          </div>
+          <div class="source-row" aria-label="音源选择">
+            <button
+              v-for="source in sourceOptions"
+              :key="source.value"
+              class="source-chip"
+              :data-active="sourcePreference === source.value"
+              type="button"
+              @click="selectSource(source.value)"
+            >
+              {{ source.label }}
+            </button>
+          </div>
+          <div v-if="searchResultsVisible" class="search-result-list" aria-label="搜索结果">
+            <button
+              v-for="track in searchResults"
+              :key="`${track.source ?? 'unknown'}-${track.id}`"
+              class="search-result-item"
+              type="button"
+              @click="selectSearchResult(track)"
+            >
+              <img
+                v-if="track.artworkUrl"
+                class="search-result-thumb search-result-thumb--image"
+                :src="track.artworkUrl"
+                alt=""
+                aria-hidden="true"
+              />
+              <span v-else class="search-result-thumb" aria-hidden="true" />
+              <span class="search-result-copy">
+                <span class="search-result-title">{{ track.title }}</span>
+                <span class="search-result-meta">
+                  {{ [track.artist, track.album].filter(Boolean).join(' · ') || '未知歌手' }}
+                </span>
               </span>
-            </span>
-            <span class="search-result-source">{{ track.source ?? 'GD' }}</span>
-          </button>
-          <p v-if="searchResults.length === 0" class="search-empty">没有找到匹配歌曲</p>
+              <span class="search-result-source">{{ track.source ?? 'GD' }}</span>
+              <span
+                class="favorite-toggle"
+                :data-favorited="isTrackFavorite(track)"
+                :aria-label="isTrackFavorite(track) ? '取消收藏' : '收藏'"
+                @click.stop="onToggleFavorite(track)"
+              >{{ isTrackFavorite(track) ? '♥' : '♡' }}</span>
+            </button>
+            <p v-if="searchResults.length === 0" class="search-empty">没有找到匹配歌曲</p>
+          </div>
+        </div>
+
+        <div v-else>
+          <div class="favorite-header">
+            <span class="history-label">我喜欢的 · {{ favorites.length }} 首</span>
+            <button
+              v-if="favorites.length"
+              type="button"
+              class="history-chip"
+              @click="emit('playAllFavorites')"
+            >
+              播放全部
+            </button>
+          </div>
+          <div class="result-list" aria-label="收藏列表">
+            <button
+              v-for="track in favorites"
+              :key="`${track.source ?? 'unknown'}-${track.id}`"
+              class="search-result-item"
+              type="button"
+              @click="onSelectFavorite(track)"
+            >
+              <img
+                v-if="track.artworkUrl"
+                class="search-result-thumb search-result-thumb--image"
+                :src="track.artworkUrl"
+                alt=""
+                aria-hidden="true"
+              />
+              <span v-else class="search-result-thumb" aria-hidden="true" />
+              <span class="search-result-copy">
+                <span class="search-result-title">{{ track.title }}</span>
+                <span class="search-result-meta">
+                  {{ [track.artist, track.album].filter(Boolean).join(' · ') || '未知歌手' }}
+                </span>
+              </span>
+              <span class="search-result-source">{{ track.source ?? 'GD' }}</span>
+              <span
+                class="favorite-toggle"
+                data-favorited="true"
+                aria-label="移除收藏"
+                @click.stop="onToggleFavorite(track)"
+              >♥</span>
+            </button>
+            <p v-if="favorites.length === 0" class="search-empty">还没有收藏的歌曲，去搜索添加吧</p>
+          </div>
         </div>
       </form>
     </header>
@@ -307,6 +455,13 @@ function lyricStyle(distance: number): Record<string, string> {
           >
             ›
           </button>
+          <button
+            class="favorite-toggle"
+            type="button"
+            :data-favorited="isCurrentFavorite"
+            :aria-label="isCurrentFavorite ? '取消收藏' : '收藏'"
+            @click="onToggleCurrentFavorite"
+          >{{ isCurrentFavorite ? '♥' : '♡' }}</button>
           <span class="source-note">
             {{ playback.status === 'loading' ? '正在寻找可播放版本' : '旋律流动中' }}
           </span>
@@ -353,7 +508,7 @@ function lyricStyle(distance: number): Record<string, string> {
       <div class="music-copy">
         <p class="eyebrow">GD Studio</p>
         <h2>{{ emptyTitle }}</h2>
-        <p class="artist">{{ emptySubtitle }}</p>
+        <p v-if="emptySubtitle" class="artist">{{ emptySubtitle }}</p>
       </div>
     </section>
   </section>

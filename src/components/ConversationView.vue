@@ -1,16 +1,39 @@
 <script setup lang="ts">
+import { nextTick, ref, watch } from 'vue'
 import type { AutoListenState, ParticleState, UiMessage } from '@/types/app'
 
-defineProps<{
+const props = defineProps<{
   autoListenState: AutoListenState
   isListening: boolean
   messages: UiMessage[]
+  partialText: string
   state: ParticleState
 }>()
 
 const panelCollapsed = defineModel<boolean>('collapsed', { default: false })
 
+const messageListRef = ref<HTMLElement | null>(null)
+
+// 展开状态下，messages 变化或 ASR 实时字幕变化时，自动滚动到最新对话
+watch(
+  [() => props.messages, () => props.partialText],
+  () => {
+    if (panelCollapsed.value) {
+      return
+    }
+
+    void nextTick(() => {
+      const el = messageListRef.value
+
+      if (el) {
+        el.scrollTop = el.scrollHeight
+      }
+    })
+  }
+)
+
 const emit = defineEmits<{
+  openSettings: []
   requestMusic: []
   toggleAutoListen: []
   voicePressEnd: []
@@ -70,6 +93,7 @@ const autoListenText: Record<AutoListenState, string> = {
         <h1>lingmo</h1>
       </div>
       <div class="header-actions">
+        <button class="panel-toggle" type="button" @click="$emit('openSettings')">设置</button>
         <button class="panel-toggle" type="button" @click="collapsePanel">收起</button>
         <div class="status-pill" :aria-label="`当前状态：${statusText[state]}`">
           <span class="status-dot" />
@@ -78,7 +102,7 @@ const autoListenText: Record<AutoListenState, string> = {
       </div>
     </header>
 
-    <div v-if="!panelCollapsed" class="message-list" aria-label="历史对话" aria-live="polite">
+    <div v-if="!panelCollapsed" ref="messageListRef" class="message-list" aria-label="历史对话" aria-live="polite">
       <article
         v-for="message in messages"
         :key="message.id"
@@ -86,6 +110,9 @@ const autoListenText: Record<AutoListenState, string> = {
         :class="`message-row--${message.role}`"
       >
         <p>{{ message.text }}</p>
+      </article>
+      <article v-if="partialText" class="message-row message-row--partial">
+        <p>{{ partialText }}</p>
       </article>
     </div>
 
@@ -142,6 +169,10 @@ const autoListenText: Record<AutoListenState, string> = {
         <span class="status-dot" />
         <b>{{ autoListenText[autoListenState] }}</b>
       </button>
+      <div class="status-pill compact-status-pill" :aria-label="`当前状态：${statusText[state]}`">
+        <span class="status-dot" />
+        {{ statusText[state] }}
+      </div>
       <button class="compact-tab" type="button" @click="$emit('requestMusic')">
         <span>♪</span>
         <b>播放</b>

@@ -2,6 +2,7 @@ import { randomUUID as nodeRandomUUID } from 'node:crypto'
 import type {
   RealtimeAsrStartResult,
   StreamingTtsAudioChunk,
+  StreamingTtsAudioHandler,
   StreamingTtsProvider,
   StreamingTtsPushPayload,
   StreamingTtsStartPayload,
@@ -298,9 +299,114 @@ export function createVolcengineTtsProvider(
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const webSocketFactory = options.webSocketFactory ?? createWsWebSocket
 
+  type StreamSession = {
+    socket: VolcengineTtsWebSocketLike
+    onAudio: StreamingTtsAudioHandler
+    config: VolcengineTtsConfig
+    sessionId: string
+    finished: boolean
+    finishWaiters: Array<() => void>
+    eventResolvers: Array<{
+      event: VolcengineTtsEventType | number
+      resolve: (message: DecodedVolcengineTtsMessage | undefined) => void
+    }>
+    error?: VolcengineTtsError
+  }
+
+  const sessions = new Map<string, StreamSession>()
+
+  function wait(timeoutMs: number): Promise<void> {
+    return new Promise((resolve) => {
+      globalThis.setTimeout(resolve, timeoutMs)
+    })
+  }
+
+  function resolveAll(session: StreamSession): void {
+    for (const resolver of session.eventResolvers.splice(0)) {
+      resolver.resolve(undefined)
+    }
+
+    for (const waiter of session.finishWaiters.splice(0)) {
+      waiter()
+    }
+  }
+
+  function handleStreamMessage(session: StreamSession, decoded: DecodedVolcengineTtsMessage): void {
+    if (
+      decoded.event === VolcengineTtsEventType.SessionFailed ||
+      decoded.event === VolcengineTtsEventType.ConnectionFailed
+    ) {
+      session.error = new VolcengineTtsError('STREAMING_TTS_FAILED', '语音合成服务返回失败事件。')
+      resolveAll(session)
+      return
+    }
+
+    if (
+      decoded.messageType === VolcengineTtsMessageType.AudioOnlyServer &&
+      decoded.event === VolcengineTtsEventType.TTSResponse
+    ) {
+      session.onAudio({
+        audio: toArrayBuffer(normalizeBuffer(decoded.payload as ArrayBuffer)),
+        isFinal: false
+      })
+      return
+    }
+
+    if (decoded.event === VolcengineTtsEventType.SessionFinished) {
+      session.finished = true
+      session.onAudio({ audio: new ArrayBuffer(0), isFinal: true })
+      resolveAll(session)
+      return
+    }
+
+    for (let index = 0; index < session.eventResolvers.length; index += 1) {
+      if (session.eventResolvers[index].event === decoded.event) {
+        const resolver = session.eventResolvers.splice(index, 1)[0]
+        resolver.resolve(decoded)
+        return
+      }
+    }
+  }
+
+  function waitForEvent(
+    session: StreamSession,
+    event: VolcengineTtsEventType,
+    timeoutMs: number
+  ): Promise<void> {
+    return withTimeout(
+      new Promise<void>((resolve) => {
+        session.eventResolvers.push({ event, resolve: () => resolve() })
+      }),
+      timeoutMs
+    )
+  }
+
   return {
-    async pushText(_payload: StreamingTtsPushPayload): Promise<StreamingTtsAudioChunk> {
-      throw new VolcengineTtsError('STREAMING_TTS_NOT_IMPLEMENTED', '流式文本推送将在下一步接入。')
+    async pushText(payload: StreamingTtsPushPayload): Promise<void> {
+      const session = sessions.get(payload.sessionId)
+
+      if (!session) {
+        throw new VolcengineTtsError('STREAMING_TTS_SESSION_NOT_FOUND', '流式语音合成会话不存在或已结束。')
+      }
+
+      if (session.error) {
+        throw session.error
+      }
+
+      const baseRequest = buildBaseRequest(session.config)
+      sendEvent(
+        session.socket,
+        VolcengineTtsEventType.TaskRequest,
+        {
+          ...baseRequest,
+          event: VolcengineTtsEventType.TaskRequest,
+          req_params: {
+            ...(baseRequest.req_params as Record<string, unknown>),
+            text: payload.text
+          }
+        },
+        session.sessionId
+      )
     },
 
     async speak(payload: TtsSpeakPayload): Promise<TtsSpeakResult> {
@@ -355,12 +461,101 @@ export function createVolcengineTtsProvider(
       }
     },
 
-    async start(_payload: StreamingTtsStartPayload): Promise<RealtimeAsrStartResult> {
-      throw new VolcengineTtsError('STREAMING_TTS_NOT_IMPLEMENTED', '流式语音合成会话将在下一步接入。')
+    async start(payload: StreamingTtsStartPayload): Promise<RealtimeAsrStartResult> {
+      const config = getConfig(env, payload.voice)
+      const sessionId = randomUUID()
+      const connectId = randomUUID()
+      const socket = await withTimeout(
+        Promise.resolve(webSocketFactory(config.endpoint, { headers: createHeaders(config, connectId) })),
+        timeoutMs
+      )
+      socket.binaryType = 'arraybuffer'
+
+      const session: StreamSession = {
+        socket,
+        onAudio: payload.onAudio,
+        config,
+        sessionId,
+        finished: false,
+        finishWaiters: [],
+        eventResolvers: []
+      }
+      sessions.set(sessionId, session)
+
+      socket.addEventListener('message', (event) => {
+        const data = (event as { data?: ArrayBuffer | Buffer | Uint8Array })?.data
+
+        if (!data) {
+          return
+        }
+
+        try {
+          handleStreamMessage(session, decodeVolcengineTtsMessage(data))
+        } catch (error) {
+          session.error =
+            error instanceof VolcengineTtsError
+              ? error
+              : new VolcengineTtsError('STREAMING_TTS_FAILED', '语音合成消息解析失败。')
+          resolveAll(session)
+        }
+      })
+
+      socket.addEventListener('error', () => {
+        if (!session.error) {
+          session.error = new VolcengineTtsError('STREAMING_TTS_CONNECT_FAILED', '语音合成连接异常。')
+        }
+        resolveAll(session)
+      })
+
+      await withTimeout(waitForOpen(socket), timeoutMs)
+      sendEvent(socket, VolcengineTtsEventType.StartConnection, {})
+      await waitForEvent(session, VolcengineTtsEventType.ConnectionStarted, timeoutMs)
+      sendEvent(socket, VolcengineTtsEventType.StartSession, buildBaseRequest(config), sessionId)
+      await waitForEvent(session, VolcengineTtsEventType.SessionStarted, timeoutMs)
+
+      return { sessionId }
     },
 
-    async stop(_payload: StreamingTtsStopPayload): Promise<StreamingTtsAudioChunk> {
-      throw new VolcengineTtsError('STREAMING_TTS_NOT_IMPLEMENTED', '流式语音合成停止将在下一步接入。')
+    async stop(payload: StreamingTtsStopPayload): Promise<void> {
+      const session = sessions.get(payload.sessionId)
+
+      if (!session) {
+        throw new VolcengineTtsError('STREAMING_TTS_SESSION_NOT_FOUND', '流式语音合成会话不存在或已结束。')
+      }
+
+      if (session.error) {
+        sessions.delete(payload.sessionId)
+        throw session.error
+      }
+
+      if (!session.finished) {
+        sendEvent(session.socket, VolcengineTtsEventType.FinishSession, {}, session.sessionId)
+
+        await Promise.race([
+          new Promise<void>((resolve) => {
+            session.finishWaiters.push(() => resolve())
+          }),
+          wait(timeoutMs)
+        ])
+      }
+
+      sessions.delete(payload.sessionId)
+
+      if (session.error) {
+        throw session.error
+      }
+
+      try {
+        sendEvent(session.socket, VolcengineTtsEventType.FinishConnection, {})
+      } catch {
+        // 连接已断开，忽略
+      }
+
+      try {
+        session.socket.close()
+      } catch {
+        // 已关闭
+      }
     }
   }
 }

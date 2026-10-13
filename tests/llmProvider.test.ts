@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   createVolcengineLlmProvider,
+  extractReplySoFar,
   parseAssistantOutput,
   VolcengineLlmError
 } from '../electron/main/providers/llmProvider'
@@ -60,12 +61,7 @@ describe('Volcengine LLM provider', () => {
       messages: Array<{ content: string; role: string }>
     }
 
-    expect(request.messages[0]).toEqual(
-      expect.objectContaining({
-        role: 'system',
-        content: expect.stringMatching(/JSON/i)
-      })
-    )
+    expect(request.messages).toContainEqual({ content: '你好', role: 'user' })
     expect(fetcher).toHaveBeenCalledWith(
       'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
       expect.objectContaining({
@@ -102,5 +98,91 @@ describe('Volcengine LLM provider', () => {
     await expect(provider.sendMessage([{ role: 'user', content: '你好' }])).rejects.toMatchObject({
       code: 'LLM_TIMEOUT'
     })
+  })
+})
+
+describe('extractReplySoFar', () => {
+  it('extracts reply content as it streams', () => {
+    expect(extractReplySoFar('{"reply":"你好')).toBe('你好')
+    expect(extractReplySoFar('{"reply":"你好呀","intent":"chat","music":null}')).toBe('你好呀')
+  })
+
+  it('returns null before reply prefix completes', () => {
+    expect(extractReplySoFar('{"rep')).toBeNull()
+    expect(extractReplySoFar('{"reply":')).toBeNull()
+  })
+
+  it('unescapes json string escapes', () => {
+    expect(extractReplySoFar('{"reply":"a\\nb')).toBe('a\nb')
+  })
+})
+
+function createSseResponse(chunks: string[]): Response {
+  const encoder = new TextEncoder()
+  const stream = new ReadableStream({
+    start(controller) {
+      for (const chunk of chunks) {
+        controller.enqueue(encoder.encode(chunk))
+      }
+      controller.close()
+    }
+  })
+
+  return new Response(stream, { status: 200 })
+}
+
+describe('Volcengine LLM streaming', () => {
+  it('streams reply tokens via onChunk and returns parsed output', async () => {
+    const sse = [
+      `data: ${JSON.stringify({ choices: [{ delta: { content: '{"reply":"你好' } }] })}\n\n`,
+      `data: ${JSON.stringify({ choices: [{ delta: { content: '呀","intent":"chat","music":null}' } }] })}\n\n`,
+      'data: [DONE]\n\n'
+    ]
+    const fetcher = vi.fn(async () => createSseResponse(sse))
+    const provider = createVolcengineLlmProvider({
+      env: { VOLCENGINE_ARK_API_KEY: 'ark-key', VOLCENGINE_ARK_MODEL: 'doubao-test' },
+      fetch: fetcher
+    })
+    const deltas: string[] = []
+    const result = await provider.streamMessage([{ role: 'user', content: 'hi' }], {
+      onChunk: (delta) => deltas.push(delta)
+    })
+
+    expect(deltas.join('')).toBe('你好呀')
+    expect(result).toEqual({ intent: 'chat', music: null, reply: '你好呀' })
+  })
+
+  it('reports raw stream timing before reply text becomes extractable', async () => {
+    const sse = [
+      `data: ${JSON.stringify({ choices: [{ delta: { content: '{"rep' } }] })}\n\n`,
+      `data: ${JSON.stringify({ choices: [{ delta: { content: 'ly":"你好","intent":"chat","music":null}' } }] })}\n\n`,
+      'data: [DONE]\n\n'
+    ]
+    const fetcher = vi.fn(async () => createSseResponse(sse))
+    const provider = createVolcengineLlmProvider({
+      env: { VOLCENGINE_ARK_API_KEY: 'ark-key', VOLCENGINE_ARK_MODEL: 'doubao-test' },
+      fetch: fetcher
+    })
+    const events: string[] = []
+
+    await provider.streamMessage([{ role: 'user', content: 'hi' }], {
+      onChunk: () => events.push('reply'),
+      onRawChunk: () => events.push('raw'),
+      onResponseStart: () => events.push('response')
+    })
+
+    expect(events).toEqual(['response', 'raw', 'raw', 'reply'])
+  })
+
+  it('fails when stream response is not ok', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ error: { message: 'bad' } }), { status: 500 }))
+    const provider = createVolcengineLlmProvider({
+      env: { VOLCENGINE_ARK_API_KEY: 'ark-key', VOLCENGINE_ARK_MODEL: 'doubao-test' },
+      fetch: fetcher
+    })
+
+    await expect(
+      provider.streamMessage([{ role: 'user', content: 'hi' }], { onChunk: () => undefined })
+    ).rejects.toThrow(VolcengineLlmError)
   })
 })

@@ -8,12 +8,19 @@ describe('IPC contract', () => {
       'app.getRuntimeState',
       'app.requestMicrophoneAccess',
       'chat.sendMessage',
+      'chat.streamMessage',
+      'config.get',
+      'config.update',
+      'music.addSearchHistory',
       'music.authorize',
+      'music.clearSearchHistory',
+      'music.getLibrary',
       'music.getPlaybackState',
       'music.pause',
       'music.play',
       'music.resume',
       'music.search',
+      'music.toggleFavorite',
       'tts.speak',
       'tts.startStreaming',
       'tts.pushText',
@@ -24,5 +31,11 @@ describe('IPC contract', () => {
       'voice.stopRealtime',
       'voice.stopAndTranscribe'
     ])
+  })
+
+  it('exposes only the approved event channels', async () => {
+    const { eventChannels } = await import('../electron/preload/index')
+
+    expect(eventChannels).toEqual(['chat.streamChunk', 'tts.streamAudio'])
   })
 })

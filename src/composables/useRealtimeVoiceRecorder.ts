@@ -18,6 +18,7 @@ type RealtimeVoiceRecorderOptions = {
   createAudioContext?: () => AudioContext
   lingli?: LingliApi
   mediaDevices?: Pick<MediaDevices, 'getUserMedia'>
+  onPartialText?: (text: string) => void
 }
 
 type RealtimeVoiceStartOptions = {
@@ -134,6 +135,7 @@ export function useRealtimeVoiceRecorder(options: RealtimeVoiceRecorderOptions =
     source = null
     stream = null
     isRecording.value = false
+    options.onPartialText?.('')
   }
 
   async function sendChunk(audio: ArrayBuffer): Promise<void> {
@@ -142,7 +144,7 @@ export function useRealtimeVoiceRecorder(options: RealtimeVoiceRecorderOptions =
     }
 
     const response = await invokeWithTimeout(
-      getLingliApi(options).invoke('voice.pushRealtimeAudio', {
+      getLingliApi(options).invoke<{ partialText?: string }>('voice.pushRealtimeAudio', {
         audio,
         sessionId
       }),
@@ -152,6 +154,13 @@ export function useRealtimeVoiceRecorder(options: RealtimeVoiceRecorderOptions =
 
     if (!response.ok) {
       errorMessage.value = response.error.message
+      return
+    }
+
+    const partialText = response.data?.partialText
+
+    if (partialText) {
+      options.onPartialText?.(partialText)
     }
   }
 

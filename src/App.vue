@@ -4,6 +4,7 @@ import ConversationView from '@/components/ConversationView.vue'
 import MiniPlayer from '@/components/MiniPlayer.vue'
 import MusicImmersiveView from '@/components/MusicImmersiveView.vue'
 import ParticleSphere from '@/components/ParticleSphere.vue'
+import SettingsView from '@/components/SettingsView.vue'
 import { useAutoListen } from '@/composables/useAutoListen'
 import { useConversation } from '@/composables/useConversation'
 import { useKeyboardRecorder } from '@/composables/useKeyboardRecorder'
@@ -12,18 +13,46 @@ import { useRealtimeVoiceRecorder } from '@/composables/useRealtimeVoiceRecorder
 import { createAutoListenSession } from '@/services/autoListenSession'
 import { evaluateAutoListenTranscript } from '@/services/autoListenTranscriptGate'
 import type { VoiceActivityDiagnostics } from '@/services/voiceActivity'
-import type { AutoListenState, ParticleState, VoiceInputMode } from '@/types/app'
+import type { AppConfig, AutoListenState, ConfigPatch, ParticleState, VoiceInputMode, VoiceLatencyTrace } from '@/types/app'
 import { invokeWithTimeout } from './utils/invokeWithTimeout'
 
 const conversation = useConversation()
 const keyboardRecorder = useKeyboardRecorder()
 const music = useMusic()
-const realtimeRecorder = useRealtimeVoiceRecorder()
+const conversationPartialText = ref('')
+const realtimeRecorder = useRealtimeVoiceRecorder({
+  onPartialText: (text) => {
+    conversationPartialText.value = text
+  }
+})
 const assistantAudioLevel = ref(0.14)
 const assistantAudioPlaying = ref(false)
+let currentVoiceTrace: VoiceLatencyTrace | null = null
+
+function startVoiceTrace(): void {
+  currentVoiceTrace = { space_up: performance.now() }
+}
+
+function markVoiceTrace(point: string): void {
+  if (!currentVoiceTrace) {
+    return
+  }
+  (currentVoiceTrace as Record<string, number>)[point] = performance.now()
+}
+
+function getLastLatencyTrace(): VoiceLatencyTrace | null {
+  return currentVoiceTrace ? { ...currentVoiceTrace } : null
+}
+
 const autoListenSession = createAutoListenSession()
 const panelCollapsed = ref(false)
 const spaceHeld = ref(false)
+const settingsOpen = ref(false)
+const appConfig = ref<AppConfig>({
+  persona: { systemPrompt: '' },
+  voice: { voices: [], activeVoiceId: '' }
+})
+const voicePreviewing = ref(false)
 let currentAssistantAudio: HTMLAudioElement | null = null
 let currentAssistantAudioTimer: number | null = null
 let currentAssistantAudioUrl: string | null = null
@@ -49,6 +78,7 @@ type AutoListenDebugBridge = {
   getAutoListenDiagnostics: () => VoiceActivityDiagnostics
   getAutoListenRecoveryMs: () => number
   getAutoListenState: () => AutoListenState
+  getLastLatencyTrace: () => VoiceLatencyTrace | null
 }
 
 type DebugWindow = Window & {
@@ -128,7 +158,8 @@ function installDebugBridge(): void {
     getAutoListenBlockers,
     getAutoListenDiagnostics: () => autoListen.diagnostics.value,
     getAutoListenRecoveryMs,
-    getAutoListenState: () => conversation.autoListenState.value
+    getAutoListenState: () => conversation.autoListenState.value,
+    getLastLatencyTrace
   }
 }
 
@@ -174,12 +205,8 @@ const audioLevel = computed(() => {
   return conversation.audioLevel.value
 })
 
-async function requestMusicPlayback(): Promise<void> {
-  const playback = await music.playRequest('适合此刻的音乐', 'all')
-
-  if (playback.status === 'error' && playback.errorMessage) {
-    conversation.addSystemMessage(playback.errorMessage)
-  }
+function requestMusicPlayback(): void {
+  music.openImmersive()
 }
 
 async function exitMusicPlayback(): Promise<void> {
@@ -285,7 +312,7 @@ function releaseAssistantAudio(resumeAutoListen = false): void {
   }
 }
 
-async function speakAssistantReply(text?: string): Promise<void> {
+async function speakAssistantReply(text?: string, voiceOverride?: string): Promise<void> {
   const content = text?.trim()
   const api = window.lingli
 
@@ -294,10 +321,14 @@ async function speakAssistantReply(text?: string): Promise<void> {
     return
   }
 
+  const voiceId = voiceOverride?.trim() || appConfig.value.voice.activeVoiceId.trim()
+
   try {
+    markVoiceTrace('tts_first_push')
     const result = await invokeWithTimeout(
       api.invoke<{ audio: ArrayBuffer; mimeType: string }>('tts.speak', {
-        text: content
+        text: content,
+        ...(voiceId ? { voice: voiceId } : {})
       }),
       15000,
       '语音合成响应超时。'
@@ -308,16 +339,24 @@ async function speakAssistantReply(text?: string): Promise<void> {
       return
     }
 
+    markVoiceTrace('tts_first_audio')
     releaseAssistantAudio()
     const blob = new Blob([result.data.audio], { type: result.data.mimeType })
     currentAssistantAudioUrl = URL.createObjectURL(blob)
     currentAssistantAudio = new Audio(currentAssistantAudioUrl)
-    currentAssistantAudio.addEventListener('ended', () => releaseAssistantAudio(true), { once: true })
+    currentAssistantAudio.addEventListener('playing', () => {
+      markVoiceTrace('tts_play_start')
+    }, { once: true })
+    currentAssistantAudio.addEventListener('ended', () => {
+      markVoiceTrace('tts_play_end')
+      releaseAssistantAudio(true)
+    }, { once: true })
     assistantAudioPlaying.value = true
     currentAssistantAudioTimer = window.setInterval(() => {
       const time = currentAssistantAudio?.currentTime ?? 0
       assistantAudioLevel.value = 0.3 + Math.abs(Math.sin(time * 9.5)) * 0.3
     }, 80)
+    markVoiceTrace('tts_play_invoked')
     await currentAssistantAudio.play()
   } catch {
     releaseAssistantAudio(true)
@@ -423,6 +462,7 @@ async function startVoiceCapture(): Promise<boolean> {
 }
 
 async function finishVoiceCapture(): Promise<void> {
+  startVoiceTrace()
   let text = ''
   const shouldGateAutoTranscript = activeVoiceInputMode === 'auto_listen'
   const captureDurationMs = voiceCaptureStartedAt === null
@@ -459,6 +499,8 @@ async function finishVoiceCapture(): Promise<void> {
     }
   }
 
+  markVoiceTrace('asr_final')
+
   if (!text.trim()) {
     conversation.cancelVoiceInput('刚刚没有识别到声音，请再按住 Space 说一遍。', {
       silent: shouldGateAutoTranscript
@@ -481,9 +523,32 @@ async function finishVoiceCapture(): Promise<void> {
     text = transcriptDecision.text
   }
 
-  const result = await conversation.stopListening(text)
+  markVoiceTrace('llm_request_start')
+  let llmFirstDeltaMarked = false
+  let llmFirstRawDeltaMarked = false
+
+  const result = await conversation.stopListening(text, {
+    onChunk: (delta) => {
+      if (!llmFirstDeltaMarked) {
+        llmFirstDeltaMarked = true
+        markVoiceTrace('llm_first_delta')
+      }
+    },
+    onRawChunk: () => {
+      if (!llmFirstRawDeltaMarked) {
+        llmFirstRawDeltaMarked = true
+        markVoiceTrace('llm_first_raw_delta')
+      }
+    },
+    onResponseStart: () => {
+      markVoiceTrace('llm_response_start')
+    }
+  })
+  markVoiceTrace('llm_done')
+
   pauseAutoListenForAssistant()
   await speakAssistantReply(result.reply)
+
   if (result.intent === 'play_music') {
     const playback = await music.playRequest(result.music?.keyword ?? result.text)
     if (playback.status === 'error' && playback.errorMessage) {
@@ -591,8 +656,56 @@ async function endPushToTalk(): Promise<void> {
   await finishActiveVoiceCapture()
 }
 
+async function loadAppConfig(): Promise<void> {
+  const api = window.lingli
+
+  if (!api) {
+    return
+  }
+
+  const result = await invokeWithTimeout(
+    api.invoke<AppConfig>('config.get'),
+    6000,
+    '配置加载超时。'
+  )
+
+  if (result.ok) {
+    appConfig.value = result.data
+  }
+}
+
+async function handleSaveConfig(patch: ConfigPatch): Promise<void> {
+  const api = window.lingli
+
+  if (!api) {
+    return
+  }
+
+  const result = await invokeWithTimeout(
+    api.invoke<AppConfig>('config.update', patch),
+    6000,
+    '配置保存超时。'
+  )
+
+  if (result.ok) {
+    appConfig.value = result.data
+  }
+}
+
+async function handlePreviewVoice(voiceId: string): Promise<void> {
+  voicePreviewing.value = true
+
+  try {
+    await speakAssistantReply('你好，这是当前的音色试听。', voiceId)
+  } finally {
+    voicePreviewing.value = false
+  }
+}
+
 onMounted(() => {
   installDebugBridge()
+  void music.loadLibrary()
+  void loadAppConfig()
   window.addEventListener('keydown', handleKeyDown)
   window.addEventListener('keyup', handleKeyUp)
   startupGreetingTimer = window.setTimeout(() => {
@@ -629,18 +742,27 @@ onBeforeUnmount(() => {
     <Transition name="view-fade" mode="out-in">
       <MusicImmersiveView
         v-if="viewMode === 'music'"
+        :active-tab="music.activeTab.value"
+        :favorites="music.favorites.value"
         :playback="music.playback.value"
+        :search-history="music.searchHistory.value"
         :search-query="music.searchQuery.value"
         :search-results="music.searchResults.value"
         :search-results-visible="music.searchResultsVisible.value"
         :source-preference="music.sourcePreference.value"
         @back="music.closeImmersive"
+        @change-tab="music.setActiveTab"
         @exit="exitMusicPlayback"
         @next-track="music.nextTrack"
+        @play-all-favorites="music.playAllFavorites"
         @previous-track="music.previousTrack"
+        @remove-history="music.removeSearchHistory"
         @search="music.searchMusic"
+        @select-favorite="music.playFavorite"
+        @select-history="music.searchMusic"
         @select-search-result="music.playSearchResult"
         @source-change="(sourcePreference) => { music.sourcePreference.value = sourcePreference }"
+        @toggle-favorite="music.toggleFavorite"
         @toggle-playback="music.togglePlayback"
       />
       <section v-else class="conversation-stage">
@@ -650,8 +772,10 @@ onBeforeUnmount(() => {
           :state="conversationPanelState"
           :auto-listen-state="conversation.autoListenState.value"
           :is-listening="conversation.isListening.value"
+          :partial-text="conversationPartialText"
           @request-music="requestMusicPlayback"
           @toggle-auto-listen="toggleAutoListen"
+          @open-settings="settingsOpen = true"
           @voice-press-end="endPushToTalk"
           @voice-press-start="beginPushToTalk"
         />
@@ -663,5 +787,14 @@ onBeforeUnmount(() => {
         />
       </section>
     </Transition>
+
+    <SettingsView
+      v-if="settingsOpen"
+      :config="appConfig"
+      :voice-previewing="voicePreviewing"
+      @close="settingsOpen = false"
+      @preview-voice="handlePreviewVoice"
+      @save="handleSaveConfig"
+    />
   </main>
 </template>

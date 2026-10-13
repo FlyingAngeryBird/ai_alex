@@ -84,3 +84,44 @@ export type ConversationResult = {
   reply?: string
   text: string
 }
+
+export type VoiceOption = {
+  id: string
+  name: string
+}
+
+export type AppConfig = {
+  persona: {
+    systemPrompt: string
+  }
+  voice: {
+    voices: VoiceOption[]
+    activeVoiceId: string
+  }
+}
+
+export type ConfigPatch = {
+  persona?: {
+    systemPrompt?: string
+  }
+  voice?: {
+    voices?: VoiceOption[]
+    activeVoiceId?: string
+  }
+}
+
+export type VoiceLatencyTrace = {
+  space_up?: number
+  asr_final?: number
+  llm_request_start?: number
+  llm_response_start?: number
+  llm_first_raw_delta?: number
+  llm_first_delta?: number
+  llm_done?: number
+  tts_session_ready?: number
+  tts_first_push?: number
+  tts_first_audio?: number
+  tts_play_invoked?: number
+  tts_play_start?: number
+  tts_play_end?: number
+}

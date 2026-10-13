@@ -234,4 +234,91 @@ describe('music IPC handlers', () => {
 
     expect(source).not.toMatch(/Apple Music|MusicKit|APPLE_MUSIC|apple-music/)
   })
+
+  it('routes library favorites and search history through the library store', async () => {
+    const handlers = new Map<string, (_event: unknown, payload?: unknown) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (_event: unknown, payload?: unknown) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+    const provider = {
+      authorize: vi.fn(),
+      getPlaybackState: vi.fn(),
+      pause: vi.fn(),
+      play: vi.fn(),
+      resume: vi.fn(),
+      search: vi.fn()
+    }
+    const track = { id: 'a', source: 'netease' as const, title: '晴天', artist: '周杰伦', durationMs: 240000 }
+    const library = {
+      loadLibrary: vi.fn(),
+      getLibrary: vi.fn(() => ({ favorites: [], searchHistory: [] })),
+      toggleFavorite: vi.fn(async () => [track]),
+      addSearchHistory: vi.fn(async (query: string) => [query]),
+      clearSearchHistory: vi.fn(async () => [])
+    }
+
+    registerMusicHandlers(ipcMain, provider, library)
+
+    expect(handlers.get('music.getLibrary')?.(null)).toEqual({
+      ok: true,
+      data: { favorites: [], searchHistory: [] }
+    })
+
+    await expect(handlers.get('music.toggleFavorite')?.(null, track)).resolves.toEqual({
+      ok: true,
+      data: [track]
+    })
+    expect(library.toggleFavorite).toHaveBeenCalledWith(track)
+
+    await expect(
+      handlers.get('music.addSearchHistory')?.(null, { query: '周杰伦' })
+    ).resolves.toEqual({ ok: true, data: ['周杰伦'] })
+    expect(library.addSearchHistory).toHaveBeenCalledWith('周杰伦')
+
+    await expect(handlers.get('music.clearSearchHistory')?.(null)).resolves.toEqual({
+      ok: true,
+      data: []
+    })
+    expect(library.clearSearchHistory).toHaveBeenCalled()
+  })
+
+  it('rejects invalid favorite and search history payloads', async () => {
+    const handlers = new Map<string, (_event: unknown, payload?: unknown) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (_event: unknown, payload?: unknown) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+    const provider = {
+      authorize: vi.fn(),
+      getPlaybackState: vi.fn(),
+      pause: vi.fn(),
+      play: vi.fn(),
+      resume: vi.fn(),
+      search: vi.fn()
+    }
+    const library = {
+      loadLibrary: vi.fn(),
+      getLibrary: vi.fn(() => ({ favorites: [], searchHistory: [] })),
+      toggleFavorite: vi.fn(async () => []),
+      addSearchHistory: vi.fn(async () => []),
+      clearSearchHistory: vi.fn(async () => [])
+    }
+
+    registerMusicHandlers(ipcMain, provider, library)
+
+    await expect(handlers.get('music.toggleFavorite')?.(null, { id: 'a' })).resolves.toEqual({
+      ok: false,
+      error: { code: 'MUSIC_INVALID_PAYLOAD', message: '收藏参数不正确' }
+    })
+
+    await expect(
+      handlers.get('music.addSearchHistory')?.(null, { query: '   ' })
+    ).resolves.toEqual({
+      ok: false,
+      error: { code: 'MUSIC_INVALID_PAYLOAD', message: '搜索历史关键词不能为空' }
+    })
+  })
 })

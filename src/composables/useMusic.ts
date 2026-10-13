@@ -111,6 +111,9 @@ export function useMusic(options: UseMusicOptions = {}) {
   const searchQuery = ref('适合此刻的音乐')
   const playbackHistory = ref<MusicTrack[]>([])
   const playbackQueue = ref<MusicTrack[]>([])
+  const favorites = ref<MusicTrack[]>([])
+  const searchHistory = ref<string[]>([])
+  const activeTab = ref<'search' | 'favorite'>('search')
   const audioEnergyRanges = {
     average: createEnergyRange(0.18),
     bass: createEnergyRange(0.14),
@@ -607,6 +610,7 @@ export function useMusic(options: UseMusicOptions = {}) {
 
     searchResults.value = searchResult.data.tracks
     searchResultsVisible.value = true
+    void addSearchHistory(normalizedQuery)
     return searchResults.value
   }
 
@@ -774,9 +778,7 @@ export function useMusic(options: UseMusicOptions = {}) {
   }
 
   function openImmersive(): void {
-    if (playback.value.track) {
-      viewMode.value = 'music'
-    }
+    viewMode.value = 'music'
   }
 
   function closeImmersive(): void {
@@ -794,29 +796,121 @@ export function useMusic(options: UseMusicOptions = {}) {
     viewMode.value = 'conversation'
   }
 
+  async function loadLibrary(): Promise<void> {
+    const result = await invokeMusic<{ favorites: MusicTrack[]; searchHistory: string[] }>(
+      'music.getLibrary'
+    )
+
+    if (result.ok) {
+      favorites.value = result.data.favorites
+      searchHistory.value = result.data.searchHistory
+    }
+  }
+
+  function isFavorite(track: MusicTrack): boolean {
+    const key = getTrackKey(track)
+    return favorites.value.some((item) => getTrackKey(item) === key)
+  }
+
+  async function toggleFavorite(track: MusicTrack): Promise<void> {
+    console.log('[lingmo] useMusic.toggleFavorite start', track?.id, track?.title)
+    // track 是 Vue reactive Proxy，IPC structured clone 无法序列化，需转普通对象
+    const plainTrack = JSON.parse(JSON.stringify(track)) as MusicTrack
+    const result = await invokeMusic<MusicTrack[]>('music.toggleFavorite', plainTrack)
+    console.log('[lingmo] useMusic.toggleFavorite result', {
+      ok: result.ok,
+      error: result.ok ? null : result.error,
+      dataLen: result.ok ? result.data.length : 0
+    })
+
+    if (result.ok) {
+      favorites.value = result.data
+      console.log('[lingmo] favorites updated, len', favorites.value.length)
+    }
+  }
+
+  async function addSearchHistory(query: string): Promise<void> {
+    const trimmed = query.trim()
+
+    if (!trimmed) {
+      return
+    }
+
+    const result = await invokeMusic<string[]>('music.addSearchHistory', { query: trimmed })
+
+    if (result.ok) {
+      searchHistory.value = result.data
+    }
+  }
+
+  function removeSearchHistory(query: string): void {
+    searchHistory.value = searchHistory.value.filter((item) => item !== query)
+  }
+
+  async function clearSearchHistory(): Promise<void> {
+    const result = await invokeMusic<string[]>('music.clearSearchHistory')
+
+    if (result.ok) {
+      searchHistory.value = result.data
+    }
+  }
+
+  async function playFavorite(track: MusicTrack): Promise<PlaybackState> {
+    const index = favorites.value.findIndex((item) => getTrackKey(item) === getTrackKey(track))
+    playbackQueue.value = index >= 0 ? favorites.value.slice(index + 1) : []
+    return playQueuedTrack(track)
+  }
+
+  async function playAllFavorites(): Promise<PlaybackState> {
+    const first = favorites.value[0]
+
+    if (!first) {
+      return playback.value
+    }
+
+    playbackQueue.value = favorites.value.slice(1)
+    return playQueuedTrack(first)
+  }
+
+  function setActiveTab(tab: 'search' | 'favorite'): void {
+    activeTab.value = tab
+  }
+
   if (getCurrentInstance()) {
     onBeforeUnmount(releaseAudioResources)
   }
 
   return {
-    audioLevel,
+    activeTab,
+    addSearchHistory,
     audioBands,
+    audioLevel,
+    clearSearchHistory,
     closeImmersive,
     exitPlayback,
+    favorites,
     hasActiveTrack,
+    isFavorite,
     isPlaying,
+    loadLibrary,
     nextTrack,
     openImmersive,
+    playAllFavorites,
+    playFavorite,
     playSearchResult,
     playRequest,
     playback,
     previousTrack,
-    searchMusic,
+    removeSearchHistory,
     searchAndPlay,
+    searchHistory,
+    searchMusic,
     searchQuery,
     searchResults,
     searchResultsVisible,
+    setActiveTab,
     sourcePreference,
+    toggleFavorite,
     togglePlayback,
     viewMode
   }

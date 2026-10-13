@@ -28,6 +28,7 @@ const SERIALIZATION_JSON = 0b0001
 const COMPRESSION_NONE = 0b0000
 const COMPRESSION_GZIP = 0b0001
 const DEFAULT_TIMEOUT_MS = 12000
+const DEFAULT_STOP_WAIT_MS = 700
 const MALFORMED_RESPONSE_MESSAGE = '实时语音识别服务返回了无法解析的数据，请稍后再试。'
 
 type Env = Record<string, string | undefined>
@@ -52,6 +53,7 @@ type VolcengineStreamingAsrProviderOptions = {
   env?: Env
   randomUUID?: () => string
   timeoutMs?: number
+  stopWaitMs?: number
   webSocketFactory?: VolcengineWebSocketFactory
 }
 
@@ -379,6 +381,7 @@ export function createVolcengineStreamingAsrProvider(
   const env = options.env ?? process.env
   const randomUUID = options.randomUUID ?? nodeRandomUUID
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const stopWaitMs = options.stopWaitMs ?? DEFAULT_STOP_WAIT_MS
   const webSocketFactory = options.webSocketFactory ?? createWsWebSocket
   const sessions = new Map<string, VolcengineAsrSession>()
 
@@ -491,7 +494,7 @@ export function createVolcengineStreamingAsrProvider(
           new Promise((resolve) => {
             session.textWaiters.push(resolve)
           }),
-          wait(1400)
+          wait(stopWaitMs)
         ])
       }
       if (session.error) {

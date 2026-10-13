@@ -2,8 +2,11 @@ import { app, BrowserWindow } from 'electron'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadEnvironmentFiles, resolveEnvironmentCandidateDirectories } from './env.js'
+import { getDefaultConfigStore, initDefaultConfigStore } from './config/configStore.js'
+import { getDefaultMusicStore, initDefaultMusicStore } from './music/musicStore.js'
 import { registerAppHandlers } from './ipc/appHandlers.js'
 import { registerChatHandlers } from './ipc/chatHandlers.js'
+import { registerConfigHandlers } from './ipc/configHandlers.js'
 import { registerMusicHandlers } from './ipc/musicHandlers.js'
 import { registerTtsHandlers } from './ipc/ttsHandlers.js'
 import { registerVoiceHandlers } from './ipc/voiceHandlers.js'
@@ -19,6 +22,9 @@ loadEnvironmentFiles(
     userDataPath: app.getPath('userData')
   })
 )
+
+initDefaultConfigStore(join(app.getPath('userData'), 'config.json'))
+initDefaultMusicStore(join(app.getPath('userData'), 'music.json'))
 
 function createMainWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow(
@@ -36,11 +42,14 @@ function createMainWindow(): BrowserWindow {
 
 registerAppHandlers()
 registerChatHandlers()
+registerConfigHandlers()
 registerMusicHandlers()
 registerTtsHandlers()
 registerVoiceHandlers()
 
-void app.whenReady().then(() => {
+void app.whenReady().then(async () => {
+  await getDefaultConfigStore().loadConfig()
+  await getDefaultMusicStore().loadLibrary()
   createMainWindow()
 
   app.on('activate', () => {

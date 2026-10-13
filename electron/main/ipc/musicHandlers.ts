@@ -7,7 +7,9 @@ import {
   type MusicSearchPayload,
   type MusicSource,
   type MusicSourcePreference,
+  type MusicTrack,
 } from '../music/gdstudioMusicProvider.js'
+import { getDefaultMusicStore, type MusicLibraryStore } from '../music/musicStore.js'
 
 type AppResult<T> =
   | {
@@ -138,9 +140,24 @@ export function createConfiguredMusicProvider(
   return createGdStudioMusicProvider(options)
 }
 
+function isFavoritePayload(payload: unknown): payload is MusicTrack {
+  if (!payload || typeof payload !== 'object') {
+    return false
+  }
+
+  const value = payload as Record<string, unknown>
+
+  return (
+    typeof value.id === 'string' &&
+    typeof value.title === 'string' &&
+    typeof value.artist === 'string'
+  )
+}
+
 export function registerMusicHandlers(
   ipc: IpcMainLike = getIpcMain(),
-  provider: MusicProvider = createConfiguredMusicProvider()
+  provider: MusicProvider = createConfiguredMusicProvider(),
+  library: MusicLibraryStore = getDefaultMusicStore()
 ): void {
   ipc.handle('music.authorize', async () => ok(await provider.authorize()))
   ipc.handle('music.getPlaybackState', async () => ok(await provider.getPlaybackState()))
@@ -177,6 +194,61 @@ export function registerMusicHandlers(
       return fail(
         'MUSIC_PLAY_FAILED',
         error instanceof Error ? error.message : '音乐播放失败'
+      )
+    }
+  })
+
+  ipc.handle('music.getLibrary', () => ok(library.getLibrary()))
+
+  ipc.handle('music.toggleFavorite', async (_event, payload) => {
+    const payloadRecord = payload as Record<string, unknown> | null
+    console.log('[lingmo main] music.toggleFavorite handler called', payloadRecord?.id, payloadRecord?.title)
+
+    if (!isFavoritePayload(payload)) {
+      console.log('[lingmo main] isFavoritePayload rejected', payload)
+      return fail('MUSIC_INVALID_PAYLOAD', '收藏参数不正确')
+    }
+
+    try {
+      const favorites = await library.toggleFavorite(payload)
+      console.log('[lingmo main] library.toggleFavorite ok, favorites len', favorites.length)
+      return ok(favorites)
+    } catch (error) {
+      console.log('[lingmo main] library.toggleFavorite error', error)
+      return fail(
+        'MUSIC_FAVORITE_FAILED',
+        error instanceof Error ? error.message : '收藏操作失败'
+      )
+    }
+  })
+
+  ipc.handle('music.addSearchHistory', async (_event, payload) => {
+    const query =
+      typeof (payload as { query?: unknown })?.query === 'string'
+        ? (payload as { query: string }).query
+        : ''
+
+    if (!query.trim()) {
+      return fail('MUSIC_INVALID_PAYLOAD', '搜索历史关键词不能为空')
+    }
+
+    try {
+      return ok(await library.addSearchHistory(query))
+    } catch (error) {
+      return fail(
+        'MUSIC_HISTORY_FAILED',
+        error instanceof Error ? error.message : '搜索历史更新失败'
+      )
+    }
+  })
+
+  ipc.handle('music.clearSearchHistory', async () => {
+    try {
+      return ok(await library.clearSearchHistory())
+    } catch (error) {
+      return fail(
+        'MUSIC_HISTORY_FAILED',
+        error instanceof Error ? error.message : '搜索历史清除失败'
       )
     }
   })

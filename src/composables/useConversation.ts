@@ -88,6 +88,109 @@ async function requestAssistantReply(text: string): Promise<ChatResponse> {
   }
 }
 
+type ChatStreamChunk =
+  | { delta: string }
+  | { diagnostic: 'llm_raw_delta' | 'llm_response_start' }
+  | {
+      done: true
+      intent?: ConversationResult['intent']
+      music?: ConversationResult['music']
+      reply?: string
+      error?: { code: string; message: string }
+    }
+
+async function streamAssistantReply(
+  text: string,
+  onDelta: (delta: string) => void,
+  options?: {
+    onRawChunk?: () => void
+    onResponseStart?: () => void
+  }
+): Promise<ChatResponse> {
+  const api = globalThis.window?.lingli
+
+  if (!api) {
+    return {
+      intent: 'chat',
+      music: null,
+      reply: CHAT_BRIDGE_UNAVAILABLE_MESSAGE
+    }
+  }
+
+  return new Promise<ChatResponse>((resolve) => {
+    let resolved = false
+
+    function finish(response: ChatResponse): void {
+      if (resolved) {
+        return
+      }
+
+      resolved = true
+      unsubscribe()
+      resolve(response)
+    }
+
+    const unsubscribe = api.on<ChatStreamChunk>('chat.streamChunk', (chunk) => {
+      if ('done' in chunk) {
+        if (chunk.error) {
+          finish({
+            intent: 'chat',
+            music: null,
+            reply: chunk.error.message || '我刚刚有点走神了，我们再来一次。'
+          })
+          return
+        }
+
+        finish({
+          intent: chunk.intent ?? 'chat',
+          music: chunk.music ?? null,
+          reply: chunk.reply ?? ''
+        })
+        return
+      }
+
+      if ('diagnostic' in chunk) {
+        if (chunk.diagnostic === 'llm_response_start') {
+          options?.onResponseStart?.()
+        } else if (chunk.diagnostic === 'llm_raw_delta') {
+          options?.onRawChunk?.()
+        }
+        return
+      }
+
+      if (chunk.delta) {
+        onDelta(chunk.delta)
+      }
+    })
+
+    api
+      .invoke<ChatResponse>('chat.streamMessage', { text })
+      .then((result) => {
+        if (!result.ok) {
+          finish({
+            intent: 'chat',
+            music: null,
+            reply: result.error.message || '我刚刚有点走神了，我们再来一次。'
+          })
+          return
+        }
+
+        finish({
+          intent: result.data.intent,
+          music: result.data.music,
+          reply: result.data.reply
+        })
+      })
+      .catch((error) => {
+        finish({
+          intent: 'chat',
+          music: null,
+          reply: error instanceof Error ? error.message : '对话服务暂时不可用，请稍后再试。'
+        })
+      })
+  })
+}
+
 export function useConversation(options: UseConversationOptions = {}) {
   const delayMs = options.delayMs ?? 720
   const particleState = ref<ParticleState>('idle')
@@ -184,7 +287,14 @@ export function useConversation(options: UseConversationOptions = {}) {
     }
   }
 
-  async function stopListening(text = DEFAULT_USER_TEXT): Promise<ConversationResult> {
+  async function stopListening(
+    text = DEFAULT_USER_TEXT,
+    options?: {
+      onChunk?: (delta: string) => void
+      onRawChunk?: () => void
+      onResponseStart?: () => void
+    }
+  ): Promise<ConversationResult> {
     if (!isListening.value) {
       startListening()
     }
@@ -201,31 +311,38 @@ export function useConversation(options: UseConversationOptions = {}) {
     ) {
       autoListenState.value = 'finalizing'
     }
+
+    const assistantMessage = createMessage('assistant', '', 'thinking')
+    messages.value.push(assistantMessage)
     particleState.value = 'thinking'
     audioLevel.value = 0.24
 
-    await wait(delayMs)
-
-    const assistant = await requestAssistantReply(normalizedText)
+    const assistant = await streamAssistantReply(
+      normalizedText,
+      (delta) => {
+        assistantMessage.text += delta
+        messages.value = [...messages.value]
+        options?.onChunk?.(delta)
+      },
+      {
+        onRawChunk: options?.onRawChunk,
+        onResponseStart: options?.onResponseStart
+      }
+    )
 
     const replyRole: UiMessage['role'] =
       assistant.reply === CHAT_BRIDGE_UNAVAILABLE_MESSAGE ? 'system' : 'assistant'
     const nextState: ParticleState = replyRole === 'system' ? 'error' : 'speaking'
 
-    messages.value.push(createMessage(replyRole, assistant.reply, nextState))
-    particleState.value = nextState
-    if (autoListenState.value !== 'off') {
-      autoListenState.value = 'paused_for_tts'
-    }
-    audioLevel.value = nextState === 'error' ? 0.12 : assistant.intent === 'play_music' ? 0.56 : 0.38
-
-    await wait(delayMs)
-
+    assistantMessage.text = assistant.reply
+    assistantMessage.role = replyRole
+    assistantMessage.state = nextState
+    messages.value = [...messages.value]
     particleState.value = 'idle'
-    if (autoListenState.value === 'paused_for_tts') {
+    if (autoListenState.value !== 'off') {
       autoListenState.value = 'armed'
     }
-    audioLevel.value = 0.14
+    audioLevel.value = nextState === 'error' ? 0.12 : 0.14
 
     return {
       intent: assistant.intent,
@@ -242,7 +359,7 @@ export function useConversation(options: UseConversationOptions = {}) {
 
   async function generateOpeningGreeting(): Promise<void> {
     const assistant = await requestAssistantReply(
-      '请为桌面语音伙伴 lingmo 生成一句自然、温暖、简短的中文开场白。不要提到这是系统指令，只说给用户听的话。'
+      '请根据你的当前角色设定，生成一句自然、温暖、简短的中文开场白。不要提到这是系统指令，只说给用户听的话。'
     )
 
     messages.value.splice(0, messages.value.length, createMessage('assistant', assistant.reply, 'idle'))

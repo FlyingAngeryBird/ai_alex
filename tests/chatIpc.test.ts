@@ -14,6 +14,11 @@ describe('chat IPC handlers', () => {
         intent: 'chat' as const,
         music: null,
         reply: '我记得你刚才说想放松一下。'
+      })),
+      streamMessage: vi.fn(async () => ({
+        intent: 'chat' as const,
+        music: null,
+        reply: '我记得你刚才说想放松一下。'
       }))
     }
 
@@ -51,7 +56,8 @@ describe('chat IPC handlers', () => {
     }
 
     registerChatHandlers(ipcMain, {
-      sendMessage: vi.fn()
+      sendMessage: vi.fn(),
+      streamMessage: vi.fn()
     })
 
     await expect(handlers.get('chat.sendMessage')?.(null, { text: ' ' })).resolves.toEqual({
@@ -61,5 +67,131 @@ describe('chat IPC handlers', () => {
         message: '对话内容不能为空'
       }
     })
+  })
+
+  it('uses systemPrompt from the injected configStore', async () => {
+    const handlers = new Map<string, (_event: unknown, payload?: unknown) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (_event: unknown, payload?: unknown) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+    const provider = {
+      sendMessage: vi.fn(async () => ({
+        intent: 'chat' as const,
+        music: null,
+        reply: '好的'
+      })),
+      streamMessage: vi.fn(async () => ({
+        intent: 'chat' as const,
+        music: null,
+        reply: '好的'
+      }))
+    }
+    const configStore = {
+      getConfig: vi.fn(() => ({
+        persona: { systemPrompt: 'CUSTOM_PROMPT' },
+        voice: { voices: [], activeVoiceId: '' }
+      })),
+      loadConfig: vi.fn(async () => ({
+        persona: { systemPrompt: 'CUSTOM_PROMPT' },
+        voice: { voices: [], activeVoiceId: '' }
+      })),
+      updateConfig: vi.fn(async () => ({
+        persona: { systemPrompt: 'CUSTOM_PROMPT' },
+        voice: { voices: [], activeVoiceId: '' }
+      }))
+    }
+
+    registerChatHandlers(ipcMain, provider, configStore)
+
+    await handlers.get('chat.sendMessage')?.(null, { text: '你好' })
+
+    expect(configStore.getConfig).toHaveBeenCalled()
+    expect(provider.sendMessage).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ role: 'system', content: 'CUSTOM_PROMPT' })
+      ])
+    )
+  })
+
+  it('drops old conversation memory when the system prompt changes', async () => {
+    const handlers = new Map<string, (_event: unknown, payload?: unknown) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (_event: unknown, payload?: unknown) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+    let systemPrompt = '你是 lingmo。'
+    const provider = {
+      sendMessage: vi.fn(async (_messages: unknown) => ({
+        intent: 'chat' as const,
+        music: null,
+        reply: systemPrompt.includes('Alex') ? '我是 Alex。' : '我是 lingmo。'
+      })),
+      streamMessage: vi.fn(async (_messages: unknown) => ({
+        intent: 'chat' as const,
+        music: null,
+        reply: systemPrompt.includes('Alex') ? '我是 Alex。' : '我是 lingmo。'
+      }))
+    }
+    const configStore = {
+      getConfig: vi.fn(() => ({
+        persona: { systemPrompt },
+        voice: { voices: [], activeVoiceId: '' }
+      })),
+      loadConfig: vi.fn(),
+      updateConfig: vi.fn()
+    }
+
+    registerChatHandlers(ipcMain, provider, configStore)
+
+    await handlers.get('chat.sendMessage')?.(null, { text: '你是谁' })
+    systemPrompt = '你是 Alex。'
+    await handlers.get('chat.sendMessage')?.(null, { text: '你是谁' })
+
+    const secondMessages = provider.sendMessage.mock.calls[1][0]
+
+    expect(secondMessages).toEqual([
+      { content: '你是 Alex。', role: 'system' },
+      { content: '你是谁', role: 'user' }
+    ])
+  })
+
+  it('streams chunks via chat.streamMessage and returns final output', async () => {
+    const handlers = new Map<string, (_event: unknown, payload?: unknown) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (_event: unknown, payload?: unknown) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+    const sent: Array<{ channel: string; data: unknown }> = []
+    const sender = {
+      send: vi.fn((channel: string, data: unknown) => {
+        sent.push({ channel, data })
+      })
+    }
+    const provider = {
+      sendMessage: vi.fn(),
+      streamMessage: vi.fn(async (_messages: unknown, callbacks: { onChunk: (delta: string) => void }) => {
+        callbacks.onChunk('你')
+        callbacks.onChunk('好')
+        return { intent: 'chat' as const, music: null, reply: '你好' }
+      })
+    }
+
+    registerChatHandlers(ipcMain, provider)
+
+    const result = await handlers.get('chat.streamMessage')?.({ sender }, { text: 'hi' })
+
+    expect(result).toEqual({
+      ok: true,
+      data: { intent: 'chat', music: null, reply: '你好' }
+    })
+    expect(sent).toEqual([
+      { channel: 'chat.streamChunk', data: { delta: '你' } },
+      { channel: 'chat.streamChunk', data: { delta: '好' } },
+      { channel: 'chat.streamChunk', data: { done: true, intent: 'chat', music: null, reply: '你好' } }
+    ])
   })
 })
