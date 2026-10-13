@@ -22,6 +22,12 @@ describe('assistant output parser', () => {
       reply: '我们慢慢聊。'
     })
   })
+  it('does not turn a song mention or a legacy model intent label into a playback action', () => {
+    expect(parseAssistantOutput('谈谈《晴天》的歌词。')).toEqual({ intent: 'chat', music: null,
+      reply: '谈谈《晴天》的歌词。' })
+    expect(parseAssistantOutput('{"reply":"已播放","intent":"play_music","music":{"keyword":"晴天"}}'))
+      .toEqual({ intent: 'chat', music: null, reply: '已播放' })
+  })
 })
 
 describe('Volcengine LLM provider', () => {

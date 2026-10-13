@@ -13,6 +13,7 @@ import type { R1PersonaStore } from '../r1/persona.js'
 import type { R1PromptAssets } from '../r1/promptAssets.js'
 import type { R1MemoryStore } from '../r1/memory.js'
 import type { R1SessionMode } from '../r1/sessionMode.js'
+import { R1ModelRequestBoundary } from '../r1/modelBoundary.js'
 
 type AppResult<T> =
   | {
@@ -135,15 +136,24 @@ export function registerChatHandlers(
   let sessionId = conversations?.start(false) ?? null
   let sessionEpoch = 0
 
-  function persistTurn(text: string, reply: string): void {
+  function captureRequest() {
+    return { epoch: sessionEpoch, personaVersion: personaStore?.get().version,
+      deletionEpoch: memoryStore?.currentDeletionEpoch() }
+  }
+  function requestIsCurrent(request: ReturnType<typeof captureRequest>): boolean {
+    return request.epoch === sessionEpoch &&
+      request.personaVersion === personaStore?.get().version &&
+      request.deletionEpoch === memoryStore?.currentDeletionEpoch()
+  }
+
+  function persistTurn(text: string, reply: string, turnId: string): void {
     if (!conversations || !sessionId) return
-    const turnId = randomUUID()
     conversations.append({ sessionId, turnId, role: 'user', body: text, status: 'final' })
     conversations.append({ sessionId, turnId, responseId: randomUUID(), role: 'assistant',
       body: reply, status: 'generated' })
   }
 
-  function getSystemPrompt(): string {
+  function getSystemPrompt(turnId: string | null = null): { text: string; boundary?: R1ModelRequestBoundary } {
     if (personaStore && promptAssets) {
       const persona = personaStore.get()
       const deletionEpoch = memoryStore?.currentDeletionEpoch() ?? 0
@@ -158,8 +168,8 @@ export function registerChatHandlers(
       }
       activePersonaVersion = persona.version
       activeDeletionEpoch = deletionEpoch
-      return promptAssets.compose(persona, {
-        sessionId, sessionGeneration: sessionEpoch + 1, turnId: null,
+      const boundary = new R1ModelRequestBoundary(promptAssets, persona, {
+        sessionId, sessionGeneration: sessionEpoch + 1, turnId,
         currentTime: new Date().toISOString(),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         temporary, contextVersion: sessionEpoch + 1,
@@ -168,6 +178,7 @@ export function registerChatHandlers(
         selectedEntity: null, availableToolAliases: [], loadedSkillIds: ['SK01'],
         recentTurns: [], memories: [], activeTasks: []
       })
+      return { text: boundary.systemText, boundary }
     }
     const systemPrompt = configStore.getConfig().persona.systemPrompt
 
@@ -181,7 +192,7 @@ export function registerChatHandlers(
     }
 
     activeSystemPrompt = systemPrompt
-    return systemPrompt
+    return { text: systemPrompt }
   }
 
   ipc.handle('chat.setTemporary', (_event, payload) => {
@@ -200,12 +211,16 @@ export function registerChatHandlers(
   })
 
   ipc.handle('chat.greeting', async (): Promise<AppResult<AssistantOutput>> => {
-    const systemPrompt = getSystemPrompt()
+    const instructions = getSystemPrompt()
+    const request = captureRequest()
     try {
-      const result = await provider.sendMessage([
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: '请用一句自然、简短的中文向用户问好。不要描述这条内部请求。' }
-      ])
+      const messages: ChatMessage[] = [
+        { role: 'system', content: instructions.text },
+        { role: 'user', content: 'APP_EVENT_DATA\n{"type":"session_started","purpose":"opening_greeting"}' }
+      ]
+      const result = instructions.boundary ? await provider.sendMessage(messages, instructions.boundary)
+        : await provider.sendMessage(messages)
+      if (!requestIsCurrent(request)) throw new Error('SESSION_CHANGED')
       return ok({ intent: 'chat', music: null, reply: result.reply })
     } catch (error) {
       const normalized = normalizeChatError(error)
@@ -219,13 +234,16 @@ export function registerChatHandlers(
     }
 
     const text = payload.text.trim()
-    const systemPrompt = getSystemPrompt()
-    const requestEpoch = sessionEpoch
+    const turnId = randomUUID()
+    const instructions = getSystemPrompt(turnId)
+    const request = captureRequest()
 
     try {
-      const result = await provider.sendMessage(createLlmMessages(text, systemPrompt))
-      if (requestEpoch !== sessionEpoch) throw new Error('SESSION_CHANGED')
-      persistTurn(text, result.reply)
+      const messages = createLlmMessages(text, instructions.text)
+      const result = instructions.boundary ? await provider.sendMessage(messages, instructions.boundary)
+        : await provider.sendMessage(messages)
+      if (!requestIsCurrent(request)) throw new Error('SESSION_CHANGED')
+      persistTurn(text, result.reply, turnId)
 
       appendMemory({
         content: text,
@@ -249,22 +267,26 @@ export function registerChatHandlers(
     }
 
     const text = payload.text.trim()
-    const systemPrompt = getSystemPrompt()
-    const requestEpoch = sessionEpoch
+    const turnId = randomUUID()
+    const instructions = getSystemPrompt(turnId)
+    const request = captureRequest()
     const sender = (event as { sender?: { send(channel: string, data: unknown): void } } | null)?.sender
 
     function pushChunk(chunk: unknown): void {
-      sender?.send('chat.streamChunk', chunk)
+      if (requestIsCurrent(request)) sender?.send('chat.streamChunk', chunk)
     }
 
     try {
-      const result = await provider.streamMessage(createLlmMessages(text, systemPrompt), {
-        onChunk: (delta) => pushChunk({ delta }),
+      const messages = createLlmMessages(text, instructions.text)
+      const callbacks = {
+        onChunk: (delta: string) => pushChunk({ delta }),
         onRawChunk: () => pushChunk({ diagnostic: 'llm_raw_delta' }),
         onResponseStart: () => pushChunk({ diagnostic: 'llm_response_start' })
-      })
-      if (requestEpoch !== sessionEpoch) throw new Error('SESSION_CHANGED')
-      persistTurn(text, result.reply)
+      }
+      const result = instructions.boundary ? await provider.streamMessage(messages, callbacks, instructions.boundary)
+        : await provider.streamMessage(messages, callbacks)
+      if (!requestIsCurrent(request)) throw new Error('SESSION_CHANGED')
+      persistTurn(text, result.reply, turnId)
 
       appendMemory({
         content: text,
@@ -285,7 +307,7 @@ export function registerChatHandlers(
       return ok(result)
     } catch (error) {
       const normalized = normalizeChatError(error)
-      pushChunk({ done: true, error: normalized })
+      sender?.send('chat.streamChunk', { done: true, error: normalized })
       return fail(normalized.code, normalized.message)
     }
   })

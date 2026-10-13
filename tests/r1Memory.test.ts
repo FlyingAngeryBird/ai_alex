@@ -20,6 +20,8 @@ describe('R1 memory source and forgetting boundary', () => {
       const corrected = memory.update({ memoryId: saved.memoryId, expectedVersion: merged.version,
         content: '周末喜欢安静的公园', category: 'preference' })
       expect(corrected.version).toBe(3)
+      expect(corrected.deletionEpoch).toBeGreaterThan(merged.deletionEpoch)
+      expect(memory.recall('安静')).toEqual([corrected])
       expect(memory.sources(saved.memoryId)).toMatchObject([{ body: '周末喜欢安静的地方' },
         { body: '周末喜欢安静的地方' }])
       expect(() => memory.update({ memoryId: saved.memoryId, expectedVersion: 1,

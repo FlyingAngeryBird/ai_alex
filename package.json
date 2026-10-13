@@ -37,6 +37,7 @@
   },
   "type": "module",
   "dependencies": {
+    "ajv": "8.20.0",
     "dotenv": "^17.4.2",
     "lucide-vue-next": "^0.468.0",
     "three": "^0.185.0",

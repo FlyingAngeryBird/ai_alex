@@ -23,11 +23,15 @@ function action<T>(run: (payload: T) => unknown) {
 }
 
 export function registerR1Handlers(db: R1Database, ipc: IpcMainLike = ipcMain,
-  sessionMode: R1SessionMode = { temporary: false }): void {
+  sessionMode: R1SessionMode = { temporary: false },
+  onMemoryInvalidated: (deletionEpoch: number) => void = () => undefined): void {
   const items = new R1Items(db)
   const persona = new R1PersonaStore(db)
   const memory = new R1MemoryStore(db)
   const history = new R1Conversations(db)
+  const notifyInvalidation = () => {
+    try { onMemoryInvalidated(memory.currentDeletionEpoch()) } catch { /* Commit remains successful. */ }
+  }
   ipc.handle('r1.persona.get', () => ({ ok: true, data: persona.get() }))
   ipc.handle('r1.persona.update', action<Parameters<R1PersonaStore['update']>[0]>((payload) => persona.update(payload)))
   const requireNormal = () => {
@@ -45,11 +49,11 @@ export function registerR1Handlers(db: R1Database, ipc: IpcMainLike = ipcMain,
   ipc.handle('r1.memory.addManual', action<Parameters<R1MemoryStore['addManual']>[0]>((payload) =>
     { requireNormal(); return memory.addManual(payload) }))
   ipc.handle('r1.memory.update', action<Parameters<R1MemoryStore['update']>[0]>((payload) =>
-    { requireNormal(); return memory.update(payload) }))
+    { requireNormal(); const result = memory.update(payload); notifyInvalidation(); return result }))
   ipc.handle('r1.memory.sources', action<{ memoryId: string }>((payload) =>
     { requireNormal(); return memory.sources(payload.memoryId) }))
   ipc.handle('r1.memory.forget', action<{ memoryId: string; expectedVersion: number }>((payload) =>
-    { requireNormal(); return memory.forget(payload.memoryId, payload.expectedVersion) }))
+    { requireNormal(); const result = memory.forget(payload.memoryId, payload.expectedVersion); notifyInvalidation(); return result }))
   ipc.handle('r1.history.list', (_event, payload) => {
     try {
       if (sessionMode.temporary) throw new Error('HISTORY_UNAVAILABLE_IN_TEMPORARY_SESSION')

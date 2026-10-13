@@ -1,3 +1,5 @@
+import type { R1ModelRequestBoundary } from '../r1/modelBoundary.js'
+
 export type ChatMessage = {
   content: string
   role: 'assistant' | 'system' | 'user'
@@ -18,8 +20,8 @@ export type LlmStreamCallbacks = {
 }
 
 export type LlmProvider = {
-  sendMessage(messages: ChatMessage[]): Promise<AssistantOutput>
-  streamMessage(messages: ChatMessage[], callbacks: LlmStreamCallbacks): Promise<AssistantOutput>
+  sendMessage(messages: ChatMessage[], boundary?: R1ModelRequestBoundary): Promise<AssistantOutput>
+  streamMessage(messages: ChatMessage[], callbacks: LlmStreamCallbacks, boundary?: R1ModelRequestBoundary): Promise<AssistantOutput>
 }
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
@@ -50,10 +52,6 @@ type ArkChatCompletionResponse = {
 
 const DEFAULT_ARK_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
 const DEFAULT_TIMEOUT_MS = 12000
-const JSON_RESPONSE_SYSTEM_PROMPT: ChatMessage = {
-  content: '请始终只返回 JSON object，格式为 {"reply":"回复文本","intent":"chat","music":null}。',
-  role: 'system'
-}
 
 export class VolcengineLlmError extends Error {
   code: string
@@ -101,24 +99,14 @@ export function parseAssistantOutput(raw: string): AssistantOutput {
     const parsed = JSON.parse(raw) as unknown
 
     if (isAssistantOutput(parsed)) {
-      return parsed
+      // Legacy response labels are text, never an authorized domain-tool request.
+      return { intent: 'chat', music: null, reply: parsed.reply }
     }
   } catch {
     // 纯文本模式
   }
 
   const text = raw.trim() || '我在。刚才那句话我没有理解完整，可以再说一次吗？'
-
-  // 纯文本模式：提取《歌名》判断点歌意图
-  const musicMatch = raw.match(/《([^》]+)》/)
-
-  if (musicMatch) {
-    return {
-      intent: 'play_music',
-      music: { keyword: musicMatch[1] },
-      reply: text
-    }
-  }
 
   return {
     intent: 'chat',
@@ -184,12 +172,13 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   })
 }
 
-function ensureJsonInstruction(messages: ChatMessage[]): ChatMessage[] {
-  if (messages.some((message) => /json/i.test(message.content))) {
-    return messages
+function finalMessages(messages: ChatMessage[], boundary?: R1ModelRequestBoundary): ChatMessage[] {
+  if (!boundary) return messages
+  const prepared = boundary.finalize(messages)
+  if (prepared.tools.length) {
+    throw new VolcengineLlmError('LLM_TOOL_PROTOCOL_NOT_READY', '此对话通道的工具协议尚未接通。')
   }
-
-  return [JSON_RESPONSE_SYSTEM_PROMPT, ...messages]
+  return prepared.messages
 }
 
 export function createVolcengineLlmProvider(options: VolcengineLlmOptions = {}): LlmProvider {
@@ -197,12 +186,13 @@ export function createVolcengineLlmProvider(options: VolcengineLlmOptions = {}):
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
 
   return {
-    async sendMessage(messages: ChatMessage[]): Promise<AssistantOutput> {
+    async sendMessage(messages: ChatMessage[], boundary?: R1ModelRequestBoundary): Promise<AssistantOutput> {
       const config = getConfig(options)
+      const preparedMessages = finalMessages(messages, boundary)
       const response = await withTimeout(
         fetcher(`${config.baseUrl}/chat/completions`, {
           body: JSON.stringify({
-            messages,
+            messages: preparedMessages,
             model: config.model,
             stream: false,
             temperature: 0.8
@@ -235,12 +225,14 @@ export function createVolcengineLlmProvider(options: VolcengineLlmOptions = {}):
 
     async streamMessage(
       messages: ChatMessage[],
-      callbacks: LlmStreamCallbacks
+      callbacks: LlmStreamCallbacks,
+      boundary?: R1ModelRequestBoundary
     ): Promise<AssistantOutput> {
       const config = getConfig(options)
+      const preparedMessages = finalMessages(messages, boundary)
       const response = await fetcher(`${config.baseUrl}/chat/completions`, {
         body: JSON.stringify({
-          messages,
+          messages: preparedMessages,
           model: config.model,
           stream: true,
           temperature: 0.8

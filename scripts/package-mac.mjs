@@ -1,12 +1,17 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const electronApp = join(projectRoot, 'node_modules/electron/dist/Electron.app')
 const outputAppRelative = 'release/seamo-ai-r1-darwin-arm64/Seamo AI R1.app'
-const outputApp = join(projectRoot, outputAppRelative)
+const outputArgument = process.argv.indexOf('--output-dir')
+if (outputArgument >= 0 && !process.argv[outputArgument + 1]) throw new Error('--output-dir requires a path')
+const outputApp = outputArgument >= 0
+  ? join(resolve(process.argv[outputArgument + 1]), 'Seamo AI R1.app')
+  : join(projectRoot, outputAppRelative)
 const outputDir = dirname(outputApp)
 const resourcesDir = join(outputApp, 'Contents/Resources')
 const appDir = join(resourcesDir, 'app')
@@ -16,7 +21,8 @@ const frameworkResourcesDir = join(
   'Contents/Frameworks/Electron Framework.framework/Versions/A/Resources'
 )
 
-const requiredRuntimeModules = ['dotenv', 'ws']
+const requiredRuntimeModules = ['dotenv', 'ws', 'ajv', 'fast-deep-equal', 'fast-uri',
+  'json-schema-traverse', 'require-from-string']
 const requiredChromiumResourceFiles = ['icudtl.dat']
 const microphoneUsageDescription = 'Seamo AI R1 需要使用麦克风来完成语音对话。'
 
@@ -131,6 +137,13 @@ cpSync(join(projectRoot, 'r1-assets'), join(appDir, 'r1-assets'), {
 })
 for (const moduleName of requiredRuntimeModules) {
   copyRequiredModule(moduleName)
+}
+const packagedRequire = createRequire(join(appDir, 'package.json'))
+const canonicalModules = realpathSync(join(appDir, 'node_modules'))
+for (const moduleName of requiredRuntimeModules) {
+  if (!packagedRequire.resolve(moduleName).startsWith(`${canonicalModules}/`)) {
+    throw new Error(`Runtime dependency resolved outside the app: ${moduleName}`)
+  }
 }
 
 copyRequiredChromiumResources()

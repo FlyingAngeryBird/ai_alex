@@ -3,8 +3,42 @@ import { registerChatHandlers } from '../electron/main/ipc/chatHandlers'
 import { openR1Database } from '../electron/main/r1/database'
 import { R1Conversations } from '../electron/main/r1/conversations'
 import { R1PersonaStore } from '../electron/main/r1/persona'
+import { loadR1PromptAssets } from '../electron/main/r1/promptAssets'
+import { resolve } from 'node:path'
+import { R1MemoryStore } from '../electron/main/r1/memory'
 
 describe('chat IPC handlers', () => {
+  it.each(['correct', 'forget'])('discards in-flight text after memory %s and does not persist the stale answer', async (operation) => {
+    const db = openR1Database(':memory:')
+    try {
+      const memory = new R1MemoryStore(db)
+      const saved = memory.addManual({ content: '喜欢红色', category: 'preference' })
+      const handlers = new Map<string, (_event: unknown, payload?: unknown) => unknown>()
+      const ipc = { handle: (channel: string, handler: (_event: unknown, payload?: unknown) => unknown) => handlers.set(channel, handler) }
+      let emitDelta: (text: string) => void = () => undefined
+      let release: (value: { intent: 'chat'; music: null; reply: string }) => void = () => undefined
+      const provider = { sendMessage: vi.fn(), streamMessage: vi.fn((_messages: unknown,
+        callbacks: { onChunk: (text: string) => void }) => {
+        emitDelta = callbacks.onChunk
+        return new Promise<{ intent: 'chat'; music: null; reply: string }>(resolve => { release = resolve })
+      }) }
+      const sent: unknown[] = []
+      registerChatHandlers(ipc, provider, undefined, new R1Conversations(db), new R1PersonaStore(db),
+        loadR1PromptAssets(resolve('r1-assets')), memory)
+      const pending = handlers.get('chat.streamMessage')!({ sender: { send: (_channel: string, chunk: unknown) => sent.push(chunk) } },
+        { text: '推荐一种颜色' }) as Promise<unknown>
+      emitDelta('当前有效的一段')
+      if (operation === 'correct') memory.update({ memoryId: saved.memoryId, expectedVersion: 1,
+        content: '喜欢绿色', category: 'preference' })
+      else memory.forget(saved.memoryId, 1)
+      emitDelta('旧事实不能继续播出')
+      release({ intent: 'chat', music: null, reply: '已失效的完整回答' })
+      expect(await pending).toMatchObject({ ok: false, error: { code: 'SESSION_CHANGED' } })
+      expect(sent).toEqual([{ delta: '当前有效的一段' },
+        { done: true, error: { code: 'SESSION_CHANGED', message: expect.any(String) } }])
+      expect(db.prepare("SELECT COUNT(*) AS count FROM messages WHERE role = 'assistant'").get()).toMatchObject({ count: 0 })
+    } finally { db.close() }
+  })
   it('uses the current versioned persona on the next conversation turn', async () => {
     const db = openR1Database(':memory:')
     try {
@@ -16,16 +50,15 @@ describe('chat IPC handlers', () => {
         music: null, reply: '你好' })), streamMessage: vi.fn() }
       const persona = new R1PersonaStore(db)
       registerChatHandlers(ipc, provider, undefined, new R1Conversations(db), persona,
-        { releaseId: 'test', toolAliases: [],
-          compose: (current) => `PERSONA:${current.assistantName}:${current.version}` })
+        loadR1PromptAssets(resolve('r1-assets')))
       await handlers.get('chat.sendMessage')?.(null, { text: '你好' })
       expect(provider.sendMessage.mock.calls[0]?.[0]?.[0]).toMatchObject({
-        role: 'system', content: 'PERSONA:Seamo AI:1'
+        role: 'system', content: expect.stringContaining('"assistantName":"Seamo AI"')
       })
       persona.update({ expectedVersion: 1, assistantName: 'Alex' })
       await handlers.get('chat.sendMessage')?.(null, { text: '你叫什么' })
       expect(provider.sendMessage.mock.calls[1]?.[0]?.[0]).toMatchObject({
-        role: 'system', content: 'PERSONA:Alex:2'
+        role: 'system', content: expect.stringContaining('"assistantName":"Alex"')
       })
     } finally { db.close() }
   })

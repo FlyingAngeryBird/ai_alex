@@ -77,7 +77,11 @@ void app.whenReady().then(async () => {
     vault.load()
     importLegacyJson(r1Database, join(app.getPath('appData'), 'lingli'), 'lingli-json')
     importLegacyJson(r1Database, join(app.getPath('appData'), 'lingmo'), 'lingmo-json')
-    registerR1Handlers(r1Database, undefined, r1SessionMode)
+    registerR1Handlers(r1Database, undefined, r1SessionMode, deletionEpoch => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.webContents.send('r1.memoryInvalidated', { deletionEpoch })
+      }
+    })
     registerCredentialHandlers(vault)
   } catch (error) {
     const { dialog } = await import('electron')

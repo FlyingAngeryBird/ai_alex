@@ -61,6 +61,6 @@ describe('IPC contract', () => {
   it('exposes only the approved event channels', async () => {
     const { eventChannels } = await import('../electron/preload/index')
 
-    expect(eventChannels).toEqual(['chat.streamChunk', 'tts.streamAudio', 'r1.reminderDue'])
+    expect(eventChannels).toEqual(['chat.streamChunk', 'tts.streamAudio', 'r1.reminderDue', 'r1.memoryInvalidated'])
   })
 })

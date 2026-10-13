@@ -95,9 +95,10 @@ export class R1MemoryStore {
         .get(input.memoryId) as MemoryRow | undefined
       if (!row || this.isSuppressed(row)) throw new Error('MEMORY_NOT_FOUND')
       if (row.version !== input.expectedVersion) throw new Error('VERSION_CONFLICT')
-      this.db.prepare(`UPDATE memory SET content = ?, category = ?, version = version + 1,
+      const epoch = this.currentDeletionEpoch() + 1
+      this.db.prepare(`UPDATE memory SET content = ?, category = ?, deletion_epoch = ?, version = version + 1,
         updated_at = ? WHERE memory_id = ?`)
-        .run(input.content.trim(), input.category, new Date().toISOString(), input.memoryId)
+        .run(input.content.trim(), input.category, epoch, new Date().toISOString(), input.memoryId)
       return view(this.db.prepare('SELECT * FROM memory WHERE memory_id = ?')
         .get(input.memoryId) as MemoryRow)
     })

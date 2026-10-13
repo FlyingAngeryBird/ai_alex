@@ -70,6 +70,6 @@ if __name__ == "__main__":
         if not p.is_file() or ".git" in p.parts or "__pycache__" in p.parts or p.name=="asset-manifest.json":
             continue
         entries.append({"path":str(p.relative_to(ROOT)),"bytes":p.stat().st_size,"sha256":hashlib.sha256(p.read_bytes()).hexdigest()})
-    manifest={"releaseId":data("config/runtime.defaults.json")["releaseId"],"version":"1.0.1","files":entries}
+    manifest={"releaseId":data("config/runtime.defaults.json")["releaseId"],"version":data("config/runtime.defaults.json")["releaseId"].removeprefix("seamo-ai-r1-agent-assets-"),"files":entries}
     (ROOT/"asset-manifest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
     print(f"Built PRD: {len(final)} characters; manifest: {len(entries)} files")

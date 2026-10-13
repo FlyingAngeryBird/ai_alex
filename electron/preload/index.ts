@@ -59,7 +59,8 @@ export type ExposedChannel = (typeof exposedChannels)[number]
 export const eventChannels = [
   'chat.streamChunk',
   'tts.streamAudio',
-  'r1.reminderDue'
+  'r1.reminderDue',
+  'r1.memoryInvalidated'
 ] as const
 
 export type ExposedEventChannel = (typeof eventChannels)[number]
@@ -127,7 +128,12 @@ function exposeLingliApi(
       addManual: (input) => invokeR1('r1.memory.addManual', input),
       update: (input) => invokeR1('r1.memory.update', input),
       sources: (memoryId) => invokeR1('r1.memory.sources', { memoryId }),
-      forget: (memoryId, expectedVersion) => invokeR1('r1.memory.forget', { memoryId, expectedVersion })
+      forget: (memoryId, expectedVersion) => invokeR1('r1.memory.forget', { memoryId, expectedVersion }),
+      onInvalidated: (handler) => {
+        const listener = (...args: unknown[]): void => handler(args[1] as { deletionEpoch: number })
+        renderer.on('r1.memoryInvalidated', listener)
+        return () => renderer.removeListener('r1.memoryInvalidated', listener)
+      }
     },
     history: {
       list: (input) => invokeR1('r1.history.list', input),

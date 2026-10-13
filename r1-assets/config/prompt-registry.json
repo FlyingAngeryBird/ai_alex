@@ -1,5 +1,5 @@
 {
-  "releaseId": "seamo-ai-r1-agent-assets-1.0.1",
+  "releaseId": "seamo-ai-r1-agent-assets-2.0.1",
   "composition": {
     "realtime": [
       "PR01",
@@ -77,7 +77,7 @@
       "id": "PR03",
       "name": "conversation",
       "path": "prompts/conversation.md",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "description": "实时交流和纯文字交流的决策指令",
       "variables": [
         "skill_index_json"

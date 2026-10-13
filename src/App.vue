@@ -90,6 +90,7 @@ function closePanels(): void {
 const temporaryMode = ref(false)
 const reminderNotice = ref<{ body: string; dueAtUtc: string; systemRequested: boolean } | null>(null)
 let stopReminderNotice: (() => void) | null = null
+let stopMemoryInvalidation: (() => void) | null = null
 const voicePreviewing = ref(false)
 let currentAssistantAudio: HTMLAudioElement | null = null
 let currentAssistantAudioTimer: number | null = null
@@ -770,6 +771,12 @@ onMounted(() => {
   stopReminderNotice = window.seamoR1?.reminders.onDue((event) => {
     reminderNotice.value = event
   }) ?? null
+  stopMemoryInvalidation = window.seamoR1.memory.onInvalidated(() => {
+    if (assistantAudioPlaying.value || conversation.particleState.value === 'thinking') {
+      releaseAssistantAudio(true)
+      conversation.addSystemMessage('记忆已更新，已停止旧上下文的回复。')
+    }
+  })
   installDebugBridge()
   void music.loadLibrary()
   window.addEventListener('keydown', handleKeyDown)
@@ -777,6 +784,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  stopMemoryInvalidation?.()
   stopReminderNotice?.()
   uninstallDebugBridge()
   window.removeEventListener('keydown', handleKeyDown)

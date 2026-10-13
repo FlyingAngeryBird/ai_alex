@@ -24,6 +24,7 @@ export type R1Api = {
     update(input: Parameters<R1MemoryStore['update']>[0]): Promise<R1Result<R1Memory>>
     sources(memoryId: string): Promise<R1Result<R1MemorySource[]>>
     forget(memoryId: string, expectedVersion: number): Promise<R1Result<{ memoryId: string; deletionEpoch: number }>>
+    onInvalidated(handler: (event: { deletionEpoch: number }) => void): () => void
   }
   history: {
     list(input?: Parameters<R1Conversations['history']>[0]): Promise<R1Result<HistoryPage>>
