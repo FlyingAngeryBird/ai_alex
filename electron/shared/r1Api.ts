@@ -27,6 +27,7 @@ export type R1Api = {
   items: {
     list(): Promise<R1Result<Item[]>>
     create(input: MethodInput<'create'>): Promise<R1Result<MethodOutput<'create'>>>
+    update(input: MethodInput<'update'>): Promise<R1Result<MethodOutput<'update'>>>
     complete(input: MethodInput<'complete'>): Promise<R1Result<MethodOutput<'complete'>>>
     deletionPreview(itemId: string): Promise<R1Result<MethodOutput<'deletionPreview'>>>
     delete(input: MethodInput<'delete'>): Promise<R1Result<MethodOutput<'delete'>>>

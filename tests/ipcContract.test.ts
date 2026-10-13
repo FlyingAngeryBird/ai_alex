@@ -32,6 +32,7 @@ describe('IPC contract', () => {
       'r1.memory.sources',
       'r1.memory.forget',
       'r1.items.create',
+      'r1.items.update',
       'r1.items.complete',
       'r1.items.deletionPreview',
       'r1.items.delete',

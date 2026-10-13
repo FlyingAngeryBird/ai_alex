@@ -5,7 +5,7 @@ import MusicImmersiveView from '@/components/MusicImmersiveView.vue'
 import ParticleSphere from '@/components/ParticleSphere.vue'
 import R1SettingsPanel from '@/components/R1SettingsPanel.vue'
 import R1MemoryPanel from '@/components/R1MemoryPanel.vue'
-import ItemsPanel from '@/components/ItemsPanel.vue'
+import R1ItemsPanel from '@/components/R1ItemsPanel.vue'
 import SearchPanel from '@/components/SearchPanel.vue'
 import R1CompanionHome from '@/components/R1CompanionHome.vue'
 import R1Composer from '@/components/R1Composer.vue'
@@ -880,7 +880,7 @@ onBeforeUnmount(() => {
       @saved="(saved) => { persona = saved }"
       @credentials-changed="(status) => { credentialStatus = status }"
     />
-    <ItemsPanel v-if="itemsOpen" :temporary-mode="temporaryMode" @close="closePanels" />
+    <R1ItemsPanel v-if="itemsOpen" :temporary-mode="temporaryMode" @close="closePanels" />
     <SearchPanel v-if="searchEverOpened" v-show="searchOpen" :temporary-mode="temporaryMode" @close="closePanels" />
     <R1MemoryPanel v-if="memoryOpen" :temporary="temporaryMode" @close="closePanels" />
     <aside v-if="historyOpen" class="r1-basic-side" aria-label="历史对话">

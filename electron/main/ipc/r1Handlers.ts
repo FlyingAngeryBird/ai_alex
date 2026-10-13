@@ -50,6 +50,7 @@ export function registerR1Handlers(db: R1Database, ipc: IpcMainLike = ipcMain,
     { requireNormal(); return memory.forget(payload.memoryId, payload.expectedVersion) }))
   ipc.handle('r1.items.list', () => ({ ok: true, data: items.list() }))
   ipc.handle('r1.items.create', action<Parameters<R1Items['create']>[0]>((payload) => items.create(payload)))
+  ipc.handle('r1.items.update', action<Parameters<R1Items['update']>[0]>((payload) => items.update(payload)))
   ipc.handle('r1.items.complete', action<Parameters<R1Items['complete']>[0]>((payload) => items.complete(payload)))
   ipc.handle('r1.items.deletionPreview', action<{ itemId: string }>((payload) => items.deletionPreview(payload.itemId)))
   ipc.handle('r1.items.delete', action<Parameters<R1Items['delete']>[0]>((payload) => items.delete(payload)))

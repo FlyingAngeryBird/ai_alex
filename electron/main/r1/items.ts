@@ -52,6 +52,13 @@ function requiredText(value: string, max: number, field: string): string {
   return value.trim()
 }
 
+function optionalText(value: string, max: number, field: string): string {
+  if (typeof value !== 'string' || [...value].length > max) {
+    throw new Error(`${field} must contain at most ${max} characters`)
+  }
+  return value.trim()
+}
+
 function itemView(row: ItemRow): Item {
   return { itemId: row.item_id, kind: row.kind, title: row.title, body: row.body,
     version: row.version, completedAt: row.completed_at, deletedAt: row.deleted_at }
@@ -108,7 +115,7 @@ export class R1Items {
     return runOnce(this.db, input.actionId, input, () => {
       if (input.kind !== 'note' && input.kind !== 'todo') throw new Error('INVALID_ITEM_KIND')
       const title = requiredText(input.title, 80, 'title')
-      const body = requiredText(input.body, 8000, 'body')
+      const body = optionalText(input.body, 8000, 'body')
       const id = randomUUID()
       const now = new Date().toISOString()
       this.db.prepare('INSERT INTO items (item_id, kind, title, body, version, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)')
@@ -120,6 +127,26 @@ export class R1Items {
   list(): Item[] {
     return (this.db.prepare('SELECT * FROM items WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 100')
       .all() as ItemRow[]).map(itemView)
+  }
+
+  update(input: { actionId: string; itemId: string; expectedVersion: number;
+    kind: Item['kind']; title: string; body: string }): { item: Item; receipt: ActionReceipt } {
+    return runOnce(this.db, input.actionId, input, () => {
+      if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1 ||
+        !['note', 'todo'].includes(input.kind)) throw new Error('INVALID_ITEM_PATCH')
+      const current = itemById(this.db, input.itemId)
+      if (current.version !== input.expectedVersion) throw new Error('VERSION_CONFLICT')
+      if (current.kind !== input.kind && (current.completed_at || this.db.prepare(
+        "SELECT 1 FROM reminders WHERE item_id = ? AND link_purpose = 'todo_due' AND status = 'scheduled' LIMIT 1"
+      ).get(input.itemId))) throw new Error('ITEM_KIND_LINKED')
+      const title = requiredText(input.title, 80, 'title')
+      const body = optionalText(input.body, 8000, 'body')
+      this.db.prepare(`UPDATE items SET kind = ?, title = ?, body = ?, version = version + 1,
+        updated_at = ? WHERE item_id = ?`).run(input.kind, title, body,
+        new Date().toISOString(), input.itemId)
+      return { item: itemView(itemById(this.db, input.itemId)),
+        receipt: receipt(input.actionId, input.itemId, current.version + 1, 'item_updated') }
+    })
   }
 
   createReminder(input: { actionId: string; itemId?: string; linkPurpose: Reminder['linkPurpose'];

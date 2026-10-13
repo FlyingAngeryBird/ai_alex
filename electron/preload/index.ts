@@ -29,6 +29,7 @@ export const exposedChannels = [
   'r1.memory.sources',
   'r1.memory.forget',
   'r1.items.create',
+  'r1.items.update',
   'r1.items.complete',
   'r1.items.deletionPreview',
   'r1.items.delete',
@@ -129,6 +130,7 @@ function exposeLingliApi(
     items: {
       list: () => invokeR1('r1.items.list'),
       create: (input) => invokeR1('r1.items.create', input),
+      update: (input) => invokeR1('r1.items.update', input),
       complete: (input) => invokeR1('r1.items.complete', input),
       deletionPreview: (itemId) => invokeR1('r1.items.deletionPreview', { itemId }),
       delete: (input) => invokeR1('r1.items.delete', input)

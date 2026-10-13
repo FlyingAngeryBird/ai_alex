@@ -12,6 +12,36 @@ function future(): string {
 }
 
 describe('R1 item and reminder transactions', () => {
+  it('edits the same item with a version check and permits a title-only note', () => {
+    const { db, items } = setup()
+    try {
+      const original = items.create({ actionId: 'create-title-only', kind: 'note',
+        title: '想到的事', body: '' }).item
+      const edited = items.update({ actionId: 'edit-title-only', itemId: original.itemId,
+        expectedVersion: original.version, kind: 'note', title: '更正后的事', body: '补充内容' })
+      expect(edited.item).toMatchObject({ itemId: original.itemId, version: 2,
+        title: '更正后的事', body: '补充内容' })
+      expect(items.update({ actionId: 'edit-title-only', itemId: original.itemId,
+        expectedVersion: original.version, kind: 'note', title: '更正后的事', body: '补充内容' }))
+        .toEqual(edited)
+      expect(() => items.update({ actionId: 'stale-edit', itemId: original.itemId,
+        expectedVersion: 1, kind: 'note', title: '旧版本', body: '' })).toThrow('VERSION_CONFLICT')
+    } finally { db.close() }
+  })
+
+  it('does not convert a todo with a due reminder into a note', () => {
+    const { db, items } = setup()
+    try {
+      const todo = items.create({ actionId: 'linked-todo', kind: 'todo', title: '交报告', body: '' }).item
+      items.createReminder({ actionId: 'linked-due', itemId: todo.itemId, linkPurpose: 'todo_due',
+        body: '交报告', dueAtUtc: future(), timezone: 'Asia/Shanghai' })
+      expect(() => items.update({ actionId: 'convert-linked', itemId: todo.itemId,
+        expectedVersion: todo.version, kind: 'note', title: '交报告', body: '' }))
+        .toThrow('ITEM_KIND_LINKED')
+      expect(items.list()[0].kind).toBe('todo')
+    } finally { db.close() }
+  })
+
   it('completes a todo, cancels only its pending due reminder, and undoes only that cancellation', () => {
     const { db, items } = setup()
     try {
