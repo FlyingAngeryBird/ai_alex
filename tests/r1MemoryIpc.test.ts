@@ -20,6 +20,10 @@ describe('R1 memory IPC temporary boundary', () => {
         error: { code: 'MEMORY_UNAVAILABLE_IN_TEMPORARY_SESSION' } })
       expect(add(null, { content: '秘密', category: 'profile' })).toMatchObject({ ok: false,
         error: { code: 'MEMORY_UNAVAILABLE_IN_TEMPORARY_SESSION' } })
+      expect(handlers.get('r1.history.list')!(null)).toMatchObject({ ok: false,
+        error: { code: 'HISTORY_UNAVAILABLE_IN_TEMPORARY_SESSION' } })
+      expect(handlers.get('r1.history.messages')!(null, { sessionId: 'old' })).toMatchObject({ ok: false,
+        error: { code: 'HISTORY_UNAVAILABLE_IN_TEMPORARY_SESSION' } })
       expect(db.prepare('SELECT COUNT(*) AS count FROM memory').get()).toMatchObject({ count: 0 })
       mode.temporary = false
       expect(add(null, { content: '喜欢茶', category: 'preference' }))

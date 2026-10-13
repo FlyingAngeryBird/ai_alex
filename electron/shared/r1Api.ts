@@ -4,6 +4,7 @@ import type { ReminderDueEvent } from '../main/r1/reminderScheduler.js'
 import type { SearchResult } from '../main/providers/braveSearchProvider.js'
 import type { R1Persona, R1PersonaStore } from '../main/r1/persona.js'
 import type { R1Memory, R1MemoryPage, R1MemorySource, R1MemoryStore } from '../main/r1/memory.js'
+import type { HistoryPage, R1Conversations, SessionMessage } from '../main/r1/conversations.js'
 
 export type R1Result<T> =
   | { ok: true; data: T }
@@ -23,6 +24,10 @@ export type R1Api = {
     update(input: Parameters<R1MemoryStore['update']>[0]): Promise<R1Result<R1Memory>>
     sources(memoryId: string): Promise<R1Result<R1MemorySource[]>>
     forget(memoryId: string, expectedVersion: number): Promise<R1Result<{ memoryId: string; deletionEpoch: number }>>
+  }
+  history: {
+    list(input?: Parameters<R1Conversations['history']>[0]): Promise<R1Result<HistoryPage>>
+    messages(sessionId: string): Promise<R1Result<SessionMessage[]>>
   }
   items: {
     list(): Promise<R1Result<Item[]>>

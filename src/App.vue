@@ -5,12 +5,13 @@ import MusicImmersiveView from '@/components/MusicImmersiveView.vue'
 import ParticleSphere from '@/components/ParticleSphere.vue'
 import R1SettingsPanel from '@/components/R1SettingsPanel.vue'
 import R1MemoryPanel from '@/components/R1MemoryPanel.vue'
+import R1HistoryPanel from '@/components/R1HistoryPanel.vue'
 import R1ItemsPanel from '@/components/R1ItemsPanel.vue'
 import SearchPanel from '@/components/SearchPanel.vue'
 import R1CompanionHome from '@/components/R1CompanionHome.vue'
 import R1Composer from '@/components/R1Composer.vue'
 import { AudioLines, Brain, Headphones, History, MessageCircle, Mic, MicOff, NotebookPen,
-  Settings2, X } from 'lucide-vue-next'
+  Settings2 } from 'lucide-vue-next'
 import { useAutoListen } from '@/composables/useAutoListen'
 import { useConversation } from '@/composables/useConversation'
 import { useKeyboardRecorder } from '@/composables/useKeyboardRecorder'
@@ -883,12 +884,7 @@ onBeforeUnmount(() => {
     <R1ItemsPanel v-if="itemsOpen" :temporary-mode="temporaryMode" @close="closePanels" />
     <SearchPanel v-if="searchEverOpened" v-show="searchOpen" :temporary-mode="temporaryMode" @close="closePanels" />
     <R1MemoryPanel v-if="memoryOpen" :temporary="temporaryMode" @close="closePanels" />
-    <aside v-if="historyOpen" class="r1-basic-side" aria-label="历史对话">
-      <header><div><small>SEAMO / PERSONAL SPACE</small><h2>聊过的话</h2></div><button aria-label="关闭侧栏" @click="closePanels"><X :size="19" /></button></header>
-      <div class="r1-basic-content"><p>当前已加载的对话</p>
-        <article v-for="message in conversation.messages.value" :key="message.id"><small>{{ message.role === 'user' ? '你' : 'Seamo AI' }}</small><p>{{ message.text }}</p></article>
-        <p>完整历史的恢复与检索仍在接入。</p></div>
-    </aside>
+    <R1HistoryPanel v-if="historyOpen" :temporary="temporaryMode" :assistant-name="persona?.assistantName || 'Seamo AI'" @close="closePanels" />
     <aside v-if="reminderNotice" class="r1-reminder-toast" role="status">
       <div><strong>提醒已到期</strong><p>{{ reminderNotice.body }}</p>
         <small>{{ reminderNotice.systemRequested ? '系统通知已请求；不代表已读。' : '已在应用内显示；系统通知未请求。' }}</small>

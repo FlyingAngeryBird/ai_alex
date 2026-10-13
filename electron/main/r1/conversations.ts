@@ -13,6 +13,10 @@ export type SessionMessage = {
   createdAt: string
 }
 
+export type HistorySession = { sessionId: string; title: string; createdAt: string;
+  lastMessageAt: string; messageCount: number }
+export type HistoryPage = { sessions: HistorySession[]; page: number; hasMore: boolean }
+
 type TemporarySession = { messages: SessionMessage[]; active: boolean }
 
 export class R1Conversations {
@@ -57,9 +61,11 @@ export class R1Conversations {
   }
 
   messages(sessionId: string): SessionMessage[] {
+    if (typeof sessionId !== 'string' || !sessionId) throw new Error('INVALID_SESSION_ID')
     const temp = this.temporary.get(sessionId)
     if (temp) return temp.messages.map((message) => ({ ...message }))
-    const session = this.db.prepare('SELECT 1 FROM sessions WHERE session_id = ? AND temporary = 0')
+    const session = this.db.prepare(`SELECT 1 FROM sessions WHERE session_id = ?
+      AND temporary = 0 AND status <> 'memory_source'`)
       .get(sessionId)
     if (!session) throw new Error('SESSION_NOT_FOUND')
     const rows = this.db.prepare('SELECT * FROM messages WHERE session_id = ? ORDER BY created_at, rowid')
@@ -90,5 +96,31 @@ export class R1Conversations {
     return (this.db.prepare(`SELECT session_id FROM sessions WHERE temporary = 0
       AND status <> 'memory_source' ORDER BY created_at DESC`)
       .all() as { session_id: string }[]).map((row) => row.session_id)
+  }
+
+  history(input: { query?: string; page?: number } = {}): HistoryPage {
+    const query = input.query ?? ''
+    const page = input.page ?? 0
+    if (typeof query !== 'string' || [...query].length > 1000 ||
+      !Number.isSafeInteger(page) || page < 0 || page > 100_000) throw new Error('INVALID_HISTORY_QUERY')
+    const escaped = query.trim().replace(/[\\%_]/g, '\\$&')
+    const rows = this.db.prepare(`SELECT s.session_id AS session_id,
+      s.created_at AS created_at, MAX(m.created_at) AS last_message_at,
+      COUNT(m.message_id) AS message_count,
+      COALESCE((SELECT first.body FROM messages first WHERE first.session_id = s.session_id
+        AND first.role = 'user' ORDER BY first.created_at, first.rowid LIMIT 1), '日常对话') AS title
+      FROM sessions s JOIN messages m ON m.session_id = s.session_id
+      WHERE s.temporary = 0 AND s.status <> 'memory_source'
+        AND (? = '' OR EXISTS (SELECT 1 FROM messages matched
+          WHERE matched.session_id = s.session_id AND matched.body LIKE ? ESCAPE '\\'))
+      GROUP BY s.session_id ORDER BY last_message_at DESC, s.session_id DESC
+      LIMIT 21 OFFSET ?`).all(query.trim(), `%${escaped}%`, page * 20) as {
+      session_id: string; created_at: string; last_message_at: string;
+      message_count: number; title: string
+    }[]
+    return { sessions: rows.slice(0, 20).map(row => ({ sessionId: row.session_id,
+      title: [...row.title].slice(0, 80).join(''), createdAt: row.created_at,
+      lastMessageAt: row.last_message_at, messageCount: row.message_count })),
+      page, hasMore: rows.length > 20 }
   }
 }

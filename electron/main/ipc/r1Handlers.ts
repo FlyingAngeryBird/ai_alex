@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import { R1Items } from '../r1/items.js'
 import { R1PersonaStore } from '../r1/persona.js'
 import { R1MemoryStore } from '../r1/memory.js'
+import { R1Conversations } from '../r1/conversations.js'
 import type { R1SessionMode } from '../r1/sessionMode.js'
 import type { R1Database } from '../r1/database.js'
 
@@ -26,6 +27,7 @@ export function registerR1Handlers(db: R1Database, ipc: IpcMainLike = ipcMain,
   const items = new R1Items(db)
   const persona = new R1PersonaStore(db)
   const memory = new R1MemoryStore(db)
+  const history = new R1Conversations(db)
   ipc.handle('r1.persona.get', () => ({ ok: true, data: persona.get() }))
   ipc.handle('r1.persona.update', action<Parameters<R1PersonaStore['update']>[0]>((payload) => persona.update(payload)))
   const requireNormal = () => {
@@ -48,6 +50,18 @@ export function registerR1Handlers(db: R1Database, ipc: IpcMainLike = ipcMain,
     { requireNormal(); return memory.sources(payload.memoryId) }))
   ipc.handle('r1.memory.forget', action<{ memoryId: string; expectedVersion: number }>((payload) =>
     { requireNormal(); return memory.forget(payload.memoryId, payload.expectedVersion) }))
+  ipc.handle('r1.history.list', (_event, payload) => {
+    try {
+      if (sessionMode.temporary) throw new Error('HISTORY_UNAVAILABLE_IN_TEMPORARY_SESSION')
+      if (payload !== undefined && (!payload || typeof payload !== 'object' || Array.isArray(payload))) {
+        throw new Error('INVALID_HISTORY_QUERY')
+      }
+      return { ok: true, data: history.history(payload as Parameters<R1Conversations['history']>[0]) }
+    } catch (error) { return failure(error) }
+  })
+  ipc.handle('r1.history.messages', action<{ sessionId: string }>((payload) =>
+    { if (sessionMode.temporary) throw new Error('HISTORY_UNAVAILABLE_IN_TEMPORARY_SESSION')
+      return history.messages(payload.sessionId) }))
   ipc.handle('r1.items.list', () => ({ ok: true, data: items.list() }))
   ipc.handle('r1.items.create', action<Parameters<R1Items['create']>[0]>((payload) => items.create(payload)))
   ipc.handle('r1.items.update', action<Parameters<R1Items['update']>[0]>((payload) => items.update(payload)))
