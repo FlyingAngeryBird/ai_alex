@@ -6,6 +6,7 @@ import { R1TaskSupervisor } from '../electron/main/r1/taskSupervisor'
 import { loadR1PromptAssets } from '../electron/main/r1/promptAssets'
 import { R1Artifacts } from '../electron/main/r1/artifacts'
 import { R1Items } from '../electron/main/r1/items'
+import { R1TaskToolExecutor } from '../electron/main/r1/taskToolExecutor'
 const assets = loadR1PromptAssets(resolve('r1-assets'))
 function setup() {
   const db = openR1Database(':memory:')
@@ -110,6 +111,21 @@ describe('R1 TaskSupervisor identity, recovery and result publication', () => {
       expect(supervisor.get(task.taskId)).toMatchObject({ status: 'succeeded', resultId: result.resultId })
       expect(db.prepare('SELECT COUNT(*) AS n FROM artifact_versions').get()).toMatchObject({ n: 1 })
       expect(db.prepare('SELECT status FROM task_runs WHERE run_id = ?').get(running.lease.runId)).toMatchObject({ status: 'succeeded' })
+    } finally { supervisor.close(); db.close() }
+  })
+  it('requires real delegated write receipts, while optional internal reads need not be listed as user results', () => {
+    const { db, supervisor, request } = setup()
+    try {
+      supervisor.accept({ ...request, requiredActions: [{ alias: 'notes_create', minimumCount: 1 }] })
+      const active = supervisor.claimNext()!
+      const executor = new R1TaskToolExecutor(supervisor, assets, new R1Items(db))
+      const read = executor.execute(active.lease, 'read_file', { file_path: '/skills/capture-item/SKILL.md' })
+      expect(() => supervisor.publish(active.lease, { ...draft(), artifacts: [], receiptActionIds: [read.actionId] }, new R1Artifacts(db)))
+        .toThrow('TASK_COMPLETION_REQUIRED_RECEIPT_MISSING')
+      const saved = executor.execute(active.lease, 'notes_create', { type: 'note', title: '真实便签', content: '正文', mode: 'organized', sourceRefs: [] })
+      const published = supervisor.publish(active.lease, { ...draft(), artifacts: [], receiptActionIds: [saved.actionId] }, new R1Artifacts(db))
+      expect(published.entityReceipts).toMatchObject([{ actionId: saved.actionId, entityId: saved.entityId, status: 'succeeded' }])
+      expect(new R1Items(db).list()).toHaveLength(1)
     } finally { supervisor.close(); db.close() }
   })
   it('restores ordinary interrupted tasks to needs_resume and never writes temporary task bodies', () => {

@@ -14,8 +14,11 @@ type TaskCheckpoint = { version: 1; requestKey: string; requestFingerprint?: str
   contextVersion: number; deletionEpoch: number; authorizedAliases: string[]; loadedSkillIds: string[];
   runId: string | null; stopRequested: 'paused' | 'cancelled' | null; planVersion: number; plan: PlanStep[];
   observations: R1TaskInput['observations']; receiptActionIds: string[]; progressBrief: string;
-  actions?: Array<{ actionId: string; alias: string; runId: string }>;
+  actions?: Array<{ actionId: string; alias: string; runId: string; fingerprint?: string; callId?: string }>;
   toolReceipts?: TaskToolReceipt[];
+  initialBudget?: R1TaskInput['budget']; budgetStopped?: boolean; persistenceConfirmed?: boolean;
+  steerEventId?: string;
+  requiredActions?: Array<{ alias: string; minimumCount: number }>;
   result?: TaskResult; publicationRunId?: string }
 export type TaskResult = { resultId: string; goalVersion: number; completionStatus: 'completed' | 'partial' | 'needs_input';
   replyBrief: string; sourceRefs: string[]; artifacts: Array<{ artifactId: string; version: number; title: string; content: string }>;
@@ -49,6 +52,7 @@ export class R1TaskSupervisor {
   private readonly controllers = new Map<string, AbortController>()
   private suspended = false
   private closed = false
+  private pendingEvents: TaskEvent[] | null = null
   constructor(private readonly db: R1Database, private readonly assets: R1PromptAssets,
     private readonly deletionEpoch: () => number, private readonly options: {
       clock?: () => number; temporarySource?: (messageId: string) => TaskSource | undefined
@@ -129,10 +133,12 @@ export class R1TaskSupervisor {
   }
   private emit(record: RecordTask, reason: TaskEvent['reason']): void {
     const event: TaskEvent = { eventId: randomUUID(), occurredAt: new Date().toISOString(), task: this.get(record.taskId), reason }
+    if (this.pendingEvents) { this.pendingEvents.push(event); return }
     for (const listener of this.listeners) { try { listener(structuredClone(event)) } catch { /* committed */ } }
   }
   accept(input: { requestKey: string; sourceMessageId: string; timezone: string; goal: string;
-    constraints: string[]; authorizedAliases: string[]; complexity: 'light' | 'complex' }): R1Task {
+    constraints: string[]; authorizedAliases: string[]; complexity: 'light' | 'complex'; persistenceConfirmed?: boolean;
+    requiredActions?: Array<{ alias: string; minimumCount: number }> }): R1Task {
     if (this.closed) throw new Error('TASK_SERVICE_CLOSED')
     requireText(input.requestKey, 160, 'TASK_REQUEST_KEY_INVALID')
     requireText(input.sourceMessageId, 160, 'TASK_SOURCE_INVALID')
@@ -143,10 +149,16 @@ export class R1TaskSupervisor {
     if (typeof input.timezone !== 'string' || !input.timezone) throw new Error('TASK_TIMEZONE_INVALID')
     try { new Intl.DateTimeFormat('zh-CN', { timeZone: input.timezone }) } catch { throw new Error('TASK_TIMEZONE_INVALID') }
     this.assets.exposeTools({ channel: 'task', loadedSkillIds: [], authorizedAliases: input.authorizedAliases, temporary: false })
+    const requirements = input.requiredActions ?? []
+    if (!Array.isArray(requirements) || requirements.length > 20 || new Set(requirements.map(action => action.alias)).size !== requirements.length ||
+      requirements.some(action => !input.authorizedAliases.includes(action.alias) || !Number.isSafeInteger(action.minimumCount) ||
+        action.minimumCount < 1 || action.minimumCount > 50 || !['write', 'media', 'ui_then_write'].includes(this.assets.toolDefinition(action.alias).effect))) throw new Error('TASK_REQUIREMENTS_INVALID')
     // The original request remains immutable even when the current goal/source changes.
     const fingerprint = createHash('sha256').update(JSON.stringify({ sourceMessageId: input.sourceMessageId,
       timezone: input.timezone, goal: input.goal, constraints: input.constraints,
-      authorizedAliases: [...new Set(input.authorizedAliases)].sort(), complexity: input.complexity })).digest('hex')
+      authorizedAliases: [...new Set(input.authorizedAliases)].sort(), complexity: input.complexity,
+      ...(requirements.length ? { requiredActions: [...requirements].sort((left, right) => left.alias.localeCompare(right.alias)) } : {}),
+      ...(input.persistenceConfirmed === true ? { persistenceConfirmed: true } : {}) })).digest('hex')
     const existing = [...this.records.values()].find(record => record.checkpoint.requestKey === input.requestKey)
     if (existing) {
       if (!existing.checkpoint.requestFingerprint) throw new Error('TASK_REQUEST_REVALIDATION_REQUIRED')
@@ -163,8 +175,11 @@ export class R1TaskSupervisor {
       createdAt: new Date().toISOString(), budget: this.assets.taskBudget(input.complexity),
       checkpoint: { version: 1, requestKey: input.requestKey, requestFingerprint: fingerprint, source, sourceRefs: [source.messageId],
         contextVersion: 1, deletionEpoch: this.deletionEpoch(), authorizedAliases: [...input.authorizedAliases], loadedSkillIds: [],
+        initialBudget: this.assets.taskBudget(input.complexity), persistenceConfirmed: input.persistenceConfirmed === true,
+        requiredActions: structuredClone(requirements),
         runId: null, stopRequested: null, planVersion: 0, plan: [], observations: [{ refId: source.messageId,
-          kind: 'source', version: 1, summary: JSON.stringify({ turnId: source.turnId, createdAt: source.createdAt, timezone: source.timezone }),
+          kind: 'source', version: 1, summary: JSON.stringify({ turnId: source.turnId, createdAt: source.createdAt, timezone: source.timezone,
+            requiredActions: requirements }),
           resourcePath: `/task/${taskId}/source-turn.json` }], receiptActionIds: [], progressBrief: '已受理。' } }
     this.persist(record); this.records.set(record.taskId, record); this.emit(record, 'accepted')
     return this.get(record.taskId)
@@ -185,6 +200,10 @@ export class R1TaskSupervisor {
     const controller = new AbortController(); this.controllers.set(runId, controller)
     this.emit(record, 'running')
     return { lease: this.lease(record), signal: controller.signal }
+  }
+  hasRunnable(): boolean {
+    return !this.closed && !this.suspended && ![...this.records.values()].some(record => record.status === 'running') &&
+      [...this.records.values()].some(record => record.status === 'accepted')
   }
   private lease(record: RecordTask): TaskLease {
     if (!record.checkpoint.runId) throw new Error('TASK_RUN_MISSING')
@@ -218,7 +237,7 @@ export class R1TaskSupervisor {
     record.budget.decisionsRemaining--; this.persist(record)
     return input
   }
-  consumeTool(lease: TaskLease, alias: string): string {
+  consumeTool(lease: TaskLease, alias: string, identity?: { callId: string; fingerprint: string }): string {
     this.assertLease(lease)
     const record = this.checked(lease.taskId)
     if (record.budget.toolsRemaining < 1) throw new Error('TASK_TOOL_BUDGET_EXHAUSTED')
@@ -226,10 +245,17 @@ export class R1TaskSupervisor {
     if (!this.assets.exposeTools({ channel: 'task', loadedSkillIds: record.checkpoint.loadedSkillIds,
       authorizedAliases: record.checkpoint.authorizedAliases, temporary: record.temporary })
       .some(tool => tool.function.name === alias)) throw new Error('MODEL_TOOL_NOT_EXPOSED')
+    const prior = identity ? record.checkpoint.actions?.find(action => action.callId === identity.callId && action.runId === lease.runId) : undefined
+    if (prior) {
+      if (prior.alias !== alias || prior.fingerprint !== identity!.fingerprint) throw new Error('TASK_TOOL_CALL_ID_REUSED')
+      record.budget.toolsRemaining--; this.persist(record)
+      return prior.actionId
+    }
     const actionId = randomUUID()
     record.checkpoint.actions ??= []
     if (record.checkpoint.actions.length >= 50) throw new Error('TASK_ACTION_LIMIT')
-    record.checkpoint.actions.push({ actionId, alias, runId: lease.runId })
+    record.checkpoint.actions.push({ actionId, alias, runId: lease.runId,
+      ...(identity ? identity : {}) })
     record.budget.toolsRemaining--; this.persist(record)
     return actionId
   }
@@ -242,6 +268,144 @@ export class R1TaskSupervisor {
   }
   originalSource(lease: TaskLease): TaskSource {
     this.assertLease(lease); return structuredClone(this.checked(lease.taskId).checkpoint.source)
+  }
+  authorizedAliases(lease: TaskLease): string[] {
+    this.assertLease(lease); return [...this.checked(lease.taskId).checkpoint.authorizedAliases]
+  }
+  steeringEvent(lease: TaskLease): Record<string, unknown> | undefined {
+    this.assertLease(lease)
+    const record = this.checked(lease.taskId)
+    if (!record.checkpoint.steerEventId) return undefined
+    return { eventId: record.checkpoint.steerEventId, taskId: record.taskId, newGoalVersion: record.goalVersion,
+      currentStatus: 'running', goal: record.goal, constraints: [...record.constraints],
+      sourceTurnIds: [record.checkpoint.source.turnId], validReceiptActionIds: [...record.checkpoint.receiptActionIds] }
+  }
+  assertToolSources(lease: TaskLease, refs: string[]): void {
+    this.assertLease(lease)
+    const record = this.checked(lease.taskId)
+    if (refs.some(ref => !record.checkpoint.sourceRefs.includes(ref) ||
+      this.db.prepare('SELECT 1 FROM source_suppression WHERE source_ref = ?').get(ref))) throw new Error('TASK_TOOL_SOURCE_INVALID')
+  }
+  assertPersistenceAllowed(lease: TaskLease): void {
+    this.assertLease(lease)
+    const record = this.checked(lease.taskId)
+    if (record.temporary && !record.checkpoint.persistenceConfirmed) throw new Error('TEMPORARY_SAVE_CONFIRMATION_REQUIRED')
+  }
+  /** Synchronous local tools commit their state and real receipt together. No external I/O here. */
+  executeLocalTool(lease: TaskLease, alias: string, input: unknown, run: (actionId: string) => {
+    data: Record<string, unknown>; entityId?: string | null; entityVersion?: number | null
+  }, callId?: string): TaskToolReceipt {
+    const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object'
+      ? Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right)).map(([key, nested]) => [key, canonical(nested)])) : value
+    if (callId !== undefined && (typeof callId !== 'string' || !callId || callId.length > 300)) throw new Error('TASK_TOOL_CALL_ID_INVALID')
+    const fingerprint = createHash('sha256').update(JSON.stringify(canonical(input))).digest('hex')
+    const actionId = this.consumeTool(lease, alias, callId ? { callId, fingerprint } : undefined)
+    const current = this.checked(lease.taskId)
+    if (current.checkpoint.receiptActionIds.includes(actionId)) {
+      const previous = this.readReceipt(lease, actionId)
+      if (previous.status === 'unknown') throw new Error('TASK_RECEIPT_RECONCILIATION_REQUIRED')
+      return previous
+    }
+    if (current.checkpoint.actions?.find(action => action.actionId === actionId)!.runId !== lease.runId) {
+      throw new Error('TASK_RECEIPT_RECONCILIATION_REQUIRED')
+    }
+    const record = this.checked(lease.taskId); const previous = structuredClone(record)
+    const events: TaskEvent[] = []
+    this.pendingEvents = events
+    let output: TaskToolReceipt
+    try {
+      output = inTransaction(this.db, () => {
+        this.assertLease(lease)
+        const result = run(actionId)
+        this.assertLease(lease)
+        const receipt: TaskToolReceipt = { kind: 'receipt', actionId, tool: this.assets.toolDefinition(alias).name,
+          status: 'succeeded', entityId: result.entityId ?? null, entityVersion: result.entityVersion ?? null,
+          data: result.data, errorCode: null, retryable: false, runId: lease.runId }
+        this.storeLocalReceipt(lease, receipt)
+        return receipt
+      })
+    } catch (error) {
+      this.records.set(record.taskId, previous)
+      events.length = 0
+      this.assertLease(lease)
+      const code = error instanceof Error && /^[A-Z][A-Z0-9_]{1,80}$/.test(error.message) ? error.message : 'TASK_TOOL_FAILED'
+      output = { kind: 'receipt', actionId, tool: this.assets.toolDefinition(alias).name,
+        status: 'failed', entityId: null, entityVersion: null, data: {}, errorCode: code, retryable: false, runId: lease.runId }
+      inTransaction(this.db, () => this.storeLocalReceipt(lease, output))
+    } finally { this.pendingEvents = null }
+    for (const event of events) for (const listener of this.listeners) { try { listener(structuredClone(event)) } catch { /* committed */ } }
+    return structuredClone(output)
+  }
+  private storeLocalReceipt(lease: TaskLease, receipt: TaskToolReceipt): void {
+    this.assertLease(lease)
+    const record = this.checked(lease.taskId)
+    this.assets.validateToolOutput(record.checkpoint.actions!.find(action => action.actionId === receipt.actionId)!.alias, receipt)
+    if (record.checkpoint.receiptActionIds.length >= 50) throw new Error('TASK_RECEIPT_LIMIT')
+    const stored = this.db.prepare('SELECT status, entity_id, entity_version FROM receipts WHERE action_id = ?').get(receipt.actionId) as {
+      status: string; entity_id: string | null; entity_version: number | null
+    } | undefined
+    if (stored && (stored.status !== receipt.status || stored.entity_id !== receipt.entityId || stored.entity_version !== receipt.entityVersion)) {
+      throw new Error('TASK_RECEIPT_NOT_VERIFIED')
+    }
+    if (!record.temporary) {
+      if (stored) this.db.prepare('UPDATE receipts SET task_id = ?, run_id = ? WHERE action_id = ?')
+        .run(record.taskId, lease.runId, receipt.actionId)
+      else this.db.prepare(`INSERT INTO receipts (action_id, task_id, run_id, entity_id, entity_version, status, actual_result_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(receipt.actionId, record.taskId, lease.runId, receipt.entityId,
+          receipt.entityVersion, receipt.status, JSON.stringify(receipt), new Date().toISOString())
+    }
+    record.checkpoint.toolReceipts ??= []; record.checkpoint.toolReceipts.push(structuredClone(receipt))
+    record.checkpoint.receiptActionIds.push(receipt.actionId)
+    record.checkpoint.observations.push({ refId: receipt.actionId, kind: 'receipt', version: 1,
+      summary: `${receipt.tool}: ${receipt.status}`, resourcePath: `/task/${record.taskId}/receipts/${receipt.actionId}.json` })
+    this.persist(record)
+  }
+  readReceipt(lease: TaskLease, actionId: string): TaskToolReceipt {
+    this.assertLease(lease)
+    const record = this.checked(lease.taskId)
+    const output = record.checkpoint.toolReceipts?.find(receipt => receipt.actionId === actionId)
+    if (!output) throw new Error('TASK_RECEIPT_NOT_VERIFIED')
+    if (!record.temporary || output.entityId !== null) {
+      const row = this.db.prepare('SELECT status, task_id FROM receipts WHERE action_id = ?').get(actionId) as { status: string; task_id: string } | undefined
+      if (!row || row.status !== output.status || (!record.temporary && row.task_id !== record.taskId)) throw new Error('TASK_RECEIPT_RECONCILIATION_REQUIRED')
+    }
+    return structuredClone(output)
+  }
+  verifyRecovery(lease: TaskLease): void {
+    this.assertLease(lease)
+    const record = this.checked(lease.taskId)
+    for (const action of record.checkpoint.actions ?? []) {
+      if (action.runId === lease.runId) continue
+      if (!record.checkpoint.receiptActionIds.includes(action.actionId)) throw new Error('TASK_RECEIPT_RECONCILIATION_REQUIRED')
+      const canonical = record.checkpoint.toolReceipts?.find(receipt => receipt.actionId === action.actionId)
+      if (!canonical || canonical.status === 'unknown') throw new Error('TASK_RECEIPT_RECONCILIATION_REQUIRED')
+      this.readReceipt(lease, action.actionId)
+    }
+  }
+  stopRun(lease: TaskLease, code: string): void {
+    const record = this.checked(lease.taskId)
+    if (record.status !== 'running' || record.checkpoint.runId !== lease.runId || record.goalVersion !== lease.goalVersion ||
+      record.checkpoint.contextVersion !== lease.contextVersion) return
+    if (record.checkpoint.deletionEpoch !== this.deletionEpoch()) { this.invalidateContext(); return }
+    if (record.checkpoint.stopRequested === 'paused') { this.settlePause(lease); return }
+    this.account(record)
+    record.checkpoint.budgetStopped = code.includes('BUDGET')
+    const receipts = (record.checkpoint.toolReceipts ?? []).map(receipt => {
+      const row = this.db.prepare('SELECT status, entity_id FROM receipts WHERE action_id = ?').get(receipt.actionId) as {
+        status: TaskToolReceipt['status']; entity_id: string | null
+      } | undefined
+      const status = record.temporary && receipt.entityId === null ? receipt.status : row?.status ?? 'unknown'
+      return { actionId: receipt.actionId, tool: receipt.tool, status,
+        entityId: row?.entity_id ?? receipt.entityId, summary: '以实际执行回执为准。' }
+    })
+    const brief = record.checkpoint.budgetStopped ? '已达到本次处理预算；可以查看已执行结果并选择继续。'
+      : code === 'TASK_RECEIPT_RECONCILIATION_REQUIRED' ? '已有步骤的回执需要核对，已停止继续执行。' : '本次处理未完成，已保存可核验的执行记录。'
+    record.checkpoint.result = { resultId: randomUUID(), goalVersion: record.goalVersion, completionStatus: 'partial',
+      replyBrief: brief, sourceRefs: [...record.checkpoint.sourceRefs], artifacts: [], unresolved: [code], candidateRefs: [], entityReceipts: receipts }
+    record.checkpoint.progressBrief = brief
+    const status = code === 'STRUCTURED_OUTPUT_INVALID' ? 'failed' : 'partially_succeeded'
+    this.endRun(record, status); record.status = status
+    this.persist(record); this.emit(record, 'completed')
   }
   recordInternalReceipt(lease: TaskLease, receipt: TaskToolReceipt): void {
     this.assertLease(lease)
@@ -305,6 +469,11 @@ export class R1TaskSupervisor {
     const draft = value as TaskDraft
     if (draft.goalVersion !== record.goalVersion) throw new Error('TASK_CONTEXT_STALE')
     if (draft.status === 'completed' && draft.unresolved.length) throw new Error('TASK_COMPLETION_INCONSISTENT')
+    for (const requirement of record.checkpoint.requiredActions ?? []) if (draft.status === 'completed') {
+      const actual = (record.checkpoint.toolReceipts ?? []).filter(receipt => receipt.tool === this.assets.toolDefinition(requirement.alias).name &&
+        receipt.status === 'succeeded' && draft.receiptActionIds.includes(receipt.actionId))
+      if (actual.length < requirement.minimumCount) throw new Error('TASK_COMPLETION_REQUIRED_RECEIPT_MISSING')
+    }
     draft.artifacts.forEach(artifact => artifacts.validateDraft(artifact))
     const sources = new Set(record.checkpoint.sourceRefs)
     const refs = [...draft.sourceRefs, ...draft.artifacts.flatMap(artifact => artifact.sourceRefs),
@@ -316,7 +485,7 @@ export class R1TaskSupervisor {
       observation.kind === 'candidate' && observation.refId === candidate.candidateId))) throw new Error('TASK_RESULT_CANDIDATE_INVALID')
     const receipts = draft.receiptActionIds.map(actionId => {
       if (!record.checkpoint.receiptActionIds.includes(actionId)) throw new Error('TASK_RESULT_RECEIPT_INVALID')
-      const temporaryReceipt = record.temporary ? record.checkpoint.toolReceipts?.find(receipt => receipt.actionId === actionId) : undefined
+      const temporaryReceipt = record.temporary ? this.readReceipt(lease, actionId) : undefined
       const row = temporaryReceipt ? { status: temporaryReceipt.status, entity_id: temporaryReceipt.entityId }
         : this.db.prepare('SELECT * FROM receipts WHERE action_id = ? AND task_id = ?').get(actionId, record.taskId) as {
         status: TaskResult['entityReceipts'][number]['status']; entity_id: string | null
@@ -327,7 +496,8 @@ export class R1TaskSupervisor {
       return { actionId, tool: this.assets.toolDefinition(action.alias).name,
         status: row.status, entityId: row.entity_id, summary: '以实际执行回执为准。' }
     })
-    if (draft.status === 'completed' && record.checkpoint.receiptActionIds.some(id => !draft.receiptActionIds.includes(id))) {
+    if (draft.status === 'completed' && record.checkpoint.receiptActionIds.some(id => !draft.receiptActionIds.includes(id) &&
+      ['write', 'media', 'ui_then_write'].includes(this.assets.toolDefinition(record.checkpoint.actions!.find(action => action.actionId === id)!.alias).effect))) {
       throw new Error('TASK_RESULT_RECEIPT_OMITTED')
     }
     const baseIds = draft.artifacts.map(artifact => artifact.baseArtifactId).filter(id => id !== null)
@@ -335,7 +505,8 @@ export class R1TaskSupervisor {
     for (const artifact of draft.artifacts) if (artifact.baseArtifactId !== null) {
       const permitted = record.checkpoint.observations.find(observation => observation.kind === 'artifact' &&
         observation.refId === artifact.baseArtifactId && observation.version === artifact.baseArtifactVersion)
-      if (!permitted || artifacts.get(artifact.baseArtifactId, record.temporary ? record.checkpoint.source.sessionId : null).version !== artifact.baseArtifactVersion) {
+      if (!permitted) throw new Error('TASK_RESULT_ARTIFACT_INVALID')
+      if (artifacts.get(artifact.baseArtifactId, record.temporary ? record.checkpoint.source.sessionId : null).version !== artifact.baseArtifactVersion) {
         throw new Error('VERSION_CONFLICT')
       }
     } else if (artifact.baseArtifactVersion !== null) throw new Error('TASK_ARTIFACT_BASE_INVALID')
@@ -409,13 +580,19 @@ export class R1TaskSupervisor {
   resume(taskId: string, expectedGoalVersion: number): R1Task {
     const record = this.checked(taskId, expectedGoalVersion)
     if (this.suspended) throw new Error('TASK_DEVICE_SUSPENDED')
-    if (!['paused', 'needs_resume', 'waiting_input'].includes(record.status)) throw new Error('TASK_INVALID_STATE')
+    if (!['paused', 'needs_resume', 'waiting_input', 'partially_succeeded'].includes(record.status)) throw new Error('TASK_INVALID_STATE')
     this.source(record.checkpoint.source.messageId)
     if (record.assetReleaseId !== this.assets.releaseId) throw new Error('TASK_ASSET_RELEASE_UNAVAILABLE')
     if (record.checkpoint.deletionEpoch !== this.deletionEpoch()) throw new Error('TASK_CONTEXT_REVALIDATION_REQUIRED')
-    if (record.budget.decisionsRemaining < 1 || record.budget.activeMsRemaining < 1) throw new Error('TASK_BUDGET_EXHAUSTED')
+    let renewedBudget: R1TaskInput['budget'] | null = null
+    if (record.budget.decisionsRemaining < 1 || record.budget.activeMsRemaining < 1 || record.checkpoint.budgetStopped) {
+      if (!record.checkpoint.budgetStopped || !record.checkpoint.initialBudget) throw new Error('TASK_BUDGET_EXHAUSTED')
+      renewedBudget = structuredClone(record.checkpoint.initialBudget)
+    }
     if ([...this.records.values()].filter(value => ['accepted', 'running'].includes(value.status)).length >= 4) throw new Error('TASK_QUEUE_FULL')
+    if (renewedBudget) record.budget = renewedBudget
     record.status = 'accepted'; record.checkpoint.runId = null; record.checkpoint.stopRequested = null
+    record.checkpoint.budgetStopped = false
     record.checkpoint.progressBrief = '准备继续，先核对已提交的步骤。'
     this.persist(record); this.emit(record, 'accepted'); return this.get(taskId)
   }
@@ -432,6 +609,7 @@ export class R1TaskSupervisor {
     const previousStatus = record.status
     this.endRun(record, 'superseded')
     record.goal = input.goal; record.constraints = [...input.constraints]; record.goalVersion++
+    record.checkpoint.steerEventId = randomUUID()
     record.checkpoint.contextVersion++; record.checkpoint.deletionEpoch = this.deletionEpoch()
     source.timezone = record.checkpoint.source.timezone; record.checkpoint.source = source
     record.checkpoint.sourceRefs = [source.messageId]; record.checkpoint.observations = [{ refId: source.messageId,

@@ -1,5 +1,7 @@
 上一次输出未通过应用Schema校验，请仅修复它的格式与可证实字段：
 {{repair_json}}
 只输出targetSchema规定的JSON对象，不加围栏。保留可由输入、来源和回执证明的原意；不得为了填字段虚构ID、时间、来源或成功状态。
+sourceSnapshot.receiptProofs是实际actionId与工具、entityId、状态、版本的对应关系；receiptActionIds只使用其中的actionId，不使用协议call_id或entityId代替。sourceRefs只使用sourceSnapshot.sourceRefs中有效的来源，不能混入事项ID或回执ID。
+sourceSnapshot.artifactBases列出允许续改的Artifact基准。Item和Reminder不是Artifact，已保存事项无需另造Artifact；不必要的工作稿可以保留为空数组。确有原任务要求的新工作稿，其baseArtifactId与baseArtifactVersion应均为null。没有对应实际成功回执的必要写入只能标partial或needs_input，不能补造成功。
 不调用任何工具，不执行写操作，不扩大原任务，不输出隐藏推理。无法修复的事实用Schema允许的空数组、null或未解决状态表达。
 修复机会仅一次；是否发布由程序再次校验。

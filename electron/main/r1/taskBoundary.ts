@@ -1,4 +1,5 @@
 import type { ChatMessage } from '../providers/llmProvider.js'
+import { createHash } from 'node:crypto'
 import type { ArkModelBoundary } from '../providers/arkResponsesProvider.js'
 import type { R1Persona } from './persona.js'
 import type { R1ModelTool, R1PromptAssets } from './promptAssets.js'
@@ -29,7 +30,7 @@ export class R1TaskRequestBoundary implements ArkModelBoundary {
     return { name: 'seamo_task_draft_v2', schema: this.assets.structuredSchema('task-draft') }
   }
   constructor(private readonly assets: R1PromptAssets, persona: R1Persona, input: R1TaskInput,
-    authorizedAliases: string[], private readonly current: () => R1TaskAuthority) {
+    authorizedAliases: string[], private readonly current: () => R1TaskAuthority, steering?: Record<string, unknown>) {
     this.snapshot = structuredClone(input)
     this.authorizedAliases = [...authorizedAliases]
     assets.validateStructured('task-input', this.snapshot)
@@ -39,9 +40,12 @@ export class R1TaskRequestBoundary implements ArkModelBoundary {
       authorizedAliases, temporary: this.snapshot.temporary })
     if (input.budget.toolsRemaining === 0) this.tools = []
     const compiled = assets.composeTask(structuredClone(persona), this.snapshot)
-    this.systemText = compiled.text
-    this.diagnostic = Object.freeze({ assetReleaseId: compiled.releaseId, promptHash: compiled.sha256,
-      promptIds: Object.freeze([...compiled.promptIds]), toolAliases: Object.freeze(this.tools.map(tool => tool.function.name)),
+    const event = steering ? assets.compile('taskSteering', { steer_json: structuredClone(steering) }) : null
+    if (steering && (steering.taskId !== input.taskId || steering.newGoalVersion !== input.goalVersion)) throw new Error('TASK_CONTEXT_STALE')
+    this.systemText = event ? `${compiled.text}\n\n${event.text}` : compiled.text
+    this.diagnostic = Object.freeze({ assetReleaseId: compiled.releaseId,
+      promptHash: createHash('sha256').update(this.systemText).digest('hex'),
+      promptIds: Object.freeze([...compiled.promptIds, ...(event?.promptIds ?? [])]), toolAliases: Object.freeze(this.tools.map(tool => tool.function.name)),
       taskId: input.taskId, runId: input.runId, goalVersion: input.goalVersion })
     this.assertCurrent()
     Object.freeze(this)

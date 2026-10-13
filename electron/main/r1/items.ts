@@ -110,18 +110,35 @@ export function runOnce<T>(db: R1Database, actionId: string, request: unknown, o
 export class R1Items {
   constructor(private readonly db: R1Database) {}
 
-  create(input: { actionId: string; kind: Item['kind']; title: string; body: string }):
+  create(input: { actionId: string; kind: Item['kind']; title: string; body: string; sourceRefs?: string[]; preserveBody?: boolean }):
     { item: Item; receipt: ActionReceipt } {
     return runOnce(this.db, input.actionId, input, () => {
       if (input.kind !== 'note' && input.kind !== 'todo') throw new Error('INVALID_ITEM_KIND')
       const title = requiredText(input.title, 80, 'title')
-      const body = optionalText(input.body, 8000, 'body')
+      const body = input.preserveBody ? (optionalText(input.body, 8000, 'body'), input.body) : optionalText(input.body, 8000, 'body')
+      if (input.sourceRefs && (input.sourceRefs.length > 50 || new Set(input.sourceRefs).size !== input.sourceRefs.length ||
+        input.sourceRefs.some(ref => typeof ref !== 'string' || !ref || [...ref].length > 160))) throw new Error('INVALID_ITEM_SOURCES')
       const id = randomUUID()
       const now = new Date().toISOString()
-      this.db.prepare('INSERT INTO items (item_id, kind, title, body, version, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)')
-        .run(id, input.kind, title, body, now, now)
+      this.db.prepare('INSERT INTO items (item_id, kind, title, body, source_ref, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)')
+        .run(id, input.kind, title, body, JSON.stringify(input.sourceRefs ?? []), now, now)
       return { item: itemView(itemById(this.db, id)), receipt: receipt(input.actionId, id, 1, 'item_committed') }
     })
+  }
+
+  toolView(itemId: string): { itemId: string; type: Item['kind']; title: string; content: string;
+    completed: boolean; version: number; sourceRefs: string[]; createdAt: string; updatedAt: string } {
+    const row = itemById(this.db, itemId)
+    const meta = this.db.prepare('SELECT source_ref, created_at, updated_at FROM items WHERE item_id = ?').get(itemId) as {
+      source_ref: string | null; created_at: string; updated_at: string
+    }
+    let sourceRefs: string[] = []
+    if (meta.source_ref) {
+      try { const parsed: unknown = JSON.parse(meta.source_ref); if (Array.isArray(parsed) && parsed.every(ref => typeof ref === 'string')) sourceRefs = parsed }
+      catch { sourceRefs = [meta.source_ref] }
+    }
+    return { itemId, type: row.kind, title: row.title, content: row.body, completed: row.completed_at !== null,
+      version: row.version, sourceRefs, createdAt: meta.created_at, updatedAt: meta.updated_at }
   }
 
   list(): Item[] {

@@ -1,4 +1,11 @@
 # 资产与迭代规则
+## DEC-R1-TASK-RUNNER-009：任务执行、真实回执与引用类型修正
+- 原因与 Bad Case：真实 M02 创建了便签后将 Item ID 当作 Artifact 基准；另一次只读 Skill 就标 completed；PR10 修复仍混用 call_id/actionId/entityId，结果被程序拒绝。
+- 影响：F03、F09、F10b；PR04/PR10 澄清已有对象类型和实际回执合同。程序受理时记录可信调用方提供的必要动作，不能由 M02 最终结果或网页自授；不新增关键词路由、额外模型或产品功能。
+- 版本：资产 releaseId 2.0.2；PR04 1.0.2、PR10 1.0.1；其他 Prompt/Skill、tool schemaVersion 2.0.0 不变。sourceSnapshot 给 PR10 传实际回执证明和合法 Artifact 基准，不传虚构补值。
+- 验证：静态资产与合同样例、程序侧缺写入回执拒绝、ID 混淆的一次无工具修复、旧目标/暂停/预算/未知回执与原子提交测试；真实 M02 失败与后续检查结果记录在 docs/r1/2026-10-14-task-runner-progress.md。
+- 兼容性与回滚：活动/旧 Task 保持所绑定 release，不自动切换新包；旧 release 不可用则保留 needs_resume 并拒绝运行。旧包可从父提交 26b2456 找回；旧任务资产包归档及跨发布迁移恢复仍待实现。代码与资产整体回退，不降级数据库或覆盖删除抑制。
+
 ## DEC-R1-BOUNDARY-004：运行时编译与资产发布标识修正
 - 原因与 Bad Case：manifest/runtime 声明 2.0.0，但 Prompt/Skill 注册表仍声明 1.0.1，无法按同一发布包追溯；旧模板替换会把用户 JSON 内的占位符误认成未解析变量，变量 Schema 也没有在真实请求中验证。
 - 影响：PR01–PR10 运行时模板编译、Skill 读取与工具曝光；PR03 将原有 F02a 开场规则收回资产源，应用只传入开始会话事件数据；不修改工具字段或产品功能范围。

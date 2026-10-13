@@ -31,6 +31,10 @@ import { registerServiceHandlers } from './ipc/serviceHandlers.js'
 import { R1TaskSupervisor } from './r1/taskSupervisor.js'
 import { R1Artifacts } from './r1/artifacts.js'
 import { registerTaskHandlers } from './ipc/taskHandlers.js'
+import { R1TaskToolExecutor } from './r1/taskToolExecutor.js'
+import { R1TaskRunner } from './r1/taskRunner.js'
+import { R1Items } from './r1/items.js'
+import { createArkResponsesProvider } from './providers/arkResponsesProvider.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 let r1Database: R1Database | null = null
@@ -39,6 +43,7 @@ let r1PromptAssets: R1PromptAssets | null = null
 let r1Focus: R1Focus | null = null
 let r1Diagnostics: R1ServiceDiagnostics | null = null
 let r1Tasks: R1TaskSupervisor | null = null
+let r1TaskRunner: R1TaskRunner | null = null
 let r1Artifacts: R1Artifacts | null = null
 let r1Conversations: R1Conversations | null = null
 const r1SessionMode: R1SessionMode = { temporary: false }
@@ -113,6 +118,10 @@ void app.whenReady().then(async () => {
     })
     const vault = new CredentialVault(join(app.getPath('userData'), 'credentials.bin'))
     vault.load()
+    r1TaskRunner = new R1TaskRunner(r1Tasks, r1PromptAssets,
+      new R1TaskToolExecutor(r1Tasks, r1PromptAssets, new R1Items(r1Database)), r1Artifacts,
+      createArkResponsesProvider(), () => new R1PersonaStore(r1Database!).get())
+    r1TaskRunner.start()
     importLegacyJson(r1Database, join(app.getPath('appData'), 'lingli'), 'lingli-json')
     importLegacyJson(r1Database, join(app.getPath('appData'), 'lingmo'), 'lingmo-json')
     registerR1Handlers(r1Database, undefined, r1SessionMode, deletionEpoch => {
@@ -187,6 +196,7 @@ void app.whenReady().then(async () => {
 
 app.on('before-quit', () => {
   r1Tasks?.close()
+  void r1TaskRunner?.close()
   r1Diagnostics?.close()
   r1Focus?.close()
   reminderScheduler?.stop()

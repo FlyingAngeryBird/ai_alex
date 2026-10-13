@@ -126,7 +126,7 @@ SK01正文由应用常驻加载。简单暂停、继续、下一首、定位、�
 
 ### 22.4.04 PR04 后台任务目标驱动循环
 
-实际文件：prompts/task-harness.md，版本1.0.1。
+实际文件：prompts/task-harness.md，版本1.0.2。
 
 ```text
 你是同一Seamo AI的后台任务执行层，使用已注册工具完成目标，不另开语音、不另创人格。
@@ -141,6 +141,8 @@ SK01正文由应用常驻加载。简单暂停、继续、下一首、定位、�
 缺关键条件时以needs_input结束本轮，给出一个明确问题；非关键字段未知时说明并给部分结果。等待界面选择或授权时不能声称成功。
 结束时输出一个符合TaskDraft Schema的JSON对象，不加Markdown围栏。status只用completed、partial或needs_input。replyBrief是可以交给语音层的简短中文结果；sourceRefs、receiptActionIds仅引用实际可见对象。文本产物通过artifacts草稿返回，ID和版本由应用创建。未解决事项写入unresolved。
 只有真实回执与来源满足完成条件时标completed；有明确未完成部分标partial；关键输入不足标needs_input。不要把预算耗尽或工具受理包装为完成。
+引用不同对象时保持其真实类型：Item/Reminder不是Artifact；notes_create已经保存事项时，无须为了表达成功另造工作稿。新工作稿的baseArtifactId与baseArtifactVersion均为null；只有TaskInput.observations中kind=artifact的真实ID和版本可以作为续改基准。
+receiptActionIds使用TaskInput.validReceiptActionIds或实际工具回执中的actionId，不能使用协议call_id、entityId或Item/Reminder/Artifact ID代替。内部读取的回执可不作为用户结果列出，已执行的领域写入回执不能遗漏；程序资料中的requiredActions必须有对应实际成功回执才可标completed。
 调用工具时使用协议原生的tool call，不同时把动作写进JSON正文。最终JSON仅用于结构化结果发布，不直接触发新的领域写操作。
 ```
 
@@ -211,12 +213,14 @@ TaskSupervisor提供了经过校验的新目标事件：
 
 ### 22.4.10 PR10 一次结构化输出修复
 
-实际文件：prompts/schema-repair.md，版本1.0.0。
+实际文件：prompts/schema-repair.md，版本1.0.1。
 
 ```text
 上一次输出未通过应用Schema校验，请仅修复它的格式与可证实字段：
 {{repair_json}}
 只输出targetSchema规定的JSON对象，不加围栏。保留可由输入、来源和回执证明的原意；不得为了填字段虚构ID、时间、来源或成功状态。
+sourceSnapshot.receiptProofs是实际actionId与工具、entityId、状态、版本的对应关系；receiptActionIds只使用其中的actionId，不使用协议call_id或entityId代替。sourceRefs只使用sourceSnapshot.sourceRefs中有效的来源，不能混入事项ID或回执ID。
+sourceSnapshot.artifactBases列出允许续改的Artifact基准。Item和Reminder不是Artifact，已保存事项无需另造Artifact；不必要的工作稿可以保留为空数组。确有原任务要求的新工作稿，其baseArtifactId与baseArtifactVersion应均为null。没有对应实际成功回执的必要写入只能标partial或needs_input，不能补造成功。
 不调用任何工具，不执行写操作，不扩大原任务，不输出隐藏推理。无法修复的事实用Schema允许的空数组、null或未解决状态表达。
 修复机会仅一次；是否发布由程序再次校验。
 ```
@@ -1175,6 +1179,13 @@ runtime.defaults.json中的null仅用于不可杜撰的账号接入与SDK实测�
 ### 25.2 发布与迭代规则
 
 ### 资产与迭代规则
+#### DEC-R1-TASK-RUNNER-009：任务执行、真实回执与引用类型修正
+- 原因与 Bad Case：真实 M02 创建了便签后将 Item ID 当作 Artifact 基准；另一次只读 Skill 就标 completed；PR10 修复仍混用 call_id/actionId/entityId，结果被程序拒绝。
+- 影响：F03、F09、F10b；PR04/PR10 澄清已有对象类型和实际回执合同。程序受理时记录可信调用方提供的必要动作，不能由 M02 最终结果或网页自授；不新增关键词路由、额外模型或产品功能。
+- 版本：资产 releaseId 2.0.2；PR04 1.0.2、PR10 1.0.1；其他 Prompt/Skill、tool schemaVersion 2.0.0 不变。sourceSnapshot 给 PR10 传实际回执证明和合法 Artifact 基准，不传虚构补值。
+- 验证：静态资产与合同样例、程序侧缺写入回执拒绝、ID 混淆的一次无工具修复、旧目标/暂停/预算/未知回执与原子提交测试；真实 M02 失败与后续检查结果记录在 docs/r1/2026-10-14-task-runner-progress.md。
+- 兼容性与回滚：活动/旧 Task 保持所绑定 release，不自动切换新包；旧 release 不可用则保留 needs_resume 并拒绝运行。旧包可从父提交 26b2456 找回；旧任务资产包归档及跨发布迁移恢复仍待实现。代码与资产整体回退，不降级数据库或覆盖删除抑制。
+
 #### DEC-R1-BOUNDARY-004：运行时编译与资产发布标识修正
 - 原因与 Bad Case：manifest/runtime 声明 2.0.0，但 Prompt/Skill 注册表仍声明 1.0.1，无法按同一发布包追溯；旧模板替换会把用户 JSON 内的占位符误认成未解析变量，变量 Schema 也没有在真实请求中验证。
 - 影响：PR01–PR10 运行时模板编译、Skill 读取与工具曝光；PR03 将原有 F02a 开场规则收回资产源，应用只传入开始会话事件数据；不修改工具字段或产品功能范围。
@@ -1229,7 +1240,7 @@ patch：表达澄清或修错且行为合同不变。minor：在已批准范围�
 
 ```json
 {
-  "releaseId": "seamo-ai-r1-agent-assets-2.0.1",
+  "releaseId": "seamo-ai-r1-agent-assets-2.0.2",
   "schemaVersion": "2.0.0",
   "providerPolicy": {
     "primary": "volcengine",
