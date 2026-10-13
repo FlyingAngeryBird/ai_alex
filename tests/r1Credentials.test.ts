@@ -5,10 +5,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({ safeStorage: { isEncryptionAvailable: () => false } }))
 
-import { CredentialVault } from '../electron/main/r1/credentials'
+import { CredentialVault, CREDENTIAL_FIELDS } from '../electron/main/r1/credentials'
 
 const directories: string[] = []
-const originalKey = process.env.VOLCENGINE_ARK_API_KEY
+const originalEnv = Object.fromEntries(CREDENTIAL_FIELDS.map(field => [field, process.env[field]]))
 
 function makePath(): string {
   const directory = mkdtempSync(join(tmpdir(), 'seamo-vault-'))
@@ -17,8 +17,10 @@ function makePath(): string {
 }
 
 afterEach(() => {
-  if (originalKey === undefined) delete process.env.VOLCENGINE_ARK_API_KEY
-  else process.env.VOLCENGINE_ARK_API_KEY = originalKey
+  for (const field of CREDENTIAL_FIELDS) {
+    if (originalEnv[field] === undefined) delete process.env[field]
+    else process.env[field] = originalEnv[field]
+  }
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true })
 })
 
@@ -50,5 +52,20 @@ describe('R1 encrypted credential vault', () => {
     expect(() => new CredentialVault(path, storage).save({ arbitrary: 'x' } as never))
       .toThrow('CREDENTIAL_FIELD_NOT_ALLOWED')
     expect(() => readFileSync(path)).toThrow()
+  })
+  it('keeps native realtime credentials distinct, overrides stale local env on reopen and rejects header injection', () => {
+    const path = makePath()
+    const vault = new CredentialVault(path, storage)
+    const initial = vault.revision
+    const status = vault.save({ VOLCENGINE_REALTIME_API_KEY: 'native-secret', VOLCENGINE_REALTIME_VOICE: 'test_voice' })
+    expect(status.VOLCENGINE_REALTIME_API_KEY).toBe(true)
+    expect(vault.revision).toBeGreaterThan(initial)
+    process.env.VOLCENGINE_REALTIME_API_KEY = 'stale-development-key'
+    const reopened = new CredentialVault(path, storage)
+    reopened.load()
+    expect(process.env.VOLCENGINE_REALTIME_API_KEY).toBe('native-secret')
+    expect(readFileSync(path, 'utf8')).not.toContain('native-secret')
+    expect(() => reopened.save({ VOLCENGINE_REALTIME_API_KEY: 'key\r\nOther: value' })).toThrow('INVALID_CREDENTIAL_VALUE')
+    expect(() => reopened.save({ VOLCENGINE_REALTIME_VOICE: 'not valid voice' })).toThrow('INVALID_REALTIME_VOICE')
   })
 })

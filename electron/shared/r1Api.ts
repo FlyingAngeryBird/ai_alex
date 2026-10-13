@@ -6,6 +6,7 @@ import type { R1Persona, R1PersonaStore } from '../main/r1/persona.js'
 import type { R1Memory, R1MemoryPage, R1MemorySource, R1MemoryStore } from '../main/r1/memory.js'
 import type { HistoryPage, R1Conversations, SessionMessage } from '../main/r1/conversations.js'
 import type { FocusCommand, FocusEvent, FocusState, R1Focus } from '../main/r1/focus.js'
+import type { R1ServiceDiagnostics, ServiceCheckReport } from '../main/r1/serviceDiagnostics.js'
 
 export type R1Result<T> =
   | { ok: true; data: T }
@@ -57,6 +58,10 @@ export type R1Api = {
   credentials: {
     status(): Promise<R1Result<CredentialStatus>>
     save(patch: CredentialPatch): Promise<R1Result<CredentialStatus>>
+  }
+  services: {
+    check(input: Parameters<R1ServiceDiagnostics['check']>[1]): Promise<R1Result<ServiceCheckReport>>
+    cancel(requestId: string): Promise<R1Result<null>>
   }
   search: {
     web(query: string): Promise<R1Result<SearchResult>>

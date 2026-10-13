@@ -28,7 +28,7 @@ export type R1PromptAssets = {
   releaseId: string
   schemaVersion: string
   toolAliases: readonly string[]
-  compose(persona: R1Persona, context: Record<string, unknown>): string
+  compose(persona: R1Persona, context: Record<string, unknown>, mode?: 'textOnly' | 'realtime'): string
   compile(mode: string, variables: Record<string, unknown>, loadedSkillIds?: string[]): R1CompiledPrompt
   exposeTools(input: { channel: 'realtime' | 'task'; loadedSkillIds: string[];
     authorizedAliases: string[]; temporary: boolean }): R1ModelTool[]
@@ -175,8 +175,8 @@ export function loadR1PromptAssets(root: string): R1PromptAssets {
     schemaVersion: catalog.schemaVersion,
     toolAliases: Object.freeze(tools.map(tool => tool.alias)),
     compile,
-    compose(persona, context) {
-      return compile('textOnly', { persona_json: persona, skill_index_json: skillIndex,
+    compose(persona, context, mode = 'textOnly') {
+      return compile(mode, { persona_json: persona, skill_index_json: skillIndex,
         app_context: context }, (context.loadedSkillIds ?? ['SK01']) as string[]).text
     },
     exposeTools({ channel, loadedSkillIds, authorizedAliases, temporary }) {

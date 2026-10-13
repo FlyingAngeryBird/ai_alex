@@ -7,9 +7,10 @@ export class R1ModelRequestBoundary {
   readonly systemText: string
   readonly diagnostic: Readonly<{ assetReleaseId: string; promptHash: string; toolAliases: readonly string[] }>
   private readonly tools: R1ModelTool[]
+  private readonly validateInput: (alias: string, input: unknown) => void
 
   constructor(assets: R1PromptAssets, persona: R1Persona, context: Record<string, unknown>,
-    authorizedAliases: string[] = []) {
+    authorizedAliases: string[] = [], mode: 'textOnly' | 'realtime' = 'textOnly') {
     const snapshot = structuredClone(context)
     const loadedSkillIds = snapshot.loadedSkillIds as string[]
     if (!Array.isArray(loadedSkillIds) || !loadedSkillIds.includes('SK01')) {
@@ -17,8 +18,9 @@ export class R1ModelRequestBoundary {
     }
     this.tools = assets.exposeTools({ channel: 'realtime', loadedSkillIds,
       authorizedAliases, temporary: snapshot.temporary === true })
+    this.validateInput = (alias, input) => assets.validateToolInput(alias, input)
     snapshot.availableToolAliases = this.tools.map(tool => tool.function.name)
-    this.systemText = assets.compose(structuredClone(persona), snapshot)
+    this.systemText = assets.compose(structuredClone(persona), snapshot, mode)
     this.diagnostic = Object.freeze({ assetReleaseId: assets.releaseId,
       promptHash: createHash('sha256').update(this.systemText).digest('hex'),
       toolAliases: Object.freeze([...snapshot.availableToolAliases as string[]]) })
@@ -37,5 +39,9 @@ export class R1ModelRequestBoundary {
     }
     return { messages: [{ role: 'system', content: this.systemText }, ...conversation],
       tools: structuredClone(this.tools) }
+  }
+  validateToolCall(alias: string, input: unknown): void {
+    if (!this.tools.some(tool => tool.function.name === alias)) throw new Error('MODEL_TOOL_NOT_EXPOSED')
+    this.validateInput(alias, input)
   }
 }

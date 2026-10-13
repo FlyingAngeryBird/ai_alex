@@ -1,0 +1,31 @@
+# R1 服务协议与配置进展（阶段未通过）
+
+changeId：DEC-R1-PROTOCOL-006。功能关联：F01、F02、F03、F11c；最终 PRD 第 4.6、5.1、7 节与资产架构合同。未改变功能范围、业务 Prompt、工具字段或数据库 Schema。
+
+## 用户确认与协议依据
+
+- 用户确认原生实时对话 3.0 已开通，稍后在设置中配置。该信息只证明开通意向/状态，不代表本机鉴权、连续语音或性能通过。
+- [实时对话 3.0 接口](https://docs.volcengine.com/docs/6561/2549778)、[接入必读](https://docs.volcengine.com/docs/DoubaoVoice/access-mustread?lang=zh)。从火山官方文档 API 读取完整正文，并只读核对其 Go 示例 `events.go`/`fc.go`：3.0 使用独立 duplex 地址、JSON 文本事件、模型 1.2.6.1；`extension` 位于事件顶层；工具平铺 name/parameters；原生回传是 `conversation.item.create` 的 tool items，区别于 Ark Responses 的 function_call_output。
+- [Responses 工具调用](https://docs.volcengine.com/docs/ark/responses-api-tool-calling?lang=zh)、[创建响应 API](https://docs.volcengine.com/docs/ark/create-model-responses-api?lang=zh)。保留原生 call_id 与本地完整配对历史，store:false，不用服务器 previous_response_id。
+
+## 本次实现
+
+- Ark Responses transport 使用最后一道注册请求边界；平铺工具定义，拒绝未知工具、额外参数、缺失/错误配对、重复 call_id、未完成响应和超时/取消结果。运输层不执行领域动作，也不宣称任务完成。
+- 原生实时 session 创建编译注册实时模式，使用确定音频格式，关闭供应商内置联网/唱歌，不接入多模态。当前只提供会话创建/关闭检测，未作为正式连续语音通道激活；没有混用旧版 ASR 路径的回复所有权。
+- 原型 P05 右侧设置保留人格优先/高级折叠结构，补独立原生 API Key 与默认音色字段，修正旧流式 ASR 标签。主进程加密保存；渲染层只得到已配置布尔状态；密钥不回显、备份不含凭据。
+- 设置增加 Ark 与原生实时各自检测/取消。检测上下文临时、无用户历史/记忆、无工具，Ark 仅发送合成的连接测试文字；原生仅建立/关闭会话，不开麦、不请求播音。成功范围明确显示；缺配置、鉴权/限额、超时和失败分类显示，不显示供应商原始错误或密钥。
+- 检测按 renderer owner/requestId 隔离；窗口销毁、退出和用户取消会终止请求；配置/人格更改后的迟到成功失效。检查结果不持久化为服务永久可用状态。
+- 修正加密凭据重启时被旧开发环境覆盖的问题；状态以实际运行配置为准，修改凭据有 revision，错误返回稳定类别。
+
+## 实际证据
+
+- 2026-10-13T14:55:54.770Z：真实 Ark Responses，两次请求共 3542ms；批准资产 2.0.1、memory_recall 一次；工具查询独立空 SQLite，回传真实 no_match；原 call_id 配对，最终回答 21 码点，store:false。没有发送私人历史/记忆、输出密钥/模型正文；仅协议核验，非真实任务验收。复跑入口 `scripts/check-ark-responses.mjs`，需本机显式提供环境并先构建。
+- 全量测试 50 文件、281 项通过；`npm run build` 通过。随后按官方 Go 示例修正 extension 顶层映射，再跑相关协议测试与构建。测试覆盖原生建立与有序关闭、取消迟到、超时、HTTP 鉴权、二进制拒绝、诊断授权为空、owner 隔离、配置/人格更新失效、加密重启与头注入拒绝。
+- 独立 Electron 临时数据库、真实 preload/IPC/领域服务，目视核验窄侧栏、高级配置展开/滚动、密码字段、两个检测按钮的未配置结果；没有用假服务成功回执。Vite 检查服务中途停止，确认端口未监听后恢复并重载；不是供应商失败。测试窗口已退出。
+- 资产静态检查通过：10 Prompt、6 Skill、38 业务工具、3 内部工具、14 Schema、16 样例、59 哈希文件；合同样例 16 项。
+
+## 仍未完成与回退
+
+原生真实创建/关闭、麦克风、连续 PCM 播放、判停、打断/已播截断、文字混输、工具回注均尚未实测或完成。Task PR04 边界、ToolExecutor、Supervisor、框架检查点/打包、真实联网证据和完整 41 功能验收仍未完成。G0–G5 均维持未通过；没有新增阶段标签、正式 Release、签名公证或安装验收。
+
+开发回退点为本提交的父提交 `99f66c9`；旧版工作树和数据不改动。此变更不迁移/降级数据库；新增的加密配置字段由旧 R1 代码忽略，回退前保留整个 R1 数据与凭据文件，不复制到旧版。

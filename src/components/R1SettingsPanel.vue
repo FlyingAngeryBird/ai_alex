@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue'
+import { onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { X } from 'lucide-vue-next'
 import type { R1Persona } from '../../electron/main/r1/persona'
 import type { CredentialField, CredentialPatch, CredentialStatus } from '../../electron/main/r1/credentials'
+import type { ServiceCheckReport, ServiceCheckTarget } from '../../electron/main/r1/serviceDiagnostics'
 
 const props = defineProps<{ persona: R1Persona | null; voicePreviewing: boolean }>()
 const emit = defineEmits<{
@@ -21,15 +22,58 @@ const message = ref('')
 const credentialFields: { key: CredentialField; label: string; secret: boolean }[] = [
   { key: 'VOLCENGINE_ARK_API_KEY', label: '豆包 API Key', secret: true },
   { key: 'VOLCENGINE_ARK_MODEL', label: '豆包模型名', secret: false },
+  { key: 'VOLCENGINE_REALTIME_API_KEY', label: '原生实时对话 3.0 API Key', secret: true },
+  { key: 'VOLCENGINE_REALTIME_VOICE', label: '原生实时对话默认音色 ID', secret: false },
   { key: 'VOLCENGINE_ASR_APP_ID', label: '语音识别 App ID', secret: false },
   { key: 'VOLCENGINE_ASR_ACCESS_TOKEN', label: '语音识别 Access Token', secret: true },
-  { key: 'VOLCENGINE_STREAM_ASR_API_KEY', label: '实时语音 API Key', secret: true },
+  { key: 'VOLCENGINE_STREAM_ASR_API_KEY', label: '流式 ASR API Key', secret: true },
   { key: 'VOLCENGINE_TTS_API_KEY', label: '语音合成 API Key', secret: true },
   { key: 'VOLCENGINE_TTS_VOICE', label: '默认音色 ID', secret: false },
   { key: 'BRAVE_SEARCH_API_KEY', label: 'Brave Search API Key · G0 待验证候选', secret: true }
 ]
 const credentialInputs = reactive<Partial<Record<CredentialField, string>>>({})
 const credentialStatus = ref<CredentialStatus | null>(null)
+const checks = reactive<Partial<Record<ServiceCheckTarget, ServiceCheckReport>>>({})
+const checking = ref<ServiceCheckTarget | null>(null)
+let checkRequestId: string | null = null
+let configurationGeneration = 0
+let disposed = false
+function cancelCheck(): void {
+  if (checkRequestId) void window.seamoR1.services.cancel(checkRequestId).catch(() => {})
+}
+function invalidateChecks(): void {
+  configurationGeneration++
+  delete checks.ark
+  delete checks.realtime
+  if (checkRequestId) void window.seamoR1.services.cancel(checkRequestId).catch(() => {})
+}
+onBeforeUnmount(() => { disposed = true; invalidateChecks() })
+watch(() => props.persona?.version, (next, previous) => { if (previous !== undefined && next !== previous) invalidateChecks() })
+async function checkService(service: ServiceCheckTarget): Promise<void> {
+  if (checking.value || busy.value) return
+  const generation = configurationGeneration
+  const requestId = crypto.randomUUID()
+  checkRequestId = requestId
+  checking.value = service
+  message.value = ''
+  try {
+    const result = await window.seamoR1.services.check({ service, requestId })
+    if (disposed || generation !== configurationGeneration) return
+    if (result.ok) checks[service] = result.data
+    else message.value = '连接检测未能启动，请稍后重试。'
+  } catch { if (!disposed) message.value = '连接检测暂时不可用。' }
+  finally { if (checkRequestId === requestId) { checkRequestId = null; checking.value = null } }
+}
+function checkLabel(report?: ServiceCheckReport): string {
+  if (!report) return '尚未检测'
+  if (report.status === 'passed') return report.service === 'ark' ? '请求通过' : '会话建立与关闭通过'
+  if (report.status === 'cancelled') return '已取消，请重新检测'
+  if (report.status === 'not_configured') return report.service === 'ark' ? '请先保存密钥与模型' : '请先保存密钥与音色'
+  if (['REALTIME_AUTH_FAILED', 'ARK_HTTP_401', 'ARK_HTTP_403'].includes(report.code)) return '鉴权失败，请检查密钥与服务权限'
+  if (['REALTIME_QUOTA_LIMIT', 'ARK_HTTP_429'].includes(report.code)) return '服务限额，请稍后重试'
+  if (report.code.includes('TIMEOUT')) return '连接超时，请重试'
+  return '检测失败，请检查服务配置后重试'
+}
 
 watch(() => props.persona, (current) => {
   if (!current) return
@@ -68,6 +112,7 @@ async function savePersona(): Promise<void> {
       return
     }
     emit('saved', result.data)
+    invalidateChecks()
     message.value = '偏好已保存；下一轮回复会使用新版本。'
   } catch {
     message.value = '保存失败：设置服务暂时不可用。'
@@ -95,6 +140,7 @@ async function saveCredentials(): Promise<void> {
       return
     }
     credentialStatus.value = result.data
+    invalidateChecks()
     for (const field of credentialFields) credentialInputs[field.key] = ''
     emit('credentialsChanged', result.data)
     message.value = '服务配置已保存；是否可用仍以实际请求为准。'
@@ -115,6 +161,7 @@ async function clearCredential(field: CredentialField): Promise<void> {
       return
     }
     credentialStatus.value = result.data
+    invalidateChecks()
     credentialInputs[field] = ''
     emit('credentialsChanged', result.data)
     message.value = '已移除这项服务配置。'
@@ -155,10 +202,15 @@ async function clearCredential(field: CredentialField): Promise<void> {
       <section class="r1-settings-section">
         <h3>服务状态</h3>
         <p>对话模型：{{ credentialStatus?.VOLCENGINE_ARK_API_KEY && credentialStatus?.VOLCENGINE_ARK_MODEL ? '密钥与模型已填写，实际连接待请求验证' : '未配置' }}</p>
+        <p>原生实时对话 3.0：{{ credentialStatus?.VOLCENGINE_REALTIME_API_KEY ? '已填写密钥' : '未配置' }}</p>
+        <div class="r1-settings-check"><button type="button" :disabled="busy || !!checking" @click="checkService('ark')">{{ checking === 'ark' ? '检测中…' : '检测对话模型' }}</button><span role="status">{{ checkLabel(checks.ark) }}</span></div>
+        <div class="r1-settings-check"><button type="button" :disabled="busy || !!checking" @click="checkService('realtime')">{{ checking === 'realtime' ? '检测中…' : '检测实时对话' }}</button><span role="status">{{ checkLabel(checks.realtime) }}</span></div>
+        <button v-if="checking" type="button" @click="cancelCheck">取消检测</button>
+        <p>检测使用已保存配置。实时检测只建立并关闭会话，不打开麦克风；连续交流和出声效果另行验证。</p>
         <p>联网搜索：{{ credentialStatus?.BRAVE_SEARCH_API_KEY ? '候选服务已填写密钥，G0 待验证' : 'G0 待验证候选，未配置' }}</p>
         <p>音乐音源：待 G0 真实播放验证</p>
         <details><summary>模型与语音服务配置</summary>
-          <p>密钥保存在本机加密存储中，这里不回显。留空不会覆盖原值。</p>
+          <p>密钥保存在本机加密存储中，这里不回显。留空不会覆盖原值。原生实时对话与 ASR、TTS 使用独立配置。</p>
           <div v-for="field in credentialFields" :key="field.key" class="r1-settings-field">
             <label :for="`r1-${field.key}`">{{ field.label }}</label>
             <div class="r1-settings-credential-row">
@@ -176,3 +228,10 @@ async function clearCredential(field: CredentialField): Promise<void> {
     </div>
   </aside>
 </template>
+
+<style scoped>
+.r1-settings-check { display: flex; align-items: center; gap: 10px; margin: 8px 0; font-size: 11px; line-height: 1.6; }
+.r1-settings-check button { flex-shrink: 0; min-height: 30px; padding: 4px 9px; border: 1px solid var(--r1-line); border-radius: 5px; background: #1b2422; color: var(--r1-aqua); font: inherit; }
+.r1-settings-check button:disabled { opacity: .45; }
+.r1-settings-check span { color: #91a09b; }
+</style>

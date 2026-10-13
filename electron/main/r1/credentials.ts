@@ -5,6 +5,8 @@ import { safeStorage } from 'electron'
 export const CREDENTIAL_FIELDS = [
   'VOLCENGINE_ARK_API_KEY',
   'VOLCENGINE_ARK_MODEL',
+  'VOLCENGINE_REALTIME_API_KEY',
+  'VOLCENGINE_REALTIME_VOICE',
   'VOLCENGINE_ASR_APP_ID',
   'VOLCENGINE_ASR_ACCESS_TOKEN',
   'VOLCENGINE_STREAM_ASR_API_KEY',
@@ -25,6 +27,8 @@ type SecretStorage = {
 
 export class CredentialVault {
   private values: Partial<Record<CredentialField, string>> = {}
+  private currentRevision = 0
+  get revision(): number { return this.currentRevision }
 
   constructor(private readonly path: string, private readonly storage: SecretStorage = safeStorage) {}
 
@@ -40,12 +44,13 @@ export class CredentialVault {
       }
     }
     this.applyToRuntime()
+    this.currentRevision++
     return this.status()
   }
 
   status(): CredentialStatus {
     return Object.fromEntries(CREDENTIAL_FIELDS.map((field) => [field,
-      Boolean(this.values[field]?.trim())])) as CredentialStatus
+      Boolean(this.values[field]?.trim() || process.env[field]?.trim())])) as CredentialStatus
   }
 
   save(patch: CredentialPatch): CredentialStatus {
@@ -56,7 +61,10 @@ export class CredentialVault {
       if (!CREDENTIAL_FIELDS.includes(field as CredentialField)) throw new Error('CREDENTIAL_FIELD_NOT_ALLOWED')
       if (value === null) {
         delete next[field as CredentialField]
-      } else if (typeof value === 'string' && value.trim() && value.length <= 1000) {
+      } else if (typeof value === 'string' && value.trim() && value.length <= 1000 && !/[\r\n\x00]/.test(value)) {
+        if (field === 'VOLCENGINE_REALTIME_VOICE' && !/^[A-Za-z0-9_.-]{1,200}$/.test(value.trim())) {
+          throw new Error('INVALID_REALTIME_VOICE')
+        }
         next[field as CredentialField] = value.trim()
       } else {
         throw new Error('INVALID_CREDENTIAL_VALUE')
@@ -68,6 +76,7 @@ export class CredentialVault {
     writeFileSync(temporaryPath, encrypted, { mode: 0o600 })
     renameSync(temporaryPath, this.path)
     this.values = next
+    this.currentRevision++
     for (const field of Object.keys(patch) as CredentialField[]) {
       if (next[field]) process.env[field] = next[field]
       else delete process.env[field]
@@ -80,7 +89,7 @@ export class CredentialVault {
     for (const field of CREDENTIAL_FIELDS) {
       // Existing process configuration is useful during local development.
       // A packaged app loads only the encrypted vault; no .env ships with it.
-      if (this.values[field] && !process.env[field]) process.env[field] = this.values[field]
+      if (this.values[field]) process.env[field] = this.values[field]
     }
   }
 }

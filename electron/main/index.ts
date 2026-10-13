@@ -26,12 +26,15 @@ import type { MusicTrack } from './music/gdstudioMusicProvider.js'
 import type { R1SessionMode } from './r1/sessionMode.js'
 import { R1Focus } from './r1/focus.js'
 import { registerFocusHandlers } from './ipc/focusHandlers.js'
+import { R1ServiceDiagnostics } from './r1/serviceDiagnostics.js'
+import { registerServiceHandlers } from './ipc/serviceHandlers.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 let r1Database: R1Database | null = null
 let reminderScheduler: ReminderScheduler | null = null
 let r1PromptAssets: R1PromptAssets | null = null
 let r1Focus: R1Focus | null = null
+let r1Diagnostics: R1ServiceDiagnostics | null = null
 const r1SessionMode: R1SessionMode = { temporary: false }
 
 // R1 keeps its data separate from every legacy lingmo build. The old directory
@@ -95,6 +98,8 @@ void app.whenReady().then(async () => {
       }
     })
     registerCredentialHandlers(vault)
+    r1Diagnostics = new R1ServiceDiagnostics(vault, r1PromptAssets, new R1PersonaStore(r1Database))
+    registerServiceHandlers(r1Diagnostics)
     r1Focus = new R1Focus(r1Database)
     registerFocusHandlers(r1Focus)
     r1Focus.onChanged(event => {
@@ -153,6 +158,7 @@ void app.whenReady().then(async () => {
 })
 
 app.on('before-quit', () => {
+  r1Diagnostics?.close()
   r1Focus?.close()
   reminderScheduler?.stop()
   r1Database?.close()

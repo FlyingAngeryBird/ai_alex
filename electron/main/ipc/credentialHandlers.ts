@@ -11,7 +11,9 @@ export function registerCredentialHandlers(vault: CredentialVault, ipc: IpcMainL
     try {
       return { ok: true, data: vault.save(payload as CredentialPatch) }
     } catch (error) {
-      const message = error instanceof Error ? error.message : '保存服务配置失败'
+      const allowed = ['SYSTEM_SECRET_STORAGE_UNAVAILABLE', 'INVALID_CREDENTIAL_PATCH',
+        'CREDENTIAL_FIELD_NOT_ALLOWED', 'INVALID_CREDENTIAL_VALUE', 'INVALID_REALTIME_VOICE']
+      const message = error instanceof Error && allowed.includes(error.message) ? error.message : 'CREDENTIAL_SAVE_FAILED'
       return { ok: false, error: { code: message, message } }
     }
   })
