@@ -30,6 +30,11 @@ export const exposedChannels = [
   'r1.memory.forget',
   'r1.history.list',
   'r1.history.messages',
+  'r1.focus.getState',
+  'r1.focus.start',
+  'r1.focus.pause',
+  'r1.focus.resume',
+  'r1.focus.stop',
   'r1.items.create',
   'r1.items.update',
   'r1.items.complete',
@@ -60,7 +65,8 @@ export const eventChannels = [
   'chat.streamChunk',
   'tts.streamAudio',
   'r1.reminderDue',
-  'r1.memoryInvalidated'
+  'r1.memoryInvalidated',
+  'r1.focusChanged'
 ] as const
 
 export type ExposedEventChannel = (typeof eventChannels)[number]
@@ -138,6 +144,18 @@ function exposeLingliApi(
     history: {
       list: (input) => invokeR1('r1.history.list', input),
       messages: (sessionId) => invokeR1('r1.history.messages', { sessionId })
+    },
+    focus: {
+      getState: () => invokeR1('r1.focus.getState'),
+      start: input => invokeR1('r1.focus.start', input),
+      pause: input => invokeR1('r1.focus.pause', input),
+      resume: input => invokeR1('r1.focus.resume', input),
+      stop: input => invokeR1('r1.focus.stop', input),
+      onChanged: handler => {
+        const listener = (...args: unknown[]): void => handler(args[1] as Parameters<typeof handler>[0])
+        renderer.on('r1.focusChanged', listener)
+        return () => renderer.removeListener('r1.focusChanged', listener)
+      }
     },
     items: {
       list: () => invokeR1('r1.items.list'),

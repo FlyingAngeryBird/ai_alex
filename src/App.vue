@@ -6,6 +6,9 @@ import ParticleSphere from '@/components/ParticleSphere.vue'
 import R1SettingsPanel from '@/components/R1SettingsPanel.vue'
 import R1MemoryPanel from '@/components/R1MemoryPanel.vue'
 import R1HistoryPanel from '@/components/R1HistoryPanel.vue'
+import R1FocusChip from '@/components/R1FocusChip.vue'
+import R1FocusDialog from '@/components/R1FocusDialog.vue'
+import { useFocus } from '@/composables/useFocus'
 import R1ItemsPanel from '@/components/R1ItemsPanel.vue'
 import SearchPanel from '@/components/SearchPanel.vue'
 import R1CompanionHome from '@/components/R1CompanionHome.vue'
@@ -29,6 +32,30 @@ import { invokeWithTimeout } from './utils/invokeWithTimeout'
 const conversation = useConversation()
 const keyboardRecorder = useKeyboardRecorder()
 const music = useMusic()
+const focusNotice = ref('')
+const focus = useFocus(event => {
+  const track = music.playback.value.track
+  const currentTrackKey = track ? `${track.source ?? 'unknown'}:${track.id}` : null
+  if (event.focus.endMusicRule === 'pause_user_selected_track' &&
+    event.focus.endTargetTrackKey === currentTrackKey && music.playback.value.status === 'playing') {
+    void music.togglePlayback()
+  }
+  focusNotice.value = '这一段专注已完成，可以休息一下。'
+})
+const focusEditorOpen = ref(false)
+const focusTargetTrack = ref<{ key: string; title: string } | null>(null)
+function openFocusEditor(): void {
+  focusEditorOpen.value = true
+  const track = music.playback.value.track
+  focusTargetTrack.value = track ? { key: `${track.source ?? 'unknown'}:${track.id}`, title: track.title } : null
+  focus.error.value = ''
+}
+async function startFocus(durationSec: number, target: string | null): Promise<void> {
+  if (await focus.start(durationSec, target)) {
+    focusEditorOpen.value = false
+    focusNotice.value = ''
+  }
+}
 const conversationPartialText = ref('')
 const realtimeRecorder = useRealtimeVoiceRecorder({
   onPartialText: (text) => {
@@ -853,6 +880,8 @@ onBeforeUnmount(() => {
       </div>
     </nav>
     <section class="r1-main-space" aria-label="Seamo 陪伴空间">
+      <R1FocusChip v-if="focus.active.value && focus.state.value" :focus="focus.state.value" :busy="focus.busy.value"
+        @pause="focus.control('pause')" @resume="focus.control('resume')" @stop="focus.control('stop')" />
       <div class="r1-particle-space" :data-mode="viewMode">
         <ParticleSphere :state="particleState" :audio-level="audioLevel" :audio-bands="music.audioBands.value" />
       </div>
@@ -916,10 +945,15 @@ onBeforeUnmount(() => {
       @saved="(saved) => { persona = saved }"
       @credentials-changed="(status) => { credentialStatus = status }"
     />
-    <R1ItemsPanel v-if="itemsOpen" :temporary-mode="temporaryMode" @close="closePanels" />
+    <R1ItemsPanel v-if="itemsOpen" :temporary-mode="temporaryMode" @close="closePanels" @start-focus="openFocusEditor" />
     <SearchPanel v-if="searchEverOpened" v-show="searchOpen" :temporary-mode="temporaryMode" @close="closePanels" />
     <R1MemoryPanel v-if="memoryOpen" :temporary="temporaryMode" @close="closePanels" />
     <R1HistoryPanel v-if="historyOpen" :temporary="temporaryMode" :assistant-name="persona?.assistantName || 'Seamo AI'" @close="closePanels" />
+    <R1FocusDialog v-if="focusEditorOpen" :active="focus.active.value" :busy="focus.busy.value"
+      :error="focus.error.value" :track="focusTargetTrack" @close="focusEditorOpen = false" @start="startFocus" />
+    <aside v-if="focusNotice || (focus.error.value && !focusEditorOpen)" class="r1-reminder-toast" role="status">
+      <p>{{ focusNotice || focus.error.value }}</p><button type="button" @click="focusNotice = ''; focus.error.value = ''">关闭</button>
+    </aside>
     <aside v-if="reminderNotice" class="r1-reminder-toast" role="status">
       <div><strong>提醒已到期</strong><p>{{ reminderNotice.body }}</p>
         <small>{{ reminderNotice.systemRequested ? '系统通知已请求；不代表已读。' : '已在应用内显示；系统通知未请求。' }}</small>

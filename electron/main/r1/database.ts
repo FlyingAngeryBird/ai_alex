@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-export const R1_SCHEMA_VERSION = 2
+export const R1_SCHEMA_VERSION = 3
 
 export type R1Database = DatabaseSync
 
@@ -256,6 +256,16 @@ export function openR1Database(databasePath: string): R1Database {
       db.exec('DROP TABLE deliveries')
       db.exec('ALTER TABLE deliveries_v2 RENAME TO deliveries')
       db.exec('PRAGMA user_version = 2')
+    })
+  }
+  const migratedVersion = (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version
+  if (migratedVersion < 3) {
+    inTransaction(db, () => {
+      const columns = new Set((db.prepare('PRAGMA table_info(focus)').all() as { name: string }[]).map(row => row.name))
+      if (!columns.has('end_music_rule')) db.exec("ALTER TABLE focus ADD COLUMN end_music_rule TEXT NOT NULL DEFAULT 'none'")
+      if (!columns.has('end_target_track_key')) db.exec('ALTER TABLE focus ADD COLUMN end_target_track_key TEXT')
+      db.exec('CREATE UNIQUE INDEX IF NOT EXISTS focus_one_active ON focus((1)) WHERE state IN (\'running\', \'paused\')')
+      db.exec('PRAGMA user_version = 3')
     })
   }
   return db

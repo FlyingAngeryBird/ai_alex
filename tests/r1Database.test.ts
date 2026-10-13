@@ -20,6 +20,23 @@ afterEach(() => {
 })
 
 describe('R1 database and legacy import', () => {
+  it('upgrades the existing v2 focus row without losing its countdown or creating a second active timer', () => {
+    const path = join(makeDirectory(), 'r1.sqlite')
+    const db = openR1Database(path)
+    db.exec('DROP TABLE focus')
+    db.exec(`CREATE TABLE focus (focus_id TEXT PRIMARY KEY, duration_sec INTEGER NOT NULL,
+      remaining_sec INTEGER NOT NULL, state TEXT NOT NULL, version INTEGER NOT NULL, updated_at TEXT NOT NULL)`)
+    db.prepare('INSERT INTO focus VALUES (?, ?, ?, ?, ?, ?)').run('old-focus', 1500, 900, 'paused', 2, new Date().toISOString())
+    db.exec('PRAGMA user_version = 2')
+    db.close()
+    const migrated = openR1Database(path)
+    expect(migrated.prepare('SELECT * FROM focus').get()).toMatchObject({ focus_id: 'old-focus',
+      remaining_sec: 900, state: 'paused', version: 2, end_music_rule: 'none', end_target_track_key: null })
+    expect(() => migrated.prepare(`INSERT INTO focus
+      (focus_id, duration_sec, remaining_sec, state, version, updated_at) VALUES ('second', 60, 60, 'running', 1, ?)`)
+      .run(new Date().toISOString())).toThrow()
+    migrated.close()
+  })
   it('creates the versioned domain schema and opens it again without changing data', () => {
     const path = join(makeDirectory(), 'r1.sqlite')
     const db = openR1Database(path)
@@ -63,7 +80,7 @@ describe('R1 database and legacy import', () => {
     db.close()
 
     const migrated = openR1Database(path)
-    expect(migrated.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 2 })
+    expect(migrated.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: R1_SCHEMA_VERSION })
     expect(migrated.prepare('SELECT channel FROM deliveries').all()).toEqual([{ channel: 'system' }])
     expect(() => migrated.prepare('INSERT INTO deliveries VALUES (?, ?, 1, ?, ?, ?)')
       .run('duplicate', reminder.reminderId, 'in_app', 'requested', new Date().toISOString())).toThrow()

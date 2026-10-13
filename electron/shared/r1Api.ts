@@ -5,6 +5,7 @@ import type { SearchResult } from '../main/providers/braveSearchProvider.js'
 import type { R1Persona, R1PersonaStore } from '../main/r1/persona.js'
 import type { R1Memory, R1MemoryPage, R1MemorySource, R1MemoryStore } from '../main/r1/memory.js'
 import type { HistoryPage, R1Conversations, SessionMessage } from '../main/r1/conversations.js'
+import type { FocusCommand, FocusEvent, FocusState, R1Focus } from '../main/r1/focus.js'
 
 export type R1Result<T> =
   | { ok: true; data: T }
@@ -29,6 +30,14 @@ export type R1Api = {
   history: {
     list(input?: Parameters<R1Conversations['history']>[0]): Promise<R1Result<HistoryPage>>
     messages(sessionId: string): Promise<R1Result<SessionMessage[]>>
+  }
+  focus: {
+    getState(): Promise<R1Result<FocusState | null>>
+    start(input: Parameters<R1Focus['start']>[0]): Promise<R1Result<ReturnType<R1Focus['start']>>>
+    pause(input: FocusCommand): Promise<R1Result<ReturnType<R1Focus['pause']>>>
+    resume(input: FocusCommand): Promise<R1Result<ReturnType<R1Focus['resume']>>>
+    stop(input: FocusCommand): Promise<R1Result<ReturnType<R1Focus['stop']>>>
+    onChanged(handler: (event: FocusEvent) => void): () => void
   }
   items: {
     list(): Promise<R1Result<Item[]>>

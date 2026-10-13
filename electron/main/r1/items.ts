@@ -83,12 +83,12 @@ function reminderById(db: R1Database, reminderId: string): ReminderRow {
   return row
 }
 
-function receipt(actionId: string, entityId: string, entityVersion: number, detail: string,
+export function receipt(actionId: string, entityId: string, entityVersion: number, detail: string,
   status: ActionReceipt['status'] = 'succeeded'): ActionReceipt {
   return { actionId, entityId, entityVersion, status, detail }
 }
 
-function runOnce<T>(db: R1Database, actionId: string, request: unknown, operation: () => T): T {
+export function runOnce<T>(db: R1Database, actionId: string, request: unknown, operation: () => T): T {
   requiredText(actionId, 160, 'actionId')
   return inTransaction(db, () => {
     const stored = db.prepare('SELECT actual_result_json FROM receipts WHERE action_id = ?')

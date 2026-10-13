@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { Bell, Check, FileText, NotebookPen, Plus, Search, Trash2, X } from 'lucide-vue-next'
+import { Bell, Check, FileText, NotebookPen, Plus, Search, Timer, Trash2, X } from 'lucide-vue-next'
 import type { Item, Reminder } from '../../electron/shared/r1Api'
 
 const props = defineProps<{ temporaryMode: boolean }>()
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: []; startFocus: [] }>()
 const items = ref<Item[]>([])
 const reminders = ref<Reminder[]>([])
 const query = ref('')
@@ -213,6 +213,7 @@ onUnmounted(() => stopEvents?.())
             <small>{{ dateLabel(reminder.dueAtUtc) }} · {{ reminder.status === 'due' ? '已到期，不代表已读' : '等待到期' }}</small><button type="button" @click="openExistingReminder(reminder)">改期</button>
             <button type="button" @click="cancelReminder(reminder)">取消</button></article></section>
         <button class="r1-items-add-reminder" type="button" @click="openReminder()"><Bell :size="14" />设置独立提醒</button>
+        <button class="r1-items-add-reminder" type="button" @click="emit('startFocus')"><Timer :size="14" />开始一段专注</button>
         <p class="r1-items-scope">提醒在应用运行且 Mac 清醒时调度。休眠、关机或完全退出时无法保证准点。</p>
       </template>
     </div>
@@ -226,6 +227,7 @@ onUnmounted(() => stopEvents?.())
       <label>类型<select v-model="editor.kind"><option value="todo">待办</option><option value="note">记录</option></select></label>
       <p v-if="temporaryMode">保存后会独立留在设备上；请先在事项侧栏确认保存范围。</p>
       <div class="r1-memory-dialog-actions"><button type="button" @click="editor = null">取消</button>
+        <button v-if="editor.item?.kind === 'todo'" type="button" @click="editor = null; emit('startFocus')">开始专注</button>
         <button type="submit" :disabled="busy || !editor.title.trim()">保存</button></div>
       <p v-if="message" role="status">{{ message }}</p>
     </form>

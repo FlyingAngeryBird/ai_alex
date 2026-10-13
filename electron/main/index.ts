@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, powerMonitor } from 'electron'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync } from 'node:fs'
@@ -24,17 +24,28 @@ import { R1MemoryStore } from './r1/memory.js'
 import { loadR1PromptAssets, type R1PromptAssets } from './r1/promptAssets.js'
 import type { MusicTrack } from './music/gdstudioMusicProvider.js'
 import type { R1SessionMode } from './r1/sessionMode.js'
+import { R1Focus } from './r1/focus.js'
+import { registerFocusHandlers } from './ipc/focusHandlers.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 let r1Database: R1Database | null = null
 let reminderScheduler: ReminderScheduler | null = null
 let r1PromptAssets: R1PromptAssets | null = null
+let r1Focus: R1Focus | null = null
 const r1SessionMode: R1SessionMode = { temporary: false }
 
 // R1 keeps its data separate from every legacy lingmo build. The old directory
 // is only read by the explicit migration path; opening R1 never writes to it.
 app.setName('Seamo AI R1')
 app.setPath('userData', join(app.getPath('appData'), 'Seamo AI R1'))
+const ownsInstance = app.requestSingleInstanceLock()
+if (!ownsInstance) app.quit()
+app.on('second-instance', () => {
+  const window = BrowserWindow.getAllWindows()[0]
+  if (window?.isMinimized()) window.restore()
+  window?.show()
+  window?.focus()
+})
 
 loadEnvironmentFiles(
   resolveEnvironmentCandidateDirectories({
@@ -70,6 +81,7 @@ registerVoiceHandlers()
 registerSearchHandlers()
 
 void app.whenReady().then(async () => {
+  if (!ownsInstance) return
   try {
     r1Database = openR1Database(join(app.getPath('userData'), 'r1.sqlite'))
     r1PromptAssets = loadR1PromptAssets(join(app.getAppPath(), 'r1-assets'))
@@ -83,6 +95,13 @@ void app.whenReady().then(async () => {
       }
     })
     registerCredentialHandlers(vault)
+    r1Focus = new R1Focus(r1Database)
+    registerFocusHandlers(r1Focus)
+    r1Focus.onChanged(event => {
+      for (const window of BrowserWindow.getAllWindows()) window.webContents.send('r1.focusChanged', event)
+    })
+    powerMonitor.on('suspend', () => r1Focus?.suspend())
+    powerMonitor.on('resume', () => r1Focus?.wake())
   } catch (error) {
     const { dialog } = await import('electron')
     dialog.showErrorBox(
@@ -120,6 +139,7 @@ void app.whenReady().then(async () => {
     }
   }
   createMainWindow()
+  r1Focus?.startScheduler()
   if (r1Database) {
     reminderScheduler = createElectronReminderScheduler(r1Database)
     reminderScheduler.start()
@@ -133,6 +153,7 @@ void app.whenReady().then(async () => {
 })
 
 app.on('before-quit', () => {
+  r1Focus?.close()
   reminderScheduler?.stop()
   r1Database?.close()
   r1Database = null

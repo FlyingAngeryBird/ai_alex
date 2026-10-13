@@ -1,13 +1,13 @@
 import { chmodSync, copyFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { backup, DatabaseSync } from 'node:sqlite'
-import { inTransaction, R1_SCHEMA_VERSION, type R1Database } from './database.js'
+import { inTransaction, openR1Database, R1_SCHEMA_VERSION, type R1Database } from './database.js'
 
 function validateBackup(path: string): void {
   const db = new DatabaseSync(path, { readOnly: true })
   try {
     const version = (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version
-    if (version !== R1_SCHEMA_VERSION) throw new Error(`BACKUP_SCHEMA_UNSUPPORTED:${version}`)
+    if (version < 1 || version > R1_SCHEMA_VERSION) throw new Error(`BACKUP_SCHEMA_UNSUPPORTED:${version}`)
     const integrity = (db.prepare('PRAGMA integrity_check').get() as { integrity_check: string }).integrity_check
     if (integrity !== 'ok') throw new Error('BACKUP_INTEGRITY_FAILED')
     for (const table of ['memory', 'topics', 'source_suppression', 'items', 'reminders']) {
@@ -89,9 +89,9 @@ export function restoreR1BackupOffline(currentPath: string, backupPath: string):
     if (version !== R1_SCHEMA_VERSION) throw new Error('CURRENT_SCHEMA_UNSUPPORTED')
     current.exec('PRAGMA wal_checkpoint(TRUNCATE)')
     copyFileSync(backupPath, stagedPath)
-    staged = new DatabaseSync(stagedPath)
-    staged.exec('PRAGMA foreign_keys = ON')
+    staged = openR1Database(stagedPath)
     preserveSuppression(current, staged)
+    staged.exec('PRAGMA wal_checkpoint(TRUNCATE)')
     staged.close()
     staged = null
     validateBackup(stagedPath)
