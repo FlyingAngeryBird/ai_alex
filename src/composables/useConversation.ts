@@ -198,6 +198,15 @@ export function useConversation(options: UseConversationOptions = {}) {
   const autoListenState = ref<AutoListenState>('off')
   const isListening = ref(false)
   const messages = ref<UiMessage[]>([])
+  let conversationEpoch = 0
+
+  function resetConversation(): void {
+    conversationEpoch += 1
+    messages.value = []
+    isListening.value = false
+    particleState.value = 'idle'
+    audioLevel.value = 0.14
+  }
 
   const latestMessage = computed(() => messages.value[messages.value.length - 1] ?? null)
 
@@ -295,6 +304,7 @@ export function useConversation(options: UseConversationOptions = {}) {
       onResponseStart?: () => void
     }
   ): Promise<ConversationResult> {
+    const requestEpoch = conversationEpoch
     if (!isListening.value) {
       startListening()
     }
@@ -320,6 +330,7 @@ export function useConversation(options: UseConversationOptions = {}) {
     const assistant = await streamAssistantReply(
       normalizedText,
       (delta) => {
+        if (requestEpoch !== conversationEpoch) return
         assistantMessage.text += delta
         messages.value = [...messages.value]
         options?.onChunk?.(delta)
@@ -329,6 +340,10 @@ export function useConversation(options: UseConversationOptions = {}) {
         onResponseStart: options?.onResponseStart
       }
     )
+
+    if (requestEpoch !== conversationEpoch) {
+      return { intent: 'chat', music: null, reply: '', text: normalizedText }
+    }
 
     const replyRole: UiMessage['role'] =
       assistant.reply === CHAT_BRIDGE_UNAVAILABLE_MESSAGE ? 'system' : 'assistant'
@@ -358,9 +373,12 @@ export function useConversation(options: UseConversationOptions = {}) {
   }
 
   async function generateOpeningGreeting(): Promise<void> {
+    const requestEpoch = conversationEpoch
     const assistant = await requestAssistantReply(
       '请根据你的当前角色设定，生成一句自然、温暖、简短的中文开场白。不要提到这是系统指令，只说给用户听的话。'
     )
+
+    if (requestEpoch !== conversationEpoch) return
 
     messages.value.splice(0, messages.value.length, createMessage('assistant', assistant.reply, 'idle'))
   }
@@ -380,6 +398,7 @@ export function useConversation(options: UseConversationOptions = {}) {
     particleState,
     generateOpeningGreeting,
     requestMusicPlayback,
+    resetConversation,
     setAutoListenState,
     startListening,
     stopListening,

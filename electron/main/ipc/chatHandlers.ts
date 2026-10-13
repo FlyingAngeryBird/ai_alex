@@ -7,6 +7,8 @@ import {
   type LlmProvider
 } from '../providers/llmProvider.js'
 import { getDefaultConfigStore, type ConfigStore } from '../config/configStore.js'
+import { randomUUID } from 'node:crypto'
+import type { R1Conversations } from '../r1/conversations.js'
 
 type AppResult<T> =
   | {
@@ -94,6 +96,9 @@ function createLlmMessages(text: string, systemPrompt: string): ChatMessage[] {
 }
 
 function normalizeChatError(error: unknown): { code: string; message: string } {
+  if (error instanceof Error && error.message === 'SESSION_CHANGED') {
+    return { code: 'SESSION_CHANGED', message: '会话已切换，旧回答已丢弃。' }
+  }
   if (error instanceof VolcengineLlmError) {
     return {
       code: error.code,
@@ -110,21 +115,52 @@ function normalizeChatError(error: unknown): { code: string; message: string } {
 export function registerChatHandlers(
   ipc: IpcMainLike = getIpcMain(),
   provider: LlmProvider = createVolcengineLlmProvider(),
-  configStore: ConfigStore = getDefaultConfigStore()
+  configStore: ConfigStore = getDefaultConfigStore(),
+  conversations?: R1Conversations
 ): void {
   clearMemory()
   let activeSystemPrompt: string | null = null
+  let temporary = false
+  let sessionId = conversations?.start(false) ?? null
+  let sessionEpoch = 0
+
+  function persistTurn(text: string, reply: string): void {
+    if (!conversations || !sessionId) return
+    const turnId = randomUUID()
+    conversations.append({ sessionId, turnId, role: 'user', body: text, status: 'final' })
+    conversations.append({ sessionId, turnId, responseId: randomUUID(), role: 'assistant',
+      body: reply, status: 'generated' })
+  }
 
   function getSystemPrompt(): string {
     const systemPrompt = configStore.getConfig().persona.systemPrompt
 
     if (activeSystemPrompt !== null && activeSystemPrompt !== systemPrompt) {
       clearMemory()
+      sessionEpoch += 1
+      if (conversations && sessionId) {
+        conversations.end(sessionId)
+        sessionId = conversations.start(temporary)
+      }
     }
 
     activeSystemPrompt = systemPrompt
     return systemPrompt
   }
+
+  ipc.handle('chat.setTemporary', (_event, payload) => {
+    if (!conversations || typeof (payload as { enabled?: unknown })?.enabled !== 'boolean') {
+      return fail('INVALID_TEMPORARY_MODE', '临时对话状态不可用')
+    }
+    const enabled = (payload as { enabled: boolean }).enabled
+    if (enabled === temporary) return ok({ temporary })
+    clearMemory()
+    sessionEpoch += 1
+    if (sessionId) conversations.end(sessionId)
+    temporary = enabled
+    sessionId = conversations.start(temporary)
+    return ok({ temporary })
+  })
 
   ipc.handle('chat.sendMessage', async (_event, payload): Promise<AppResult<AssistantOutput>> => {
     if (!isChatPayload(payload)) {
@@ -133,9 +169,12 @@ export function registerChatHandlers(
 
     const text = payload.text.trim()
     const systemPrompt = getSystemPrompt()
+    const requestEpoch = sessionEpoch
 
     try {
       const result = await provider.sendMessage(createLlmMessages(text, systemPrompt))
+      if (requestEpoch !== sessionEpoch) throw new Error('SESSION_CHANGED')
+      persistTurn(text, result.reply)
 
       appendMemory({
         content: text,
@@ -160,7 +199,8 @@ export function registerChatHandlers(
 
     const text = payload.text.trim()
     const systemPrompt = getSystemPrompt()
-    const sender = (event as { sender?: { send(channel: string, data: unknown): void } }).sender
+    const requestEpoch = sessionEpoch
+    const sender = (event as { sender?: { send(channel: string, data: unknown): void } } | null)?.sender
 
     function pushChunk(chunk: unknown): void {
       sender?.send('chat.streamChunk', chunk)
@@ -172,6 +212,8 @@ export function registerChatHandlers(
         onRawChunk: () => pushChunk({ diagnostic: 'llm_raw_delta' }),
         onResponseStart: () => pushChunk({ diagnostic: 'llm_response_start' })
       })
+      if (requestEpoch !== sessionEpoch) throw new Error('SESSION_CHANGED')
+      persistTurn(text, result.reply)
 
       appendMemory({
         content: text,

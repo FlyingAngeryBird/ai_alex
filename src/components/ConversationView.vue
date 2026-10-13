@@ -8,6 +8,7 @@ const props = defineProps<{
   messages: UiMessage[]
   partialText: string
   state: ParticleState
+  temporaryMode: boolean
 }>()
 
 const panelCollapsed = defineModel<boolean>('collapsed', { default: false })
@@ -34,6 +35,7 @@ watch(
 
 const emit = defineEmits<{
   openItems: []
+  toggleTemporary: []
   openSettings: []
   requestMusic: []
   toggleAutoListen: []
@@ -94,6 +96,7 @@ const autoListenText: Record<AutoListenState, string> = {
         <h1>Seamo AI</h1>
       </div>
       <div class="header-actions">
+        <button class="panel-toggle" type="button" :aria-pressed="temporaryMode" @click="$emit('toggleTemporary')">{{ temporaryMode ? '退出临时' : '临时对话' }}</button>
         <button class="panel-toggle" type="button" @click="$emit('openItems')">事项</button>
         <button class="panel-toggle" type="button" @click="$emit('openSettings')">设置</button>
         <button class="panel-toggle" type="button" @click="collapsePanel">收起</button>
@@ -149,6 +152,7 @@ const autoListenText: Record<AutoListenState, string> = {
     </footer>
 
     <footer v-else class="compact-action-bar" aria-label="灵粒快捷操作">
+      <button class="compact-tab" type="button" :aria-pressed="temporaryMode" @click="$emit('toggleTemporary')">{{ temporaryMode ? '临时中' : '临时' }}</button>
       <button class="compact-tab" type="button" @click="$emit('openItems')">事项</button>
       <button
         class="compact-tab compact-voice"

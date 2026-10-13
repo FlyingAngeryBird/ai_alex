@@ -17,6 +17,7 @@ import { registerR1Handlers } from './ipc/r1Handlers.js'
 import { registerCredentialHandlers } from './ipc/credentialHandlers.js'
 import { CredentialVault } from './r1/credentials.js'
 import { createElectronReminderScheduler, type ReminderScheduler } from './r1/reminderScheduler.js'
+import { R1Conversations } from './r1/conversations.js'
 import type { MusicTrack } from './music/gdstudioMusicProvider.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -55,7 +56,6 @@ function createMainWindow(): BrowserWindow {
 }
 
 registerAppHandlers()
-registerChatHandlers()
 registerConfigHandlers()
 registerMusicHandlers()
 registerTtsHandlers()
@@ -84,6 +84,9 @@ void app.whenReady().then(async () => {
   const musicPath = join(userData, 'music.json')
   await getDefaultConfigStore().loadConfig()
   await getDefaultMusicStore().loadLibrary()
+  if (r1Database) {
+    registerChatHandlers(undefined, undefined, undefined, new R1Conversations(r1Database))
+  }
   if (r1Database && !existsSync(configPath)) {
     const persona = r1Database.prepare('SELECT voice_id FROM persona WHERE id = 1')
       .get() as { voice_id: string }

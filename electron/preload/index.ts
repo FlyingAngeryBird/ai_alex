@@ -6,6 +6,7 @@ export const exposedChannels = [
   'app.requestMicrophoneAccess',
   'chat.sendMessage',
   'chat.streamMessage',
+  'chat.setTemporary',
   'config.get',
   'config.update',
   'music.addSearchHistory',

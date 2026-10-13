@@ -1,7 +1,38 @@
 import { describe, expect, it, vi } from 'vitest'
 import { registerChatHandlers } from '../electron/main/ipc/chatHandlers'
+import { openR1Database } from '../electron/main/r1/database'
+import { R1Conversations } from '../electron/main/r1/conversations'
 
 describe('chat IPC handlers', () => {
+  it('persists normal turns, isolates temporary turns, and discards an old in-flight reply', async () => {
+    const db = openR1Database(':memory:')
+    try {
+      const handlers = new Map<string, (_event: unknown, payload?: unknown) => Promise<unknown> | unknown>()
+      const ipc = { handle: (channel: string, handler: (_event: unknown, payload?: unknown) => unknown) => {
+        handlers.set(channel, handler)
+      } }
+      let release: (value: { intent: 'chat'; music: null; reply: string }) => void = () => undefined
+      const provider = { sendMessage: vi.fn(async () => ({ intent: 'chat' as const, music: null, reply: '回答' })),
+        streamMessage: vi.fn(() => new Promise<{ intent: 'chat'; music: null; reply: string }>((resolve) => {
+          release = resolve
+        })) }
+      registerChatHandlers(ipc, provider, undefined, new R1Conversations(db))
+      await handlers.get('chat.sendMessage')?.(null, { text: '普通内容' })
+      expect(db.prepare('SELECT COUNT(*) AS count FROM messages').get()).toMatchObject({ count: 2 })
+      expect(handlers.get('chat.setTemporary')?.(null, { enabled: true }))
+        .toEqual({ ok: true, data: { temporary: true } })
+      await handlers.get('chat.sendMessage')?.(null, { text: '临时内容' })
+      expect(db.prepare('SELECT COUNT(*) AS count FROM messages').get()).toMatchObject({ count: 2 })
+      const pending = handlers.get('chat.streamMessage')?.(null, { text: '临时请求' }) as Promise<unknown>
+      expect(handlers.get('chat.setTemporary')?.(null, { enabled: false }))
+        .toEqual({ ok: true, data: { temporary: false } })
+      release({ intent: 'chat', music: null, reply: '旧回答' })
+      expect(await pending).toMatchObject({ ok: false, error: { code: 'SESSION_CHANGED' } })
+      expect(db.prepare('SELECT COUNT(*) AS count FROM messages').get()).toMatchObject({ count: 2 })
+      expect(db.prepare("SELECT COUNT(*) AS count FROM messages WHERE body = '临时内容'").get())
+        .toMatchObject({ count: 0 })
+    } finally { db.close() }
+  })
   it('keeps short conversation memory and routes messages to LLM provider', async () => {
     const handlers = new Map<string, (_event: unknown, payload?: unknown) => Promise<unknown> | unknown>()
     const ipcMain = {

@@ -50,6 +50,7 @@ const panelCollapsed = ref(false)
 const spaceHeld = ref(false)
 const settingsOpen = ref(false)
 const itemsOpen = ref(false)
+const temporaryMode = ref(false)
 const reminderNotice = ref<{ body: string; dueAtUtc: string; systemRequested: boolean } | null>(null)
 let stopReminderNotice: (() => void) | null = null
 const appConfig = ref<AppConfig>({
@@ -696,6 +697,30 @@ async function handleSaveConfig(patch: ConfigPatch): Promise<void> {
   }
 }
 
+async function handleToggleTemporary(): Promise<void> {
+  if (conversation.isListening.value || assistantAudioPlaying.value ||
+    conversation.particleState.value === 'thinking') {
+    conversation.addSystemMessage('请先结束当前语音或等待回答结束，再切换临时对话。')
+    return
+  }
+  const next = !temporaryMode.value
+  const result = await window.lingli.invoke<{ temporary: boolean }>('chat.setTemporary', { enabled: next })
+  if (!result.ok) {
+    conversation.addSystemMessage(result.error.message)
+    return
+  }
+  if (startupGreetingTimer !== null) {
+    window.clearTimeout(startupGreetingTimer)
+    startupGreetingTimer = null
+  }
+  releaseAssistantAudio()
+  conversation.resetConversation()
+  temporaryMode.value = result.data.temporary
+  conversation.addSystemMessage(temporaryMode.value
+    ? '已进入临时对话。这里的聊天不会保存，也不会读取长期记忆。'
+    : '已退出临时对话。刚才的临时聊天已清除。')
+}
+
 async function handlePreviewVoice(voiceId: string): Promise<void> {
   voicePreviewing.value = true
 
@@ -781,10 +806,12 @@ onBeforeUnmount(() => {
           :auto-listen-state="conversation.autoListenState.value"
           :is-listening="conversation.isListening.value"
           :partial-text="conversationPartialText"
+          :temporary-mode="temporaryMode"
           @request-music="requestMusicPlayback"
           @toggle-auto-listen="toggleAutoListen"
           @open-settings="settingsOpen = true"
           @open-items="itemsOpen = true"
+          @toggle-temporary="handleToggleTemporary"
           @voice-press-end="endPushToTalk"
           @voice-press-start="beginPushToTalk"
         />
@@ -805,7 +832,7 @@ onBeforeUnmount(() => {
       @preview-voice="handlePreviewVoice"
       @save="handleSaveConfig"
     />
-    <ItemsPanel v-if="itemsOpen" @close="itemsOpen = false" />
+    <ItemsPanel v-if="itemsOpen" :temporary-mode="temporaryMode" @close="itemsOpen = false" />
     <aside v-if="reminderNotice" class="r1-reminder-toast" role="status">
       <div><strong>提醒已到期</strong><p>{{ reminderNotice.body }}</p>
         <small>{{ reminderNotice.systemRequested ? '系统通知已请求；不代表已读。' : '已在应用内显示；系统通知未请求。' }}</small>

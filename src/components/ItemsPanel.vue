@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, ref } from 'vue'
 import type { Item, Reminder } from '../../electron/shared/r1Api'
 
 const emit = defineEmits<{ close: [] }>()
+const props = defineProps<{ temporaryMode: boolean }>()
 const items = ref<Item[]>([])
 const reminders = ref<Reminder[]>([])
 const kind = ref<'note' | 'todo'>('note')
@@ -15,6 +16,7 @@ const reminderPurpose = ref<'todo_due' | 'independent'>('independent')
 const editingReminderId = ref('')
 const editedReminderTime = ref('')
 const busy = ref(false)
+const persistAcknowledged = ref(false)
 const error = ref('')
 const pendingDeletion = ref<{
   item: Item
@@ -40,6 +42,10 @@ async function refresh(): Promise<void> {
 
 async function createItem(): Promise<void> {
   if (!title.value.trim() || !body.value.trim() || busy.value) return
+  if (props.temporaryMode && !persistAcknowledged.value) {
+    error.value = '请先确认：这条事项会独立保存，退出临时对话后仍保留。'
+    return
+  }
   busy.value = true
   try {
     const result = await window.seamoR1.items.create({ actionId: crypto.randomUUID(),
@@ -55,6 +61,10 @@ async function createItem(): Promise<void> {
 
 async function createReminder(): Promise<void> {
   if (!reminderBody.value.trim() || !reminderTime.value || busy.value) return
+  if (props.temporaryMode && !persistAcknowledged.value) {
+    error.value = '请先确认：这条提醒会独立保存，退出临时对话后仍保留。'
+    return
+  }
   const due = new Date(reminderTime.value)
   if (!Number.isFinite(due.getTime()) || due.getTime() <= Date.now()) {
     error.value = '请选择未来的具体日期和时间。'
@@ -183,6 +193,7 @@ onUnmounted(() => stopReminderEvents?.())
       </header>
 
       <div class="items-content">
+        <label v-if="temporaryMode" class="items-temp-confirm"><input v-model="persistAcknowledged" type="checkbox" />我确认：在这里保存的事项和提醒会留在设备上，退出临时对话后仍保留。</label>
         <form class="items-create" @submit.prevent="createItem">
           <div class="items-kind" role="group" aria-label="事项类型">
             <button type="button" :aria-pressed="kind === 'note'" @click="kind = 'note'">便签</button>
@@ -278,7 +289,7 @@ h2{margin:0;font-family:"Songti SC",Georgia,serif;font-size:31px;font-weight:500
 label{display:grid;gap:7px;font-size:12px;color:#b7c6c7}
 input,textarea,select{width:100%;border:1px solid rgba(176,213,219,.22);border-radius:9px;background:#101822;color:#f7f3e9;padding:10px 12px;font:inherit;resize:vertical}
 input:focus,textarea:focus,select:focus{outline:2px solid #82d8d7;outline-offset:1px}
-.items-form-hint{margin:0;color:#8faeb2;font-size:12px;line-height:1.6}
+.items-form-hint{margin:0;color:#8faeb2;font-size:12px;line-height:1.6}.items-temp-confirm{display:flex;align-items:flex-start;gap:9px;margin-bottom:20px;color:#e5d5a9;line-height:1.6}.items-temp-confirm input{width:auto;margin-top:3px}
 .items-primary{border:0;border-radius:9px;background:#88d9d5;color:#09232b;padding:10px 17px;font-weight:650;cursor:pointer}
 .items-primary:disabled{opacity:.45;cursor:not-allowed}
 .items-quiet{border:0;background:transparent;color:#a8bbbd;cursor:pointer;padding:5px;white-space:nowrap;flex:none}
