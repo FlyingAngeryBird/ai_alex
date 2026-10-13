@@ -15,6 +15,7 @@ import { createMainWindowOptions } from './windowOptions.js'
 import { importLegacyJson, openR1Database, type R1Database } from './r1/database.js'
 import { registerR1Handlers } from './ipc/r1Handlers.js'
 import { registerCredentialHandlers } from './ipc/credentialHandlers.js'
+import { registerSearchHandlers } from './ipc/searchHandlers.js'
 import { CredentialVault } from './r1/credentials.js'
 import { createElectronReminderScheduler, type ReminderScheduler } from './r1/reminderScheduler.js'
 import { R1Conversations } from './r1/conversations.js'
@@ -60,6 +61,7 @@ registerConfigHandlers()
 registerMusicHandlers()
 registerTtsHandlers()
 registerVoiceHandlers()
+registerSearchHandlers()
 
 void app.whenReady().then(async () => {
   try {

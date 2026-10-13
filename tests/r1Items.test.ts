@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { openR1Database } from '../electron/main/r1/database'
 import { R1Items } from '../electron/main/r1/items'
 
@@ -64,15 +64,17 @@ describe('R1 item and reminder transactions', () => {
     try {
       const item = items.create({ actionId: 'create', kind: 'todo', title: '事', body: '事' }).item
       const reminder = items.createReminder({ actionId: 'remind', itemId: item.itemId,
-        linkPurpose: 'todo_due', body: '提醒', dueAtUtc: new Date(Date.now() - 1000).toISOString(),
+        linkPurpose: 'todo_due', body: '提醒', dueAtUtc: new Date(Date.now() + 1000).toISOString(),
         timezone: 'Asia/Shanghai' }).reminder
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date(Date.now() + 2000))
       expect(items.deliver(reminder.reminderId, 1, 'in_app').delivered).toBe(true)
       expect(items.deliver(reminder.reminderId, 1, 'in_app').delivered).toBe(false)
       const complete = items.complete({ actionId: 'complete', itemId: item.itemId,
         expectedVersion: 1, completed: true })
       expect(complete.reminderReceipts).toHaveLength(0)
       expect(items.listReminders()[0].status).toBe('due')
-    } finally { db.close() }
+    } finally { vi.useRealTimers(); db.close() }
   })
 
   it('rejects invalid reminder times and keeps the item committed for a separate retry', () => {
@@ -81,6 +83,10 @@ describe('R1 item and reminder transactions', () => {
       const item = items.create({ actionId: 'create', kind: 'note', title: '事', body: '内容' }).item
       expect(() => items.createReminder({ actionId: 'bad-reminder', itemId: item.itemId,
         linkPurpose: 'independent', body: '提醒', dueAtUtc: '明晚', timezone: 'Asia/Shanghai' }))
+        .toThrow('INVALID_DUE_TIME')
+      expect(() => items.createReminder({ actionId: 'past-reminder', itemId: item.itemId,
+        linkPurpose: 'independent', body: '提醒',
+        dueAtUtc: new Date(Date.now() - 1000).toISOString(), timezone: 'Asia/Shanghai' }))
         .toThrow('INVALID_DUE_TIME')
       expect(items.list()).toHaveLength(1)
       expect(items.listReminders()).toHaveLength(0)

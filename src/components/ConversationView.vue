@@ -35,6 +35,7 @@ watch(
 
 const emit = defineEmits<{
   openItems: []
+  openSearch: []
   toggleTemporary: []
   openSettings: []
   requestMusic: []
@@ -98,6 +99,7 @@ const autoListenText: Record<AutoListenState, string> = {
       <div class="header-actions">
         <button class="panel-toggle" type="button" :aria-pressed="temporaryMode" @click="$emit('toggleTemporary')">{{ temporaryMode ? '退出临时' : '临时对话' }}</button>
         <button class="panel-toggle" type="button" @click="$emit('openItems')">事项</button>
+        <button class="panel-toggle" type="button" @click="$emit('openSearch')">联网查询</button>
         <button class="panel-toggle" type="button" @click="$emit('openSettings')">设置</button>
         <button class="panel-toggle" type="button" @click="collapsePanel">收起</button>
         <div class="status-pill" :aria-label="`当前状态：${statusText[state]}`">
@@ -154,6 +156,7 @@ const autoListenText: Record<AutoListenState, string> = {
     <footer v-else class="compact-action-bar" aria-label="灵粒快捷操作">
       <button class="compact-tab" type="button" :aria-pressed="temporaryMode" @click="$emit('toggleTemporary')">{{ temporaryMode ? '临时中' : '临时' }}</button>
       <button class="compact-tab" type="button" @click="$emit('openItems')">事项</button>
+      <button class="compact-tab" type="button" @click="$emit('openSearch')">查询</button>
       <button
         class="compact-tab compact-voice"
         :class="{ 'compact-tab--active': isListening }"

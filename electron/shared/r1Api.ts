@@ -1,6 +1,7 @@
 import type { ActionReceipt, Item, R1Items, Reminder } from '../main/r1/items.js'
 import type { CredentialPatch, CredentialStatus } from '../main/r1/credentials.js'
 import type { ReminderDueEvent } from '../main/r1/reminderScheduler.js'
+import type { SearchResult } from '../main/providers/braveSearchProvider.js'
 
 export type R1Result<T> =
   | { ok: true; data: T }
@@ -27,6 +28,10 @@ export type R1Api = {
   credentials: {
     status(): Promise<R1Result<CredentialStatus>>
     save(patch: CredentialPatch): Promise<R1Result<CredentialStatus>>
+  }
+  search: {
+    web(query: string): Promise<R1Result<SearchResult>>
+    open(candidateId: string): Promise<R1Result<{ candidateId: string }>>
   }
 }
 

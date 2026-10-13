@@ -6,6 +6,7 @@ import MusicImmersiveView from '@/components/MusicImmersiveView.vue'
 import ParticleSphere from '@/components/ParticleSphere.vue'
 import SettingsView from '@/components/SettingsView.vue'
 import ItemsPanel from '@/components/ItemsPanel.vue'
+import SearchPanel from '@/components/SearchPanel.vue'
 import { useAutoListen } from '@/composables/useAutoListen'
 import { useConversation } from '@/composables/useConversation'
 import { useKeyboardRecorder } from '@/composables/useKeyboardRecorder'
@@ -50,6 +51,7 @@ const panelCollapsed = ref(false)
 const spaceHeld = ref(false)
 const settingsOpen = ref(false)
 const itemsOpen = ref(false)
+const searchOpen = ref(false)
 const temporaryMode = ref(false)
 const reminderNotice = ref<{ body: string; dueAtUtc: string; systemRequested: boolean } | null>(null)
 let stopReminderNotice: (() => void) | null = null
@@ -811,6 +813,7 @@ onBeforeUnmount(() => {
           @toggle-auto-listen="toggleAutoListen"
           @open-settings="settingsOpen = true"
           @open-items="itemsOpen = true"
+          @open-search="searchOpen = true"
           @toggle-temporary="handleToggleTemporary"
           @voice-press-end="endPushToTalk"
           @voice-press-start="beginPushToTalk"
@@ -833,6 +836,7 @@ onBeforeUnmount(() => {
       @save="handleSaveConfig"
     />
     <ItemsPanel v-if="itemsOpen" :temporary-mode="temporaryMode" @close="itemsOpen = false" />
+    <SearchPanel v-if="searchOpen" :temporary-mode="temporaryMode" @close="searchOpen = false" />
     <aside v-if="reminderNotice" class="r1-reminder-toast" role="status">
       <div><strong>提醒已到期</strong><p>{{ reminderNotice.body }}</p>
         <small>{{ reminderNotice.systemRequested ? '系统通知已请求；不代表已读。' : '已在应用内显示；系统通知未请求。' }}</small>

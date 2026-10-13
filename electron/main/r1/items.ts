@@ -136,7 +136,8 @@ export class R1Items {
       }
       if (input.itemId) itemById(this.db, input.itemId)
       if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(input.dueAtUtc) ||
-        !Number.isFinite(Date.parse(input.dueAtUtc))) throw new Error('INVALID_DUE_TIME')
+        !Number.isFinite(Date.parse(input.dueAtUtc)) || Date.parse(input.dueAtUtc) <= Date.now())
+        throw new Error('INVALID_DUE_TIME')
       try { new Intl.DateTimeFormat('en', { timeZone: input.timezone }) } catch { throw new Error('INVALID_TIMEZONE') }
       const id = randomUUID()
       const now = new Date().toISOString()

@@ -48,7 +48,7 @@ describe('R1 database and legacy import', () => {
     const path = join(makeDirectory(), 'r1.sqlite')
     const db = openR1Database(path)
     const reminder = new R1Items(db).createReminder({ actionId: 'create',
-      linkPurpose: 'independent', body: '提醒', dueAtUtc: new Date().toISOString(),
+      linkPurpose: 'independent', body: '提醒', dueAtUtc: new Date(Date.now() + 60_000).toISOString(),
       timezone: 'Asia/Shanghai' }).reminder
     db.exec('DROP TABLE deliveries')
     db.exec(`CREATE TABLE deliveries (
