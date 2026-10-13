@@ -29,6 +29,9 @@ export type R1PromptAssets = {
   schemaVersion: string
   toolAliases: readonly string[]
   compose(persona: R1Persona, context: Record<string, unknown>, mode?: 'textOnly' | 'realtime'): string
+  composeTask(persona: R1Persona, taskInput: Record<string, unknown>): R1CompiledPrompt
+  validateStructured(schema: 'task-input' | 'task-draft' | 'tool-output', input: unknown): void
+  structuredSchema(schema: 'task-draft'): Record<string, unknown>
   compile(mode: string, variables: Record<string, unknown>, loadedSkillIds?: string[]): R1CompiledPrompt
   exposeTools(input: { channel: 'realtime' | 'task'; loadedSkillIds: string[];
     authorizedAliases: string[]; temporary: boolean }): R1ModelTool[]
@@ -179,6 +182,12 @@ export function loadR1PromptAssets(root: string): R1PromptAssets {
       return compile(mode, { persona_json: persona, skill_index_json: skillIndex,
         app_context: context }, (context.loadedSkillIds ?? ['SK01']) as string[]).text
     },
+    composeTask(persona, taskInput) {
+      return compile('task', { persona_json: persona, skill_index_json: skillIndex,
+        task_input_json: taskInput }, (taskInput.loadedSkillIds ?? []) as string[])
+    },
+    validateStructured(schema, input) { validate(schema, input) },
+    structuredSchema(schema) { return JSON.parse(readVerified(`schemas/${schema}.schema.json`)) as Record<string, unknown> },
     exposeTools({ channel, loadedSkillIds, authorizedAliases, temporary }) {
       if (!['realtime', 'task'].includes(channel)) throw new Error('MODEL_TOOL_CHANNEL_UNKNOWN')
       checkedSkills(loadedSkillIds)

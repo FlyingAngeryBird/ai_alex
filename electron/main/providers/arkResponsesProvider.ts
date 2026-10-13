@@ -5,6 +5,8 @@ export type ArkModelBoundary = {
   readonly systemText: string
   finalize(messages: ChatMessage[]): { messages: ChatMessage[]; tools: R1ModelTool[] }
   validateToolCall(alias: string, input: unknown): void
+  assertCurrent?(): void
+  readonly outputFormat?: { name: string; schema: Record<string, unknown> }
 }
 
 export type ArkFunctionCall = { type: 'function_call'; id?: string; call_id: string;
@@ -26,7 +28,7 @@ function invalid(code: string): never { throw new ArkResponsesError(code) }
 
 function checkedOutput(value: unknown, boundary: ArkModelBoundary): ArkOutputItem[] {
   if (!Array.isArray(value) || value.length > 100) invalid('ARK_OUTPUT_INVALID')
-  if (JSON.stringify(value).length > 400_000) invalid('ARK_OUTPUT_TOO_LARGE')
+  if (JSON.stringify(value).length > 1_048_576) invalid('ARK_OUTPUT_TOO_LARGE')
   const output = value as ArkOutputItem[]
   const calls = new Set<string>()
   for (const item of output) {
@@ -86,7 +88,9 @@ export function createArkResponsesProvider(options: { env?: Environment;
           history.push({ type: 'function_call_output', call_id: result.callId, output: text })
         }
       }
+      if (!history.length) invalid('ARK_INPUT_REQUIRED')
       const tools = prepared.tools.map(tool => ({ type: 'function', ...tool.function }))
+      const outputFormat = input.boundary.outputFormat
       const timeout = AbortSignal.timeout(options.timeoutMs ?? 15_000)
       const signal = input.signal ? AbortSignal.any([input.signal, timeout]) : timeout
       if (signal.aborted) invalid('ARK_REQUEST_CANCELLED')
@@ -96,7 +100,9 @@ export function createArkResponsesProvider(options: { env?: Environment;
         const response = await fetcher(`${(env.VOLCENGINE_ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3').trim().replace(/\/$/, '')}/responses`, {
           method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, signal,
           body: JSON.stringify({ model, store: false, stream: false, instructions: input.boundary.systemText,
-            input: history, tools, max_output_tokens: maxOutputTokens })
+            input: history, tools, max_output_tokens: maxOutputTokens,
+            ...(outputFormat ? { text: { format: { type: 'json_schema', name: outputFormat.name,
+              schema: outputFormat.schema, strict: true } } } : {}) })
         })
         if (!response.ok) invalid(`ARK_HTTP_${response.status}`)
         body = await response.json() as ResponseBody
@@ -108,12 +114,14 @@ export function createArkResponsesProvider(options: { env?: Environment;
       }
       if (input.signal?.aborted) invalid('ARK_REQUEST_CANCELLED')
       if (timeout.aborted) invalid('ARK_REQUEST_TIMEOUT')
+      input.boundary.assertCurrent?.()
       if (!body || body.error || body.status !== 'completed' || typeof body.id !== 'string' || !body.id) invalid('ARK_RESPONSE_NOT_COMPLETED')
       const output = checkedOutput(body.output, input.boundary)
       const calls = output.filter((item): item is ArkFunctionCall => item.type === 'function_call')
       if (calls.some(call => allCallIds.has(call.call_id))) invalid('ARK_DUPLICATE_CALL_ID')
       const text = output.filter(item => item.type === 'message').flatMap(item => item.content.map(part => part.text)).join('\n')
-      if ([...text].length > 8000) invalid('ARK_TEXT_TOO_LONG')
+      // The 8000 limit applies to each product body; structured JSON includes schema metadata.
+      if ([...text].length > (outputFormat ? 1_048_576 : 8000)) invalid('ARK_TEXT_TOO_LONG')
       if (!text && !calls.length) invalid('ARK_EMPTY_RESPONSE')
       return { id: body.id, output, calls, text,
         usage: body.usage && typeof body.usage === 'object' ? body.usage as Record<string, unknown> : null }

@@ -10,6 +10,7 @@ const call: ArkFunctionCall = { type: 'function_call', call_id: 'native-call-id'
   name: 'memory_recall', arguments: '{"query":"偏好"}', status: 'completed' }
 function boundary() { return new R1ModelRequestBoundary(loadR1PromptAssets(resolve('r1-assets')), persona, modelContext(), ['memory_recall']) }
 const response = (output: unknown[], status = 'completed') => new Response(JSON.stringify({ id: 'response-id', status, output }))
+const messages = [{ role: 'user' as const, content: '协议测试' }]
 
 describe('Ark Responses native tool protocol', () => {
   it('sends store=false with registered instructions and flat function definitions', async () => {
@@ -53,13 +54,19 @@ describe('Ark Responses native tool protocol', () => {
     [{ type: 'web_search_call' }, 'ARK_UNAUTHORIZED_OUTPUT_TYPE']
   ])('rejects unexposed or invalid protocol output %#', async (item, code) => {
     const adapter = createArkResponsesProvider({ env, fetch: async () => response([item]) })
-    await expect(adapter.request({ boundary: boundary(), messages: [] })).rejects.toMatchObject({ code })
+    await expect(adapter.request({ boundary: boundary(), messages })).rejects.toMatchObject({ code })
   })
   it('does not publish an incomplete or cancelled response', async () => {
     const adapter = createArkResponsesProvider({ env, fetch: async () => response([call], 'incomplete') })
-    await expect(adapter.request({ boundary: boundary(), messages: [] })).rejects.toMatchObject({ code: 'ARK_RESPONSE_NOT_COMPLETED' })
+    await expect(adapter.request({ boundary: boundary(), messages })).rejects.toMatchObject({ code: 'ARK_RESPONSE_NOT_COMPLETED' })
     const controller = new AbortController()
     controller.abort()
-    await expect(adapter.request({ boundary: boundary(), messages: [], signal: controller.signal })).rejects.toMatchObject({ code: 'ARK_REQUEST_CANCELLED' })
+    await expect(adapter.request({ boundary: boundary(), messages, signal: controller.signal })).rejects.toMatchObject({ code: 'ARK_REQUEST_CANCELLED' })
+  })
+  it('requires real input after dropping all SDK system messages', async () => {
+    const fetcher = vi.fn()
+    await expect(createArkResponsesProvider({ env, fetch: fetcher }).request({ boundary: boundary(),
+      messages: [{ role: 'system', content: 'SDK system only' }] })).rejects.toMatchObject({ code: 'ARK_INPUT_REQUIRED' })
+    expect(fetcher).not.toHaveBeenCalled()
   })
 })
