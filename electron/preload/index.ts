@@ -5,6 +5,7 @@ export const exposedChannels = [
   'app.getRuntimeState',
   'app.requestMicrophoneAccess',
   'chat.sendMessage',
+  'chat.greeting',
   'chat.streamMessage',
   'chat.setTemporary',
   'config.get',

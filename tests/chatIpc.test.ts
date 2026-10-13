@@ -4,6 +4,24 @@ import { openR1Database } from '../electron/main/r1/database'
 import { R1Conversations } from '../electron/main/r1/conversations'
 
 describe('chat IPC handlers', () => {
+  it('generates a greeting without saving its internal instruction as user history', async () => {
+    const db = openR1Database(':memory:')
+    try {
+      const handlers = new Map<string, (_event: unknown, payload?: unknown) => Promise<unknown> | unknown>()
+      const ipc = { handle: (channel: string, handler: (_event: unknown, payload?: unknown) => unknown) => {
+        handlers.set(channel, handler)
+      } }
+      const provider = { sendMessage: vi.fn(async () => ({ intent: 'chat' as const, music: null,
+        reply: '今天想聊些什么？' })), streamMessage: vi.fn() }
+      registerChatHandlers(ipc, provider, undefined, new R1Conversations(db))
+      expect(await handlers.get('chat.greeting')?.(null)).toMatchObject({ ok: true,
+        data: { intent: 'chat', reply: '今天想聊些什么？' } })
+      expect(provider.sendMessage).toHaveBeenCalledWith(expect.arrayContaining([
+        expect.objectContaining({ role: 'system' })
+      ]))
+      expect(db.prepare('SELECT COUNT(*) AS count FROM messages').get()).toMatchObject({ count: 0 })
+    } finally { db.close() }
+  })
   it('persists normal turns, isolates temporary turns, and discards an old in-flight reply', async () => {
     const db = openR1Database(':memory:')
     try {

@@ -27,7 +27,7 @@ const credentialFields: { key: CredentialField; label: string; secret: boolean }
   { key: 'VOLCENGINE_STREAM_ASR_API_KEY', label: '实时语音 API Key', secret: true },
   { key: 'VOLCENGINE_TTS_API_KEY', label: '语音合成 API Key', secret: true },
   { key: 'VOLCENGINE_TTS_VOICE', label: '默认音色 ID', secret: false },
-  { key: 'BRAVE_SEARCH_API_KEY', label: 'Brave Search API Key（联网查询）', secret: true }
+  { key: 'BRAVE_SEARCH_API_KEY', label: 'Brave Search API Key（G0 待验证候选）', secret: true }
 ]
 const credentialInputs = reactive<Partial<Record<CredentialField, string>>>({})
 const credentialStatus = ref<CredentialStatus | null>(null)
@@ -186,7 +186,7 @@ function save(): void {
         </section>
 
         <section class="settings-section">
-          <label class="settings-label">模型与语音服务</label>
+          <label class="settings-label">服务配置与状态</label>
           <p class="settings-hint">填写你自己的火山引擎配置。密钥保存在这台 Mac 的加密存储中；这里不回显已保存的值。留空表示不修改。</p>
           <div v-for="field in credentialFields" :key="field.key" class="voice-item">
             <label class="settings-hint" :for="field.key">{{ field.label }}</label>
@@ -201,8 +201,8 @@ function save(): void {
         </section>
 
         <section class="settings-section">
-          <label class="settings-label">角色提示词</label>
-          <p class="settings-hint">定义 Seamo AI 的性格、语气与输出格式。保存后立即生效。</p>
+          <label class="settings-label">高级人格设置</label>
+          <p class="settings-hint">当前仍使用旧版提示词配置。正式的助手名、称呼与风格正在接入；请勿把这里当作 R1 人格设置已验收。</p>
           <textarea
             v-model="systemPrompt"
             class="settings-textarea"

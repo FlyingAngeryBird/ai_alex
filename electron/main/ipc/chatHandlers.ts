@@ -162,6 +162,20 @@ export function registerChatHandlers(
     return ok({ temporary })
   })
 
+  ipc.handle('chat.greeting', async (): Promise<AppResult<AssistantOutput>> => {
+    const systemPrompt = getSystemPrompt()
+    try {
+      const result = await provider.sendMessage([
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: '请用一句自然、简短的中文向用户问好。不要描述这条内部请求。' }
+      ])
+      return ok({ intent: 'chat', music: null, reply: result.reply })
+    } catch (error) {
+      const normalized = normalizeChatError(error)
+      return fail(normalized.code, normalized.message)
+    }
+  })
+
   ipc.handle('chat.sendMessage', async (_event, payload): Promise<AppResult<AssistantOutput>> => {
     if (!isChatPayload(payload)) {
       return fail('CHAT_INVALID_PAYLOAD', '对话内容不能为空')

@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import type { MusicSourcePreference, MusicTrack, PlaybackState } from '@/types/app'
 import { getCurrentLyricIndex } from '@/utils/musicLyrics'
+import { ArrowLeft, Heart, Search, X } from 'lucide-vue-next'
 
 const props = defineProps<{
   activeTab: 'search' | 'favorite'
@@ -44,6 +45,12 @@ const sourceOptions: Array<{ label: string; value: MusicSourcePreference }> = [
 ]
 
 const searchInput = ref(props.searchQuery)
+const libraryOpen = ref(false)
+
+function showLibrary(tab: 'search' | 'favorite'): void {
+  emit('changeTab', tab)
+  libraryOpen.value = true
+}
 
 const progress = computed(() => {
   if (!props.playback.durationMs) {
@@ -106,14 +113,14 @@ const fallbackLines = computed(() => {
 
 const statusLabel = computed(() => {
   if (props.playback.status === 'loading') {
-    return 'Loading'
+    return '正在缓冲'
   }
 
   if (props.playback.status === 'error') {
-    return 'Error'
+    return '播放失败'
   }
 
-  return props.playback.status === 'playing' ? 'Playing' : 'Paused'
+  return props.playback.status === 'playing' ? '正在播放' : '已暂停'
 })
 
 const emptyTitle = computed(() => {
@@ -163,7 +170,6 @@ const isCurrentFavorite = computed(() => {
 })
 
 function onToggleFavorite(track: MusicTrack): void {
-  console.log('[lingmo] onToggleFavorite click', track?.id, track?.title)
   emit('toggleFavorite', track)
 }
 
@@ -239,19 +245,23 @@ function lyricStyle(distance: number): Record<string, string> {
   <section class="music-view" aria-label="音乐沉浸页">
     <header class="music-topbar">
       <div class="top-left">
-        <button class="round-button" type="button" aria-label="返回聊天" @click="$emit('back')">
-          ←
-        </button>
-        <div class="status-pill"><span class="status-dot" />{{ statusLabel }}</div>
-        <button class="exit-button" type="button" @click="$emit('exit')">退出</button>
+        <button class="r1-music-back" type="button" aria-label="返回对话" @click="$emit('back')"><ArrowLeft :size="17" />返回对话</button>
+        <div class="r1-music-mode"><span class="status-dot" />{{ playback.track ? statusLabel : '音乐陪伴' }}</div>
       </div>
-
+      <div class="r1-music-tools">
+        <button type="button" aria-label="搜索音乐" title="搜索音乐" @click="showLibrary('search')"><Search :size="17" /></button>
+        <button type="button" aria-label="收藏音乐" title="收藏音乐" @click="showLibrary('favorite')"><Heart :size="17" /></button>
+        <button v-if="playback.track" type="button" class="r1-music-exit" @click="$emit('exit')">退出播放</button>
+      </div>
+    </header>
       <form
+        v-if="libraryOpen"
         class="search-glass"
         :data-results="searchResultsVisible"
         aria-label="歌曲搜索"
         @submit.prevent="submitSearch"
       >
+        <div class="r1-music-library-head"><span>{{ activeTab === 'search' ? '寻找音乐' : '我喜欢的' }}</span><button type="button" aria-label="关闭音乐资料库" @click="libraryOpen = false"><X :size="17" /></button></div>
         <div class="music-tabs">
           <button
             type="button"
@@ -385,7 +395,6 @@ function lyricStyle(distance: number): Record<string, string> {
           </div>
         </div>
       </form>
-    </header>
 
     <section v-if="playback.track" class="music-layout music-layout-v10" aria-label="音乐播放">
       <div class="cover-frame">
@@ -402,7 +411,7 @@ function lyricStyle(distance: number): Record<string, string> {
 
       <section class="music-copy" aria-label="当前歌曲">
         <p class="eyebrow">
-          {{ playback.track.source ? `GD Studio · ${playback.track.source}` : 'GD Studio' }}
+          {{ playback.track.source ? `SEAMO SESSIONS · ${playback.track.source}` : 'SEAMO SESSIONS' }}
         </p>
         <div class="track-head">
           <h2
@@ -503,13 +512,17 @@ function lyricStyle(distance: number): Record<string, string> {
       v-else
       class="music-layout music-layout--loading"
       :data-error="playback.status === 'error'"
-      :aria-label="playback.status === 'error' ? '音乐播放失败' : '音乐加载中'"
+      :aria-label="playback.status === 'error' ? '音乐播放失败' : playback.status === 'loading' ? '音乐加载中' : '尚未播放音乐'"
     >
       <div class="music-copy">
-        <p class="eyebrow">GD Studio</p>
+        <p class="eyebrow">SEAMO SESSIONS</p>
         <h2>{{ emptyTitle }}</h2>
         <p v-if="emptySubtitle" class="artist">{{ emptySubtitle }}</p>
       </div>
+      <aside class="r1-music-empty-lyric" aria-label="歌词状态">
+        <h3>{{ playback.status === 'loading' ? '正在寻找可播放版本' : '把时间，留给一首歌。' }}</h3>
+        <p>{{ playback.status === 'error' ? '你可以打开搜索，更换歌曲或音源。' : '选好音乐后，歌词会在这里跟随真实播放时间出现。' }}</p>
+      </aside>
     </section>
   </section>
 </template>

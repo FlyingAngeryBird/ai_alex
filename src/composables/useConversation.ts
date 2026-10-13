@@ -14,6 +14,7 @@ type ChatResponse = {
   intent: ConversationResult['intent']
   music: ConversationResult['music']
   reply: string
+  error?: string
 }
 
 type ChatAppResult =
@@ -29,7 +30,6 @@ type ChatAppResult =
       }
     }
 
-const DEFAULT_USER_TEXT = '我想和你聊聊今天的心情'
 const CHAT_BRIDGE_UNAVAILABLE_MESSAGE = '对话通道不可用，请重新启动 Seamo AI R1 后再试。'
 
 function wait(ms: number): Promise<void> {
@@ -52,20 +52,21 @@ function createMessage(role: UiMessage['role'], text: string, state?: ParticleSt
   }
 }
 
-async function requestAssistantReply(text: string): Promise<ChatResponse> {
+async function requestAssistantReply(): Promise<ChatResponse> {
   const api = globalThis.window?.lingli
 
   if (!api) {
     return {
       intent: 'chat',
       music: null,
-      reply: CHAT_BRIDGE_UNAVAILABLE_MESSAGE
+      reply: '',
+      error: CHAT_BRIDGE_UNAVAILABLE_MESSAGE
     }
   }
 
   try {
     const result = await invokeWithTimeout(
-      api.invoke<ChatResponse>('chat.sendMessage', { text }),
+      api.invoke<ChatResponse>('chat.greeting'),
       15000,
       '对话服务响应超时。'
     )
@@ -77,13 +78,15 @@ async function requestAssistantReply(text: string): Promise<ChatResponse> {
     return {
       intent: 'chat',
       music: null,
-      reply: result.error.message || '我刚刚有点走神了，我们再来一次。'
+      reply: '',
+      error: result.error.message || '问候服务暂时不可用。'
     }
   } catch (error) {
     return {
       intent: 'chat',
       music: null,
-      reply: error instanceof Error ? error.message : '对话服务暂时不可用，请稍后再试。'
+      reply: '',
+      error: error instanceof Error ? error.message : '对话服务暂时不可用，请稍后再试。'
     }
   }
 }
@@ -113,7 +116,8 @@ async function streamAssistantReply(
     return {
       intent: 'chat',
       music: null,
-      reply: CHAT_BRIDGE_UNAVAILABLE_MESSAGE
+      reply: '',
+      error: CHAT_BRIDGE_UNAVAILABLE_MESSAGE
     }
   }
 
@@ -136,7 +140,8 @@ async function streamAssistantReply(
           finish({
             intent: 'chat',
             music: null,
-            reply: chunk.error.message || '我刚刚有点走神了，我们再来一次。'
+            reply: '',
+            error: chunk.error.message || '对话服务暂时不可用。'
           })
           return
         }
@@ -170,7 +175,8 @@ async function streamAssistantReply(
           finish({
             intent: 'chat',
             music: null,
-            reply: result.error.message || '我刚刚有点走神了，我们再来一次。'
+            reply: '',
+            error: result.error.message || '对话服务暂时不可用。'
           })
           return
         }
@@ -185,7 +191,8 @@ async function streamAssistantReply(
         finish({
           intent: 'chat',
           music: null,
-          reply: error instanceof Error ? error.message : '对话服务暂时不可用，请稍后再试。'
+          reply: '',
+          error: error instanceof Error ? error.message : '对话服务暂时不可用，请稍后再试。'
         })
       })
   })
@@ -297,20 +304,21 @@ export function useConversation(options: UseConversationOptions = {}) {
   }
 
   async function stopListening(
-    text = DEFAULT_USER_TEXT,
+    text: string,
     options?: {
       onChunk?: (delta: string) => void
       onRawChunk?: () => void
       onResponseStart?: () => void
     }
   ): Promise<ConversationResult> {
+    if (!text.trim()) return cancelVoiceInput('没有可发送的文字，请重新输入或录音。')
     const requestEpoch = conversationEpoch
     if (!isListening.value) {
       startListening()
     }
 
     isListening.value = false
-    const normalizedText = text.trim() || DEFAULT_USER_TEXT
+    const normalizedText = text.trim()
 
     messages.value.push(createMessage('user', normalizedText, 'listening'))
     if (
@@ -345,11 +353,10 @@ export function useConversation(options: UseConversationOptions = {}) {
       return { intent: 'chat', music: null, reply: '', text: normalizedText }
     }
 
-    const replyRole: UiMessage['role'] =
-      assistant.reply === CHAT_BRIDGE_UNAVAILABLE_MESSAGE ? 'system' : 'assistant'
+    const replyRole: UiMessage['role'] = assistant.error ? 'system' : 'assistant'
     const nextState: ParticleState = replyRole === 'system' ? 'error' : 'speaking'
 
-    assistantMessage.text = assistant.reply
+    assistantMessage.text = assistant.error || assistant.reply
     assistantMessage.role = replyRole
     assistantMessage.state = nextState
     messages.value = [...messages.value]
@@ -367,20 +374,17 @@ export function useConversation(options: UseConversationOptions = {}) {
     }
   }
 
-  async function requestMusicPlayback(): Promise<ConversationResult> {
-    startListening()
-    return stopListening('放点适合夜晚散步的音乐')
-  }
-
   async function generateOpeningGreeting(): Promise<void> {
     const requestEpoch = conversationEpoch
-    const assistant = await requestAssistantReply(
-      '请根据你的当前角色设定，生成一句自然、温暖、简短的中文开场白。不要提到这是系统指令，只说给用户听的话。'
-    )
+    const assistant = await requestAssistantReply()
 
     if (requestEpoch !== conversationEpoch) return
 
-    messages.value.splice(0, messages.value.length, createMessage('assistant', assistant.reply, 'idle'))
+    if (assistant.error) {
+      messages.value.push(createMessage('system', assistant.error, 'error'))
+    } else if (assistant.reply.trim()) {
+      messages.value.splice(0, messages.value.length, createMessage('assistant', assistant.reply, 'idle'))
+    }
   }
 
   return {
@@ -397,7 +401,6 @@ export function useConversation(options: UseConversationOptions = {}) {
     messages,
     particleState,
     generateOpeningGreeting,
-    requestMusicPlayback,
     resetConversation,
     setAutoListenState,
     startListening,

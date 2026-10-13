@@ -46,7 +46,7 @@ describe('UI prototype state', () => {
 
     expect(result.intent).toBe('chat')
     expect(result.music).toBeNull()
-    expect(result.reply).toBe('对话通道不可用，请重新启动 Seamo AI R1 后再试。')
+    expect(result.reply).toBe('')
     expect(conversation.messages.value.at(-1)).toEqual(
       expect.objectContaining({
         role: 'system',
@@ -178,9 +178,10 @@ describe('UI prototype state', () => {
   })
 
   it('generates the opening greeting from the current persona instead of a hard-coded assistant name', () => {
-    const file = readFileSync('src/composables/useConversation.ts', 'utf8')
+    const file = readFileSync('electron/main/ipc/chatHandlers.ts', 'utf8')
 
-    expect(file).toContain('请根据你的当前角色设定')
+    expect(file).toContain("ipc.handle('chat.greeting'")
+    expect(file).toContain('getSystemPrompt()')
     expect(file).not.toContain('为桌面语音伙伴 lingmo 生成')
   })
 
@@ -664,9 +665,7 @@ describe('UI prototype state', () => {
     expect(conversation.messages.value[0]?.text).toBe(
       '嗨，今天想先安静一下，还是让我陪你聊会儿？'
     )
-    expect(globalThis.window.lingli.invoke).toHaveBeenCalledWith('chat.sendMessage', {
-      text: expect.stringContaining('开场白')
-    })
+    expect(globalThis.window.lingli.invoke).toHaveBeenCalledWith('chat.greeting')
   })
 
   it('clears active music and leaves the conversation view when music exits', async () => {

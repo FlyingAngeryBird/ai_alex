@@ -8,6 +8,7 @@ describe('IPC contract', () => {
       'app.getRuntimeState',
       'app.requestMicrophoneAccess',
       'chat.sendMessage',
+      'chat.greeting',
       'chat.streamMessage',
       'chat.setTemporary',
       'config.get',

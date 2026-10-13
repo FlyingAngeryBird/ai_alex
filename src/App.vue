@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import ConversationView from '@/components/ConversationView.vue'
 import MiniPlayer from '@/components/MiniPlayer.vue'
 import MusicImmersiveView from '@/components/MusicImmersiveView.vue'
 import ParticleSphere from '@/components/ParticleSphere.vue'
 import SettingsView from '@/components/SettingsView.vue'
 import ItemsPanel from '@/components/ItemsPanel.vue'
 import SearchPanel from '@/components/SearchPanel.vue'
+import R1CompanionHome from '@/components/R1CompanionHome.vue'
+import R1Composer from '@/components/R1Composer.vue'
+import { AudioLines, Brain, Headphones, History, MessageCircle, Mic, MicOff, NotebookPen,
+  Settings2, X } from 'lucide-vue-next'
 import { useAutoListen } from '@/composables/useAutoListen'
 import { useConversation } from '@/composables/useConversation'
 import { useKeyboardRecorder } from '@/composables/useKeyboardRecorder'
@@ -52,6 +55,33 @@ const spaceHeld = ref(false)
 const settingsOpen = ref(false)
 const itemsOpen = ref(false)
 const searchOpen = ref(false)
+const searchEverOpened = ref(false)
+const memoryOpen = ref(false)
+const historyOpen = ref(false)
+const textBusy = ref(false)
+const composer = ref<InstanceType<typeof R1Composer> | null>(null)
+const credentialStatus = ref<{ VOLCENGINE_ARK_API_KEY: boolean; VOLCENGINE_ARK_MODEL: boolean } | null>(null)
+const currentDate = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())
+const hasSidePanel = computed(() => settingsOpen.value || itemsOpen.value || memoryOpen.value || historyOpen.value)
+const serviceLabel = computed(() => credentialStatus.value?.VOLCENGINE_ARK_API_KEY &&
+  credentialStatus.value?.VOLCENGINE_ARK_MODEL ? '对话服务已配置 · 实际连接以请求结果为准' : '对话服务未配置')
+
+function openPanel(panel: 'settings' | 'items' | 'search' | 'memory' | 'history'): void {
+  settingsOpen.value = panel === 'settings'
+  itemsOpen.value = panel === 'items'
+  searchOpen.value = panel === 'search'
+  memoryOpen.value = panel === 'memory'
+  historyOpen.value = panel === 'history'
+  if (panel === 'search') searchEverOpened.value = true
+}
+
+function closePanels(): void {
+  settingsOpen.value = false
+  itemsOpen.value = false
+  searchOpen.value = false
+  memoryOpen.value = false
+  historyOpen.value = false
+}
 const temporaryMode = ref(false)
 const reminderNotice = ref<{ body: string; dueAtUtc: string; systemRequested: boolean } | null>(null)
 let stopReminderNotice: (() => void) | null = null
@@ -614,6 +644,9 @@ async function handleKeyUp(event: KeyboardEvent): Promise<void> {
 }
 
 async function handleKeyDown(event: KeyboardEvent): Promise<void> {
+  const target = event.target
+  if (target instanceof HTMLElement && (target.isContentEditable ||
+    ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return
   if (
     event.code !== 'Space' ||
     event.repeat ||
@@ -629,7 +662,7 @@ async function handleKeyDown(event: KeyboardEvent): Promise<void> {
 }
 
 async function beginPushToTalk(): Promise<void> {
-  if (spaceHeld.value || voiceStartPromise || music.viewMode.value !== 'conversation') {
+  if (spaceHeld.value || voiceStartPromise) {
     return
   }
 
@@ -699,6 +732,29 @@ async function handleSaveConfig(patch: ConfigPatch): Promise<void> {
   }
 }
 
+async function handleSendText(text: string, complete?: (accepted: boolean) => void): Promise<void> {
+  if (textBusy.value || conversation.isListening.value ||
+    conversation.particleState.value === 'thinking') {
+    complete?.(false)
+    return
+  }
+  textBusy.value = true
+  releaseAssistantAudio()
+  try {
+    const response = await conversation.stopListening(text)
+    complete?.(Boolean(response.reply))
+    pauseAutoListenForAssistant()
+    await speakAssistantReply(response.reply)
+    if (response.intent === 'play_music') {
+      const playback = await music.playRequest(response.music?.keyword ?? response.text)
+      if (playback.status === 'error' && playback.errorMessage) conversation.addSystemMessage(playback.errorMessage)
+    }
+  } catch (error) {
+    complete?.(false)
+    conversation.addSystemMessage(error instanceof Error ? error.message : '消息没有发送成功，请重试。')
+  } finally { textBusy.value = false }
+}
+
 async function handleToggleTemporary(): Promise<void> {
   if (conversation.isListening.value || assistantAudioPlaying.value ||
     conversation.particleState.value === 'thinking') {
@@ -734,6 +790,16 @@ async function handlePreviewVoice(voiceId: string): Promise<void> {
 }
 
 onMounted(() => {
+  void window.seamoR1?.credentials.status().then((result) => {
+    if (!result.ok) return
+    credentialStatus.value = result.data
+    if (!result.data.VOLCENGINE_ARK_API_KEY || !result.data.VOLCENGINE_ARK_MODEL) return
+    startupGreetingTimer = window.setTimeout(() => {
+      void conversation.generateOpeningGreeting().then(() => {
+        void speakAssistantReply(conversation.messages.value[0]?.text)
+      })
+    }, 900)
+  })
   stopReminderNotice = window.seamoR1?.reminders.onDue((event) => {
     reminderNotice.value = event
   }) ?? null
@@ -742,11 +808,6 @@ onMounted(() => {
   void loadAppConfig()
   window.addEventListener('keydown', handleKeyDown)
   window.addEventListener('keyup', handleKeyUp)
-  startupGreetingTimer = window.setTimeout(() => {
-    void conversation.generateOpeningGreeting().then(() => {
-      void speakAssistantReply(conversation.messages.value[0]?.text)
-    })
-  }, 900)
 })
 
 onBeforeUnmount(() => {
@@ -766,15 +827,38 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="app-shell" :data-view="viewMode">
-    <ParticleSphere
-      class="particle-stage"
-      :state="particleState"
-      :audio-level="audioLevel"
-      :audio-bands="music.audioBands.value"
-    />
-
-    <Transition name="view-fade" mode="out-in">
+  <main class="r1-shell" :data-view="viewMode" :class="{ 'r1-has-side-panel': hasSidePanel, 'r1-has-wide-panel': searchOpen }">
+    <header class="r1-app-header">
+      <button class="r1-brand" type="button" @click="music.closeImmersive(); closePanels()"
+        aria-label="返回 Seamo 陪伴首页"><AudioLines :size="25" /><span>Seamo <em>AI</em></span></button>
+      <time>{{ currentDate }}</time>
+      <div class="r1-header-right"><span class="r1-mic-state"><Mic v-if="conversation.isListening.value" :size="14" /><MicOff v-else :size="14" />{{ conversation.isListening.value ? '正在收音' : '麦克风未开启' }}</span></div>
+    </header>
+    <nav class="r1-rail" aria-label="主导航">
+      <button type="button" :aria-current="viewMode === 'conversation' && !hasSidePanel && !searchOpen ? 'page' : undefined"
+        aria-label="陪伴" @click="music.closeImmersive(); closePanels()"><MessageCircle :size="20" /><span>陪伴</span></button>
+      <button type="button" :aria-current="viewMode === 'music' ? 'page' : undefined"
+        aria-label="音乐" @click="music.openImmersive(); closePanels()"><Headphones :size="20" /><span>音乐</span></button>
+      <i class="r1-rail-divider" />
+      <button type="button" :aria-current="memoryOpen ? 'page' : undefined" aria-label="记忆"
+        @click="openPanel('memory')"><Brain :size="20" /><span>记忆</span></button>
+      <button type="button" :aria-current="itemsOpen ? 'page' : undefined" aria-label="事项"
+        @click="openPanel('items')"><NotebookPen :size="20" /><span>事项</span></button>
+      <div class="r1-rail-bottom">
+        <button type="button" :aria-current="historyOpen ? 'page' : undefined" aria-label="历史对话"
+          @click="openPanel('history')"><History :size="20" /><span>历史</span></button>
+        <button type="button" :aria-current="settingsOpen ? 'page' : undefined" aria-label="设置"
+          @click="openPanel('settings')"><Settings2 :size="20" /><span>设置</span></button>
+      </div>
+    </nav>
+    <section class="r1-main-space" aria-label="Seamo 陪伴空间">
+      <div class="r1-particle-space" :data-mode="viewMode">
+        <ParticleSphere :state="particleState" :audio-level="audioLevel" :audio-bands="music.audioBands.value" />
+      </div>
+      <MiniPlayer v-if="viewMode === 'conversation' && music.hasActiveTrack.value"
+        class="r1-ambient-player" :playback="music.playback.value"
+        @open="music.openImmersive" @toggle-playback="music.togglePlayback" />
+      <Transition name="view-fade" mode="out-in">
       <MusicImmersiveView
         v-if="viewMode === 'music'"
         :active-tab="music.activeTab.value"
@@ -800,43 +884,46 @@ onBeforeUnmount(() => {
         @toggle-favorite="music.toggleFavorite"
         @toggle-playback="music.togglePlayback"
       />
-      <section v-else class="conversation-stage">
-        <ConversationView
-          v-model:collapsed="panelCollapsed"
+      <R1CompanionHome
+          v-else
           :messages="conversation.messages.value"
           :state="conversationPanelState"
-          :auto-listen-state="conversation.autoListenState.value"
-          :is-listening="conversation.isListening.value"
           :partial-text="conversationPartialText"
           :temporary-mode="temporaryMode"
-          @request-music="requestMusicPlayback"
-          @toggle-auto-listen="toggleAutoListen"
-          @open-settings="settingsOpen = true"
-          @open-items="itemsOpen = true"
-          @open-search="searchOpen = true"
-          @toggle-temporary="handleToggleTemporary"
-          @voice-press-end="endPushToTalk"
-          @voice-press-start="beginPushToTalk"
+          @open-history="openPanel('history')"
+          @open-search="openPanel('search')"
+          @start-chat="composer?.focusInput()"
         />
-        <MiniPlayer
-          v-if="music.hasActiveTrack.value"
-          :playback="music.playback.value"
-          @open="music.openImmersive"
-          @toggle-playback="music.togglePlayback"
-        />
-      </section>
     </Transition>
+      <R1Composer ref="composer" :auto-listen-state="conversation.autoListenState.value"
+        :busy="textBusy || conversation.isListening.value || conversation.particleState.value === 'thinking' || assistantAudioPlaying"
+        :is-listening="conversation.isListening.value" :temporary-mode="temporaryMode"
+        :service-label="serviceLabel" :music-active="viewMode === 'music'"
+        @send="handleSendText" @voice-press-start="beginPushToTalk" @voice-press-end="endPushToTalk"
+        @toggle-temporary="handleToggleTemporary" @toggle-auto-listen="toggleAutoListen"
+        @stop-speech="releaseAssistantAudio(true)" />
+    </section>
 
     <SettingsView
       v-if="settingsOpen"
       :config="appConfig"
       :voice-previewing="voicePreviewing"
-      @close="settingsOpen = false"
+      @close="closePanels"
       @preview-voice="handlePreviewVoice"
       @save="handleSaveConfig"
     />
-    <ItemsPanel v-if="itemsOpen" :temporary-mode="temporaryMode" @close="itemsOpen = false" />
-    <SearchPanel v-if="searchOpen" :temporary-mode="temporaryMode" @close="searchOpen = false" />
+    <ItemsPanel v-if="itemsOpen" :temporary-mode="temporaryMode" @close="closePanels" />
+    <SearchPanel v-if="searchEverOpened" v-show="searchOpen" :temporary-mode="temporaryMode" @close="closePanels" />
+    <aside v-if="memoryOpen" class="r1-basic-side" aria-label="记忆">
+      <header><div><small>SEAMO / PERSONAL SPACE</small><h2>关于你的记忆</h2></div><button aria-label="关闭侧栏" @click="closePanels"><X :size="19" /></button></header>
+      <div class="r1-basic-content"><p>关于我 · 持续话题</p><p>记忆的来源、更正和忘记功能仍在接入。这里暂不展示未经验证的示例资料。</p></div>
+    </aside>
+    <aside v-if="historyOpen" class="r1-basic-side" aria-label="历史对话">
+      <header><div><small>SEAMO / PERSONAL SPACE</small><h2>聊过的话</h2></div><button aria-label="关闭侧栏" @click="closePanels"><X :size="19" /></button></header>
+      <div class="r1-basic-content"><p>当前已加载的对话</p>
+        <article v-for="message in conversation.messages.value" :key="message.id"><small>{{ message.role === 'user' ? '你' : 'Seamo AI' }}</small><p>{{ message.text }}</p></article>
+        <p>完整历史的恢复与检索仍在接入。</p></div>
+    </aside>
     <aside v-if="reminderNotice" class="r1-reminder-toast" role="status">
       <div><strong>提醒已到期</strong><p>{{ reminderNotice.body }}</p>
         <small>{{ reminderNotice.systemRequested ? '系统通知已请求；不代表已读。' : '已在应用内显示；系统通知未请求。' }}</small>
