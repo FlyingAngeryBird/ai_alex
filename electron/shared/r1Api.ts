@@ -2,6 +2,7 @@ import type { ActionReceipt, Item, R1Items, Reminder } from '../main/r1/items.js
 import type { CredentialPatch, CredentialStatus } from '../main/r1/credentials.js'
 import type { ReminderDueEvent } from '../main/r1/reminderScheduler.js'
 import type { SearchResult } from '../main/providers/braveSearchProvider.js'
+import type { R1Persona, R1PersonaStore } from '../main/r1/persona.js'
 
 export type R1Result<T> =
   | { ok: true; data: T }
@@ -11,6 +12,10 @@ type MethodInput<K extends keyof R1Items> = R1Items[K] extends (input: infer I) 
 type MethodOutput<K extends keyof R1Items> = R1Items[K] extends (...args: never[]) => infer O ? O : never
 
 export type R1Api = {
+  persona: {
+    get(): Promise<R1Result<R1Persona>>
+    update(input: Parameters<R1PersonaStore['update']>[0]): Promise<R1Result<R1Persona>>
+  }
   items: {
     list(): Promise<R1Result<Item[]>>
     create(input: MethodInput<'create'>): Promise<R1Result<MethodOutput<'create'>>>

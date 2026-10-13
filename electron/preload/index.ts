@@ -21,6 +21,8 @@ export const exposedChannels = [
   'music.search',
   'music.toggleFavorite',
   'r1.items.list',
+  'r1.persona.get',
+  'r1.persona.update',
   'r1.items.create',
   'r1.items.complete',
   'r1.items.deletionPreview',
@@ -108,6 +110,10 @@ function exposeLingliApi(
     return renderer.invoke(channel, payload) as Promise<R1Result<T>>
   }
   const r1Api: R1Api = {
+    persona: {
+      get: () => invokeR1('r1.persona.get'),
+      update: (input) => invokeR1('r1.persona.update', input)
+    },
     items: {
       list: () => invokeR1('r1.items.list'),
       create: (input) => invokeR1('r1.items.create', input),

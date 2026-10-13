@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import { R1Items } from '../r1/items.js'
+import { R1PersonaStore } from '../r1/persona.js'
 import type { R1Database } from '../r1/database.js'
 
 type IpcMainLike = {
@@ -20,6 +21,9 @@ function action<T>(run: (payload: T) => unknown) {
 
 export function registerR1Handlers(db: R1Database, ipc: IpcMainLike = ipcMain): void {
   const items = new R1Items(db)
+  const persona = new R1PersonaStore(db)
+  ipc.handle('r1.persona.get', () => ({ ok: true, data: persona.get() }))
+  ipc.handle('r1.persona.update', action<Parameters<R1PersonaStore['update']>[0]>((payload) => persona.update(payload)))
   ipc.handle('r1.items.list', () => ({ ok: true, data: items.list() }))
   ipc.handle('r1.items.create', action<Parameters<R1Items['create']>[0]>((payload) => items.create(payload)))
   ipc.handle('r1.items.complete', action<Parameters<R1Items['complete']>[0]>((payload) => items.complete(payload)))
