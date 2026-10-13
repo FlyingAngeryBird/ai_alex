@@ -1,4 +1,6 @@
 import type { ActionReceipt, Item, R1Items, Reminder } from '../main/r1/items.js'
+import type { CredentialPatch, CredentialStatus } from '../main/r1/credentials.js'
+import type { ReminderDueEvent } from '../main/r1/reminderScheduler.js'
 
 export type R1Result<T> =
   | { ok: true; data: T }
@@ -18,6 +20,13 @@ export type R1Api = {
   reminders: {
     list(): Promise<R1Result<Reminder[]>>
     create(input: MethodInput<'createReminder'>): Promise<R1Result<MethodOutput<'createReminder'>>>
+    reschedule(input: MethodInput<'reschedule'>): Promise<R1Result<MethodOutput<'reschedule'>>>
+    cancel(input: MethodInput<'cancelReminder'>): Promise<R1Result<MethodOutput<'cancelReminder'>>>
+    onDue(handler: (event: ReminderDueEvent) => void): () => void
+  }
+  credentials: {
+    status(): Promise<R1Result<CredentialStatus>>
+    save(patch: CredentialPatch): Promise<R1Result<CredentialStatus>>
   }
 }
 

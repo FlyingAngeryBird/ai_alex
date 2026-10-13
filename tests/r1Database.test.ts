@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { importLegacyJson, openR1Database, R1_SCHEMA_VERSION } from '../electron/main/r1/database'
+import { R1Items } from '../electron/main/r1/items'
 
 const temporaryDirectories: string[] = []
 
@@ -41,6 +42,32 @@ describe('R1 database and legacy import', () => {
     db.exec('PRAGMA user_version = 99')
     db.close()
     expect(() => openR1Database(path)).toThrow('newer than supported')
+  })
+
+  it('migrates a v1 delivery table without reviving duplicate schedule deliveries', () => {
+    const path = join(makeDirectory(), 'r1.sqlite')
+    const db = openR1Database(path)
+    const reminder = new R1Items(db).createReminder({ actionId: 'create',
+      linkPurpose: 'independent', body: '提醒', dueAtUtc: new Date().toISOString(),
+      timezone: 'Asia/Shanghai' }).reminder
+    db.exec('DROP TABLE deliveries')
+    db.exec(`CREATE TABLE deliveries (
+      delivery_id TEXT PRIMARY KEY, reminder_id TEXT NOT NULL REFERENCES reminders(reminder_id),
+      schedule_version INTEGER NOT NULL, channel TEXT NOT NULL, status TEXT NOT NULL,
+      created_at TEXT NOT NULL, UNIQUE (reminder_id, schedule_version, channel))`)
+    db.prepare('INSERT INTO deliveries VALUES (?, ?, 1, ?, ?, ?)')
+      .run('in-app', reminder.reminderId, 'in_app', 'requested', new Date().toISOString())
+    db.prepare('INSERT INTO deliveries VALUES (?, ?, 1, ?, ?, ?)')
+      .run('system', reminder.reminderId, 'system', 'requested', new Date().toISOString())
+    db.exec('PRAGMA user_version = 1')
+    db.close()
+
+    const migrated = openR1Database(path)
+    expect(migrated.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 2 })
+    expect(migrated.prepare('SELECT channel FROM deliveries').all()).toEqual([{ channel: 'system' }])
+    expect(() => migrated.prepare('INSERT INTO deliveries VALUES (?, ?, 1, ?, ?, ?)')
+      .run('duplicate', reminder.reminderId, 'in_app', 'requested', new Date().toISOString())).toThrow()
+    migrated.close()
   })
 
   it('imports old JSON once, preserves the old files, and does not import the old assistant name', () => {

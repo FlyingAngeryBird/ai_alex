@@ -86,4 +86,23 @@ describe('R1 item and reminder transactions', () => {
       expect(items.listReminders()).toHaveLength(0)
     } finally { db.close() }
   })
+
+  it('reschedules with a new version and cannot deliver the old schedule', () => {
+    const { db, items } = setup()
+    try {
+      const reminder = items.createReminder({ actionId: 'create', linkPurpose: 'independent',
+        body: '提醒', dueAtUtc: future(), timezone: 'Asia/Shanghai' }).reminder
+      const moved = items.reschedule({ actionId: 'move', reminderId: reminder.reminderId,
+        expectedScheduleVersion: 1, dueAtUtc: future(), timezone: 'Asia/Shanghai' })
+      expect(moved.reminder.scheduleVersion).toBe(2)
+      expect(items.deliver(reminder.reminderId, 1, 'in_app').delivered).toBe(false)
+      expect(() => items.reschedule({ actionId: 'move-again', reminderId: reminder.reminderId,
+        expectedScheduleVersion: 1, dueAtUtc: future(), timezone: 'Asia/Shanghai' }))
+        .toThrow('VERSION_CONFLICT')
+      const cancelled = items.cancelReminder({ actionId: 'cancel', reminderId: reminder.reminderId,
+        expectedScheduleVersion: 2 })
+      expect(cancelled.reminder).toMatchObject({ status: 'cancelled', scheduleVersion: 3 })
+      expect(items.deliver(reminder.reminderId, 2, 'in_app').delivered).toBe(false)
+    } finally { db.close() }
+  })
 })

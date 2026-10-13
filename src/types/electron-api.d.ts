@@ -40,6 +40,10 @@ export type LingliChannel =
   | 'r1.items.delete'
   | 'r1.reminders.list'
   | 'r1.reminders.create'
+  | 'r1.reminders.reschedule'
+  | 'r1.reminders.cancel'
+  | 'r1.credentials.status'
+  | 'r1.credentials.save'
   | 'tts.speak'
   | 'tts.startStreaming'
   | 'tts.pushText'
@@ -50,7 +54,7 @@ export type LingliChannel =
   | 'voice.stopRealtime'
   | 'voice.stopAndTranscribe'
 
-export type LingliEventChannel = 'chat.streamChunk' | 'tts.streamAudio'
+export type LingliEventChannel = 'chat.streamChunk' | 'tts.streamAudio' | 'r1.reminderDue'
 
 declare global {
   interface Window {

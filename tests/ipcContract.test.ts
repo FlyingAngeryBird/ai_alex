@@ -28,6 +28,10 @@ describe('IPC contract', () => {
       'r1.items.delete',
       'r1.reminders.list',
       'r1.reminders.create',
+      'r1.reminders.reschedule',
+      'r1.reminders.cancel',
+      'r1.credentials.status',
+      'r1.credentials.save',
       'tts.speak',
       'tts.startStreaming',
       'tts.pushText',
@@ -43,6 +47,6 @@ describe('IPC contract', () => {
   it('exposes only the approved event channels', async () => {
     const { eventChannels } = await import('../electron/preload/index')
 
-    expect(eventChannels).toEqual(['chat.streamChunk', 'tts.streamAudio'])
+    expect(eventChannels).toEqual(['chat.streamChunk', 'tts.streamAudio', 'r1.reminderDue'])
   })
 })

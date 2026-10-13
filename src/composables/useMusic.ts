@@ -502,8 +502,6 @@ export function useMusic(options: UseMusicOptions = {}) {
       ...nextPlayback,
       status: 'loading'
     }
-    viewMode.value = 'music'
-
     const createAudioElement = options.createAudioElement ?? (() => new Audio())
     const audio = createAudioElement()
     audio.crossOrigin = 'anonymous'
@@ -553,8 +551,6 @@ export function useMusic(options: UseMusicOptions = {}) {
       status: 'loading',
       track: null
     }
-    viewMode.value = 'music'
-
     const playResult = await invokeMusic<PlaybackState>('music.play', {
       query,
       sourcePreference: sourcePreference.value
@@ -632,8 +628,6 @@ export function useMusic(options: UseMusicOptions = {}) {
       status: 'loading',
       track: null
     }
-    viewMode.value = 'music'
-
     const payload = track.source
       ? {
           album: track.album,
@@ -687,8 +681,6 @@ export function useMusic(options: UseMusicOptions = {}) {
       status: 'loading',
       track: null
     }
-    viewMode.value = 'music'
-
     const playResult = await invokeMusic<PlaybackState>('music.play', {
       album: track.album,
       artist: track.artist,

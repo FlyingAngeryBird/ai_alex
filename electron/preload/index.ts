@@ -25,6 +25,10 @@ export const exposedChannels = [
   'r1.items.delete',
   'r1.reminders.list',
   'r1.reminders.create',
+  'r1.reminders.reschedule',
+  'r1.reminders.cancel',
+  'r1.credentials.status',
+  'r1.credentials.save',
   'tts.speak',
   'tts.startStreaming',
   'tts.pushText',
@@ -40,7 +44,8 @@ export type ExposedChannel = (typeof exposedChannels)[number]
 
 export const eventChannels = [
   'chat.streamChunk',
-  'tts.streamAudio'
+  'tts.streamAudio',
+  'r1.reminderDue'
 ] as const
 
 export type ExposedEventChannel = (typeof eventChannels)[number]
@@ -106,9 +111,20 @@ function exposeLingliApi(
       deletionPreview: (itemId) => invokeR1('r1.items.deletionPreview', { itemId }),
       delete: (input) => invokeR1('r1.items.delete', input)
     },
+    credentials: {
+      status: () => invokeR1('r1.credentials.status'),
+      save: (patch) => invokeR1('r1.credentials.save', patch)
+    },
     reminders: {
       list: () => invokeR1('r1.reminders.list'),
-      create: (input) => invokeR1('r1.reminders.create', input)
+      create: (input) => invokeR1('r1.reminders.create', input),
+      reschedule: (input) => invokeR1('r1.reminders.reschedule', input),
+      cancel: (input) => invokeR1('r1.reminders.cancel', input),
+      onDue: (handler) => {
+        const listener = (...args: unknown[]): void => handler(args[1] as Parameters<typeof handler>[0])
+        renderer.on('r1.reminderDue', listener)
+        return () => renderer.removeListener('r1.reminderDue', listener)
+      }
     }
   }
   bridge.exposeInMainWorld('seamoR1', r1Api)

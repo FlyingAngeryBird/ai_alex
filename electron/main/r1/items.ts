@@ -131,6 +131,9 @@ export class R1Items {
       if (input.linkPurpose === 'todo_due' && (!input.itemId || itemById(this.db, input.itemId).kind !== 'todo')) {
         throw new Error('TODO_DUE_REQUIRES_TODO')
       }
+      if (input.linkPurpose === 'todo_due' && input.itemId && itemById(this.db, input.itemId).completed_at) {
+        throw new Error('TODO_ALREADY_COMPLETED')
+      }
       if (input.itemId) itemById(this.db, input.itemId)
       if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(input.dueAtUtc) ||
         !Number.isFinite(Date.parse(input.dueAtUtc))) throw new Error('INVALID_DUE_TIME')
@@ -153,9 +156,49 @@ export class R1Items {
       .all() as ReminderRow[]).map(reminderView)
   }
 
+  reschedule(input: { actionId: string; reminderId: string; expectedScheduleVersion: number;
+    dueAtUtc: string; timezone: string }): { reminder: Reminder; receipt: ActionReceipt } {
+    return runOnce(this.db, input.actionId, input, () => {
+      const reminder = reminderById(this.db, input.reminderId)
+      if (reminder.schedule_version !== input.expectedScheduleVersion) throw new Error('VERSION_CONFLICT')
+      if (reminder.status === 'cancelled') throw new Error('REMINDER_CANCELLED')
+      if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(input.dueAtUtc) ||
+        !Number.isFinite(Date.parse(input.dueAtUtc)) || Date.parse(input.dueAtUtc) <= Date.now())
+        throw new Error('INVALID_DUE_TIME')
+      try { new Intl.DateTimeFormat('en', { timeZone: input.timezone }) } catch { throw new Error('INVALID_TIMEZONE') }
+      this.db.prepare(`UPDATE reminders SET due_at_utc = ?, timezone = ?, status = 'scheduled',
+        delivery_status = 'pending', cancel_reason = NULL, cancel_action_id = NULL,
+        previous_schedule_version = schedule_version, schedule_version = schedule_version + 1,
+        updated_at = ? WHERE reminder_id = ?`)
+        .run(input.dueAtUtc, input.timezone, new Date().toISOString(), input.reminderId)
+      return { reminder: reminderView(reminderById(this.db, input.reminderId)),
+        receipt: receipt(input.actionId, input.reminderId,
+          reminder.schedule_version + 1, 'reminder_rescheduled') }
+    })
+  }
+
+  cancelReminder(input: { actionId: string; reminderId: string; expectedScheduleVersion: number }):
+    { reminder: Reminder; receipt: ActionReceipt } {
+    return runOnce(this.db, input.actionId, input, () => {
+      const reminder = reminderById(this.db, input.reminderId)
+      if (reminder.schedule_version !== input.expectedScheduleVersion) throw new Error('VERSION_CONFLICT')
+      if (reminder.status === 'cancelled') throw new Error('REMINDER_ALREADY_CANCELLED')
+      const wasDelivered = reminder.status === 'due'
+      this.db.prepare(`UPDATE reminders SET status = 'cancelled', cancel_reason = 'user_cancelled',
+        cancel_action_id = ?, previous_schedule_version = schedule_version,
+        schedule_version = schedule_version + 1, updated_at = ? WHERE reminder_id = ?`)
+        .run(input.actionId, new Date().toISOString(), input.reminderId)
+      return { reminder: reminderView(reminderById(this.db, input.reminderId)),
+        receipt: receipt(input.actionId, input.reminderId, reminder.schedule_version + 1,
+          wasDelivered ? 'cancelled_after_delivery_not_retracted' : 'reminder_cancelled') }
+    })
+  }
+
   complete(input: { actionId: string; itemId: string; expectedVersion: number; completed: boolean }):
     { item: Item; receipt: ActionReceipt; reminderReceipts: ActionReceipt[] } {
     return runOnce(this.db, input.actionId, input, () => {
+      if (typeof input.completed !== 'boolean' || !Number.isSafeInteger(input.expectedVersion) ||
+        input.expectedVersion < 1) throw new Error('INVALID_COMPLETION_REQUEST')
       const item = itemById(this.db, input.itemId)
       if (item.kind !== 'todo') throw new Error('NOT_A_TODO')
       if (item.version !== input.expectedVersion) throw new Error('VERSION_CONFLICT')
@@ -224,6 +267,8 @@ export class R1Items {
     confirmedReminders: { reminderId: string; scheduleVersion: number; status: string }[] }):
     { itemId: string; receipt: ActionReceipt; reminderReceipts: ActionReceipt[] } {
     return runOnce(this.db, input.actionId, input, () => {
+      if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1 ||
+        !Array.isArray(input.confirmedReminders)) throw new Error('INVALID_DELETE_REQUEST')
       const preview = this.deletionPreview(input.itemId)
       if (preview.item.version !== input.expectedVersion) throw new Error('VERSION_CONFLICT')
       if (input.reminderDisposition !== 'keep' && input.reminderDisposition !== 'cancel') throw new Error('INVALID_DISPOSITION')
@@ -253,21 +298,48 @@ export class R1Items {
     })
   }
 
-  deliver(reminderId: string, expectedScheduleVersion: number, channel: 'in_app' | 'system'):
+  deliver(reminderId: string, expectedScheduleVersion: number, channel: 'in_app'):
     { delivered: boolean; reminder: Reminder } {
     return inTransaction(this.db, () => {
       const reminder = reminderById(this.db, reminderId)
-      if (reminder.schedule_version !== expectedScheduleVersion || reminder.status !== 'scheduled' ||
+      if (reminder.schedule_version !== expectedScheduleVersion ||
+        (reminder.status !== 'scheduled' && reminder.status !== 'due') ||
         Date.parse(reminder.due_at_utc) > Date.now()) return { delivered: false, reminder: reminderView(reminder) }
       const result = this.db.prepare(`INSERT OR IGNORE INTO deliveries
         (delivery_id, reminder_id, schedule_version, channel, status, created_at)
         VALUES (?, ?, ?, ?, 'requested', ?)`).run(randomUUID(), reminderId,
         expectedScheduleVersion, channel, new Date().toISOString())
       if (result.changes > 0) {
-        this.db.prepare("UPDATE reminders SET status = 'due', delivery_status = 'requested', updated_at = ? WHERE reminder_id = ?")
-          .run(new Date().toISOString(), reminderId)
+        this.db.prepare('UPDATE reminders SET status = ?, delivery_status = ?, updated_at = ? WHERE reminder_id = ?')
+          .run('due', 'in_app', new Date().toISOString(), reminderId)
       }
       return { delivered: result.changes > 0, reminder: reminderView(reminderById(this.db, reminderId)) }
+    })
+  }
+
+  markSystemRequested(reminderId: string, expectedScheduleVersion: number): boolean {
+    return inTransaction(this.db, () => {
+      const reminder = reminderById(this.db, reminderId)
+      if (reminder.schedule_version !== expectedScheduleVersion || reminder.status !== 'due') return false
+      const result = this.db.prepare(`UPDATE deliveries SET channel = 'system', status = 'requested'
+        WHERE reminder_id = ? AND schedule_version = ? AND channel = 'in_app'`)
+        .run(reminderId, expectedScheduleVersion)
+      if (result.changes === 0) return false
+      this.db.prepare("UPDATE reminders SET delivery_status = 'system_requested', updated_at = ? WHERE reminder_id = ?")
+        .run(new Date().toISOString(), reminderId)
+      return true
+    })
+  }
+
+  markSystemRequestFailed(reminderId: string, expectedScheduleVersion: number): void {
+    inTransaction(this.db, () => {
+      const result = this.db.prepare(`UPDATE deliveries SET channel = 'in_app', status = 'system_failed'
+        WHERE reminder_id = ? AND schedule_version = ? AND channel = 'system'`)
+        .run(reminderId, expectedScheduleVersion)
+      if (result.changes > 0) {
+        this.db.prepare("UPDATE reminders SET delivery_status = 'in_app', updated_at = ? WHERE reminder_id = ?")
+          .run(new Date().toISOString(), reminderId)
+      }
     })
   }
 }

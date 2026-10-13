@@ -397,7 +397,7 @@ function lyricStyle(distance: number): Record<string, string> {
           aria-hidden="true"
         />
         <div v-else class="cover-art" aria-hidden="true" />
-        <span class="cover-label">{{ playback.track.album || playback.track.source || 'lingmo' }}</span>
+        <span class="cover-label">{{ playback.track.album || playback.track.source || 'Seamo AI' }}</span>
       </div>
 
       <section class="music-copy" aria-label="当前歌曲">

@@ -11,3 +11,5 @@
 旧源码检出位置：`/Users/sea/Documents/ai_alex-legacy-2026-06-27` 和 `/Users/sea/Documents/ai_alex-legacy-2026-07-05`。可在相应目录运行 `npm ci`、`npm run build`、`npm test` 复验；旧应用的实际安装和用户数据回退仍须单独验证。
 
 R1 当前是开发预览：应用 ID `com.seamo.ai.r1`，数据目录 `~/Library/Application Support/Seamo AI R1`，旧 `lingli`/`lingmo` 的 JSON 只读导入。构建出的 `.app` 仅本机临时签名，未经 Developer ID 签名、公证及安装验证，不能标成正式 Release。
+
+2026-10-13 已在现有公开仓库建立远端 `main`（当前指向原 GitHub 旧版提交 `b85da0c`）、`codex/seamo-r1` 和两个旧版标签；原 `feature/lingli-mvp` 保留。R1 开发差异见草稿 PR [#1](https://github.com/FlyingAngeryBird/ai_alex/pull/1)。`main` 只接收后续已验收版本，开发提交不会自动合并。

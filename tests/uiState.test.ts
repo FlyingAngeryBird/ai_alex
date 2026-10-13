@@ -855,7 +855,7 @@ describe('UI prototype state', () => {
     })
     expect(audio.element.src).toBe('https://example.test/daoxiang.mp3')
     expect(audio.play).toHaveBeenCalledTimes(1)
-    expect(music.viewMode.value).toBe('music')
+    expect(music.viewMode.value).toBe('conversation')
     expect(music.playback.value.durationMs).toBe(223000)
     expect(music.playback.value.positionMs).toBe(12400)
   })
@@ -1313,7 +1313,7 @@ describe('UI prototype state', () => {
     expect(music.playback.value.errorMessage).toBe('没有找到可播放的音乐，请换个关键词或音源再试试。')
   })
 
-  it('opens the music loading surface immediately while query playback is still resolving', async () => {
+  it('keeps the conversation visible while query playback is still resolving', async () => {
     let resolvePlay: (value: unknown) => void = () => undefined
     const pendingPlay = new Promise((resolve) => {
       resolvePlay = resolve
@@ -1333,7 +1333,7 @@ describe('UI prototype state', () => {
 
     const request = music.playRequest('稻香')
 
-    expect(music.viewMode.value).toBe('music')
+    expect(music.viewMode.value).toBe('conversation')
     expect(music.playback.value).toMatchObject({
       durationMs: null,
       positionMs: 0,

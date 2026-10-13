@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-export const R1_SCHEMA_VERSION = 1
+export const R1_SCHEMA_VERSION = 2
 
 export type R1Database = DatabaseSync
 
@@ -12,7 +12,7 @@ type LegacyImportResult = {
   voiceId: string | null
 }
 
-const SCHEMA_V1 = `
+const SCHEMA_V2 = `
   CREATE TABLE IF NOT EXISTS persona (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     assistant_name TEXT NOT NULL,
@@ -187,7 +187,7 @@ const SCHEMA_V1 = `
     channel TEXT NOT NULL,
     status TEXT NOT NULL,
     created_at TEXT NOT NULL,
-    UNIQUE (reminder_id, schedule_version, channel)
+    UNIQUE (reminder_id, schedule_version)
   );
   CREATE TABLE IF NOT EXISTS event_log (
     event_id TEXT PRIMARY KEY,
@@ -233,10 +233,29 @@ export function openR1Database(databasePath: string): R1Database {
   }
   if (row.user_version < 1) {
     inTransaction(db, () => {
-      db.exec(SCHEMA_V1)
+      db.exec(SCHEMA_V2)
       db.prepare(`INSERT INTO persona (id, assistant_name, updated_at) VALUES (1, 'Seamo AI', ?)`)
         .run(new Date().toISOString())
-      db.exec('PRAGMA user_version = 1')
+      db.exec('PRAGMA user_version = 2')
+    })
+  } else if (row.user_version === 1) {
+    inTransaction(db, () => {
+      db.exec(`CREATE TABLE deliveries_v2 (
+        delivery_id TEXT PRIMARY KEY,
+        reminder_id TEXT NOT NULL REFERENCES reminders(reminder_id),
+        schedule_version INTEGER NOT NULL,
+        channel TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE (reminder_id, schedule_version)
+      )`)
+      db.exec(`INSERT OR IGNORE INTO deliveries_v2
+        (delivery_id, reminder_id, schedule_version, channel, status, created_at)
+        SELECT delivery_id, reminder_id, schedule_version, channel, status, created_at
+        FROM deliveries ORDER BY CASE WHEN channel = 'system' THEN 0 ELSE 1 END, created_at`)
+      db.exec('DROP TABLE deliveries')
+      db.exec('ALTER TABLE deliveries_v2 RENAME TO deliveries')
+      db.exec('PRAGMA user_version = 2')
     })
   }
   return db

@@ -33,6 +33,7 @@ watch(
 )
 
 const emit = defineEmits<{
+  openItems: []
   openSettings: []
   requestMusic: []
   toggleAutoListen: []
@@ -93,6 +94,7 @@ const autoListenText: Record<AutoListenState, string> = {
         <h1>Seamo AI</h1>
       </div>
       <div class="header-actions">
+        <button class="panel-toggle" type="button" @click="$emit('openItems')">事项</button>
         <button class="panel-toggle" type="button" @click="$emit('openSettings')">设置</button>
         <button class="panel-toggle" type="button" @click="collapsePanel">收起</button>
         <div class="status-pill" :aria-label="`当前状态：${statusText[state]}`">
@@ -147,6 +149,7 @@ const autoListenText: Record<AutoListenState, string> = {
     </footer>
 
     <footer v-else class="compact-action-bar" aria-label="灵粒快捷操作">
+      <button class="compact-tab" type="button" @click="$emit('openItems')">事项</button>
       <button
         class="compact-tab compact-voice"
         :class="{ 'compact-tab--active': isListening }"

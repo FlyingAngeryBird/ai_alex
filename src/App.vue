@@ -5,6 +5,7 @@ import MiniPlayer from '@/components/MiniPlayer.vue'
 import MusicImmersiveView from '@/components/MusicImmersiveView.vue'
 import ParticleSphere from '@/components/ParticleSphere.vue'
 import SettingsView from '@/components/SettingsView.vue'
+import ItemsPanel from '@/components/ItemsPanel.vue'
 import { useAutoListen } from '@/composables/useAutoListen'
 import { useConversation } from '@/composables/useConversation'
 import { useKeyboardRecorder } from '@/composables/useKeyboardRecorder'
@@ -48,6 +49,9 @@ const autoListenSession = createAutoListenSession()
 const panelCollapsed = ref(false)
 const spaceHeld = ref(false)
 const settingsOpen = ref(false)
+const itemsOpen = ref(false)
+const reminderNotice = ref<{ body: string; dueAtUtc: string; systemRequested: boolean } | null>(null)
+let stopReminderNotice: (() => void) | null = null
 const appConfig = ref<AppConfig>({
   persona: { systemPrompt: '' },
   voice: { voices: [], activeVoiceId: '' }
@@ -703,6 +707,9 @@ async function handlePreviewVoice(voiceId: string): Promise<void> {
 }
 
 onMounted(() => {
+  stopReminderNotice = window.seamoR1?.reminders.onDue((event) => {
+    reminderNotice.value = event
+  }) ?? null
   installDebugBridge()
   void music.loadLibrary()
   void loadAppConfig()
@@ -716,6 +723,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  stopReminderNotice?.()
   uninstallDebugBridge()
   window.removeEventListener('keydown', handleKeyDown)
   window.removeEventListener('keyup', handleKeyUp)
@@ -776,6 +784,7 @@ onBeforeUnmount(() => {
           @request-music="requestMusicPlayback"
           @toggle-auto-listen="toggleAutoListen"
           @open-settings="settingsOpen = true"
+          @open-items="itemsOpen = true"
           @voice-press-end="endPushToTalk"
           @voice-press-start="beginPushToTalk"
         />
@@ -796,5 +805,12 @@ onBeforeUnmount(() => {
       @preview-voice="handlePreviewVoice"
       @save="handleSaveConfig"
     />
+    <ItemsPanel v-if="itemsOpen" @close="itemsOpen = false" />
+    <aside v-if="reminderNotice" class="r1-reminder-toast" role="status">
+      <div><strong>提醒已到期</strong><p>{{ reminderNotice.body }}</p>
+        <small>{{ reminderNotice.systemRequested ? '系统通知已请求；不代表已读。' : '已在应用内显示；系统通知未请求。' }}</small>
+      </div>
+      <button type="button" @click="reminderNotice = null">关闭</button>
+    </aside>
   </main>
 </template>

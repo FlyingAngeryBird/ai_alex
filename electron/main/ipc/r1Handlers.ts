@@ -27,4 +27,6 @@ export function registerR1Handlers(db: R1Database, ipc: IpcMainLike = ipcMain): 
   ipc.handle('r1.items.delete', action<Parameters<R1Items['delete']>[0]>((payload) => items.delete(payload)))
   ipc.handle('r1.reminders.list', () => ({ ok: true, data: items.listReminders() }))
   ipc.handle('r1.reminders.create', action<Parameters<R1Items['createReminder']>[0]>((payload) => items.createReminder(payload)))
+  ipc.handle('r1.reminders.reschedule', action<Parameters<R1Items['reschedule']>[0]>((payload) => items.reschedule(payload)))
+  ipc.handle('r1.reminders.cancel', action<Parameters<R1Items['cancelReminder']>[0]>((payload) => items.cancelReminder(payload)))
 }
