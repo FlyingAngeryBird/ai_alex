@@ -35,6 +35,34 @@ class FakeAudioContext {
 }
 
 describe('realtime voice recorder', () => {
+  it('cleans up a cancelled stream and ignores a late partial transcript', async () => {
+    const audioContext = new FakeAudioContext()
+    const track = { stop: vi.fn() }
+    const stream = { getTracks: () => [track] } as unknown as MediaStream
+    let resolvePush: (result: AppResult<unknown>) => void = () => undefined
+    const partials: string[] = []
+    const invokeCalls: Array<[LingliChannel, unknown]> = []
+    const invoke = async <T>(channel: LingliChannel, payload?: unknown): Promise<AppResult<T>> => {
+      invokeCalls.push([channel, payload])
+      if (channel === 'voice.startRealtime') return { ok: true, data: { sessionId: 'cancel-session' } as T }
+      if (channel === 'voice.pushRealtimeAudio') return await new Promise<AppResult<T>>(resolve => { resolvePush = resolve as typeof resolvePush })
+      return { ok: true, data: { text: '不应提交' } as T }
+    }
+    const recorder = useRealtimeVoiceRecorder({ createAudioContext: () => audioContext as unknown as AudioContext,
+      lingli: { invoke }, mediaDevices: { getUserMedia: vi.fn(async () => stream) }, onPartialText: text => partials.push(text) })
+    await recorder.start()
+    audioContext.processor.emit(new Float32Array(4096).fill(0.2))
+    const pendingPush = recorder.flush()
+    await Promise.resolve()
+    await recorder.cancel()
+    resolvePush({ ok: true, data: { partialText: '迟到文本' } })
+    await pendingPush
+    expect(partials).not.toContain('迟到文本')
+    expect(recorder.isRecording.value).toBe(false)
+    expect(track.stop).toHaveBeenCalledTimes(1)
+    expect(audioContext.close).toHaveBeenCalledTimes(1)
+    expect(invokeCalls).toContainEqual(['voice.stopRealtime', { sessionId: 'cancel-session' }])
+  })
   afterEach(() => {
     vi.unstubAllGlobals()
   })

@@ -142,16 +142,18 @@ export function useRealtimeVoiceRecorder(options: RealtimeVoiceRecorderOptions =
     if (!sessionId) {
       return
     }
+    const activeSessionId = sessionId
 
     const response = await invokeWithTimeout(
       getLingliApi(options).invoke<{ partialText?: string }>('voice.pushRealtimeAudio', {
         audio,
-        sessionId
+        sessionId: activeSessionId
       }),
       10000,
       '实时语音识别响应超时。'
     )
 
+    if (sessionId !== activeSessionId) return
     if (!response.ok) {
       errorMessage.value = response.error.message
       return
@@ -170,9 +172,9 @@ export function useRealtimeVoiceRecorder(options: RealtimeVoiceRecorderOptions =
     }
 
     try {
-      await getLingliApi(options).invoke('voice.stopRealtime', {
+      await invokeWithTimeout(getLingliApi(options).invoke('voice.stopRealtime', {
         sessionId: activeSessionId
-      })
+      }), 6000, '实时语音清理超时。')
     } catch {
       // This is a best-effort remote cleanup. The original local failure is more useful to the user.
     }
@@ -296,10 +298,17 @@ export function useRealtimeVoiceRecorder(options: RealtimeVoiceRecorderOptions =
     return response.data
   }
 
+  async function cancel(): Promise<void> {
+    const activeSessionId = sessionId
+    cleanup()
+    await closeRealtimeSession(activeSessionId)
+  }
+
   return {
     errorMessage,
     flush,
     isRecording,
+    cancel,
     start,
     stopAndTranscribe
   }

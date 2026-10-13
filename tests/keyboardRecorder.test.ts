@@ -98,4 +98,17 @@ describe('keyboard recorder', () => {
     expect(recorder.errorMessage.value).toBe('语音通道不可用')
     expect(getUserMedia).not.toHaveBeenCalled()
   })
+  it('discards a cancelled recording and releases the microphone without ASR submission', async () => {
+    const track = { stop: vi.fn() }
+    const stream = { getTracks: () => [track] } as unknown as MediaStream
+    const invoke = vi.fn()
+    const recorder = useKeyboardRecorder({ createMediaRecorder: () => new FakeMediaRecorder() as unknown as MediaRecorder,
+      lingli: { invoke }, mediaDevices: { getUserMedia: vi.fn(async () => stream) } })
+    await recorder.start()
+    recorder.cancel()
+    expect(recorder.isRecording.value).toBe(false)
+    expect(track.stop).toHaveBeenCalledTimes(1)
+    expect(invoke).not.toHaveBeenCalled()
+    await expect(recorder.stopAndTranscribe()).rejects.toThrow('当前没有正在录制的语音')
+  })
 })

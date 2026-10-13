@@ -118,9 +118,20 @@ export function useKeyboardRecorder(options: KeyboardRecorderOptions = {}) {
     return response.data
   }
 
+  function cancel(): void {
+    try {
+      if (recorder && recorder.state !== 'inactive') {
+        recorder.ondataavailable = null
+        recorder.onstop = null
+        recorder.stop()
+      }
+    } finally { cleanup() }
+  }
+
   return {
     errorMessage,
     isRecording,
+    cancel,
     start,
     stopAndTranscribe
   }

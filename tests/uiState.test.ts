@@ -129,7 +129,7 @@ describe('UI prototype state', () => {
     expect(app).toContain('evaluateAutoListenTranscript')
     expect(app).toContain("activeVoiceInputMode === 'auto_listen'")
     expect(app).toContain('silent: true')
-    expect(app).toContain("activeVoiceInputMode = spaceHeld.value ? 'push_to_talk' : 'auto_listen'")
+    expect(app).toContain("activeVoiceInputMode = manualCapture ? 'push_to_talk' : 'auto_listen'")
   })
 
   it('uses a short cooldown after filtered automatic listening so one noise does not loop captures', () => {
@@ -366,7 +366,7 @@ describe('UI prototype state', () => {
     expect(file).toContain("conversation.setAutoListenState('grace')")
     expect(file).toContain("conversation.setAutoListenState('paused_for_tts')")
     expect(file).toContain('assistantSpeaking: assistantAudioPlaying.value')
-    expect(file).toContain('manualVoiceActive: spaceHeld.value')
+    expect(file).toContain('manualVoiceActive: pushToTalk.isBusy() || Boolean(voiceCancelPromise)')
     expect(file).toContain("musicActive: viewMode === 'music'")
   })
 

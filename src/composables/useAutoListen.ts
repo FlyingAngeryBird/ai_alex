@@ -4,8 +4,8 @@ import {
   defaultVoiceActivityThresholds,
   type VoiceActivityDiagnostics,
   type VoiceActivityThresholds
-} from '@/services/voiceActivity'
-import { createPcmRingBuffer } from '@/services/pcmRingBuffer'
+} from '../services/voiceActivity'
+import { createPcmRingBuffer } from '../services/pcmRingBuffer'
 
 const TARGET_SAMPLE_RATE = 16000
 const PREBUFFER_SECONDS = 0.9
@@ -58,6 +58,7 @@ export function useAutoListen(options: UseAutoListenOptions = {}) {
   let samples: Uint8Array<ArrayBuffer> | null = null
   let source: MediaStreamAudioSourceNode | null = null
   let stream: MediaStream | null = null
+  let lifecycleGeneration = 0
 
   const isSupported = computed(() => {
     const audioWindow = globalThis.window as BrowserWindowWithAudio | undefined
@@ -169,6 +170,7 @@ export function useAutoListen(options: UseAutoListenOptions = {}) {
   }
 
   async function start(): Promise<boolean> {
+    const generation = ++lifecycleGeneration
     if (enabled.value) {
       return true
     }
@@ -187,13 +189,18 @@ export function useAutoListen(options: UseAutoListenOptions = {}) {
         return false
       }
 
-      stream = await navigator.mediaDevices.getUserMedia({
+      const acquiredStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           autoGainControl: true,
           echoCancellation: true,
           noiseSuppression: true
         }
       })
+      if (generation !== lifecycleGeneration) {
+        acquiredStream.getTracks().forEach(track => track.stop())
+        return false
+      }
+      stream = acquiredStream
       audioContext = new AudioContextConstructor()
       analyser = audioContext.createAnalyser()
       analyser.fftSize = 1024
@@ -223,6 +230,7 @@ export function useAutoListen(options: UseAutoListenOptions = {}) {
 
       return true
     } catch (error) {
+      if (generation !== lifecycleGeneration) return false
       cleanupAudioNodes()
       errorMessage.value = getErrorMessage(error)
       return false
@@ -230,6 +238,7 @@ export function useAutoListen(options: UseAutoListenOptions = {}) {
   }
 
   function stop(): void {
+    lifecycleGeneration += 1
     enabled.value = false
     cleanupAudioNodes()
   }

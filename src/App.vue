@@ -19,6 +19,7 @@ import { useMusic } from '@/composables/useMusic'
 import { useRealtimeVoiceRecorder } from '@/composables/useRealtimeVoiceRecorder'
 import { createAutoListenSession } from '@/services/autoListenSession'
 import { evaluateAutoListenTranscript } from '@/services/autoListenTranscriptGate'
+import { createPushToTalkController, type PushToTalkSource } from '@/services/pushToTalkController'
 import type { VoiceActivityDiagnostics } from '@/services/voiceActivity'
 import type { AutoListenState, ParticleState, VoiceInputMode, VoiceLatencyTrace } from '@/types/app'
 import type { R1Persona } from '../electron/main/r1/persona'
@@ -103,6 +104,29 @@ let activeVoiceInputMode: VoiceInputMode | null = null
 let voiceCaptureStartedAt: number | null = null
 let voiceFinishPromise: Promise<void> | null = null
 let voiceStartPromise: Promise<boolean> | null = null
+let voiceCancelPromise: Promise<void> | null = null
+let autoListenModeGeneration = 0
+const pushToTalk = createPushToTalkController({
+  canStart: () => !voiceStartPromise && !voiceFinishPromise && !voiceCancelPromise && !textBusy.value &&
+    conversation.particleState.value !== 'thinking',
+  onHeldChange: held => { spaceHeld.value = held },
+  onError: error => conversation.markVoiceError(getVoiceErrorMessage(error)),
+  start: async () => {
+    clearAutoListenRecoveryTimer()
+    clearAutoListenGraceTimer()
+    if (activeVoiceInputMode === 'auto_listen') {
+      await cancelActiveVoiceCapture()
+    }
+    voiceStartPromise = startVoiceCapture()
+    try { return await voiceStartPromise } finally { voiceStartPromise = null }
+  },
+  finish: finishActiveVoiceCapture,
+  cancel: async () => {
+    await cancelActiveVoiceCapture()
+    conversation.cancelVoiceInput('本次录音已取消，没有发送。')
+    recoverAutoListenAfterVoiceCancel()
+  }
+})
 const viewMode = computed(() => music.viewMode.value)
 const autoLevelStates = new Set<AutoListenState>(['armed', 'prehearing', 'recording', 'grace'])
 const AUTO_LISTEN_REJECTION_COOLDOWN_MS = 760
@@ -129,7 +153,7 @@ function getAutoListenBlockers() {
 
   return {
     assistantSpeaking: assistantAudioPlaying.value,
-    manualVoiceActive: spaceHeld.value,
+    manualVoiceActive: pushToTalk.isBusy() || Boolean(voiceCancelPromise),
     musicActive: viewMode === 'music'
   }
 }
@@ -164,8 +188,19 @@ const autoListen = useAutoListen({
     }
 
     conversation.setAutoListenState('prehearing')
+    const generation = autoListenModeGeneration
     voiceStartPromise = startVoiceCapture()
     const didStart = await voiceStartPromise
+    if (generation !== autoListenModeGeneration || !autoListen.enabled.value) {
+      await cancelActiveVoiceCapture()
+      voiceStartPromise = null
+      conversation.cancelVoiceInput('', { silent: true })
+      if (autoListen.enabled.value) {
+        autoListenSession.ready()
+        conversation.setAutoListenState('armed')
+      }
+      return
+    }
     voiceStartPromise = null
 
     if (!didStart) {
@@ -457,14 +492,15 @@ async function startVoiceCapture(): Promise<boolean> {
 
   let realtimeStartError: unknown
 
-  activeVoiceInputMode = spaceHeld.value ? 'push_to_talk' : 'auto_listen'
+  const manualCapture = pushToTalk.isBusy()
+  activeVoiceInputMode = manualCapture ? 'push_to_talk' : 'auto_listen'
   voiceCaptureStartedAt = performance.now()
 
   try {
-    const autoListenStream = autoListen.enabled.value && !spaceHeld.value
+    const autoListenStream = autoListen.enabled.value && !manualCapture
       ? autoListen.getMediaStream() ?? undefined
       : undefined
-    const initialAudio = autoListen.enabled.value && !spaceHeld.value
+    const initialAudio = autoListen.enabled.value && !manualCapture
       ? autoListen.consumeBufferedAudio()
       : undefined
 
@@ -609,10 +645,15 @@ async function finishActiveVoiceCapture(): Promise<void> {
 }
 
 async function toggleAutoListen(): Promise<void> {
+  const generation = ++autoListenModeGeneration
+  await pushToTalk.cancel()
+  await pushToTalk.whenIdle()
+  if (generation !== autoListenModeGeneration) return
   if (conversation.autoListenState.value === 'off' || conversation.autoListenState.value === 'error') {
     autoListenSession.enable()
     conversation.setAutoListenState('arming')
     const didStart = await autoListen.start()
+    if (generation !== autoListenModeGeneration) return
     if (didStart) {
       autoListenSession.ready()
       conversation.setAutoListenState('armed')
@@ -628,75 +669,56 @@ async function toggleAutoListen(): Promise<void> {
   autoListenSession.disable()
   autoListen.stop()
   conversation.disableAutoListen()
+  if (activeVoiceInputMode === 'auto_listen') {
+    await cancelActiveVoiceCapture()
+    conversation.cancelVoiceInput('', { silent: true })
+  }
+}
+
+async function cancelActiveVoiceCapture(): Promise<void> {
+  if (voiceCancelPromise) return voiceCancelPromise
+  voiceCancelPromise = (async () => {
+    keyboardRecorder.cancel()
+    await realtimeRecorder.cancel()
+    activeVoiceInputMode = null
+    voiceCaptureStartedAt = null
+  })().finally(() => { voiceCancelPromise = null })
+  return voiceCancelPromise
 }
 
 async function handleKeyUp(event: KeyboardEvent): Promise<void> {
-  if (event.code !== 'Space' || (!spaceHeld.value && !voiceStartPromise)) {
+  if (event.code !== 'Space' || pushToTalk.owner() !== 'keyboard') {
     return
   }
 
   event.preventDefault()
-  spaceHeld.value = false
-
-  if (voiceStartPromise) {
-    return
-  }
-
-  await finishActiveVoiceCapture()
+  await endPushToTalk('keyboard')
 }
 
 async function handleKeyDown(event: KeyboardEvent): Promise<void> {
   const target = event.target
   if (target instanceof HTMLElement && (target.isContentEditable ||
     ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return
+  if (target instanceof HTMLElement && target.closest('button') &&
+    !target.closest('.r1-microphone')) return
   if (
     event.code !== 'Space' ||
     event.repeat ||
     spaceHeld.value ||
-    voiceStartPromise ||
-    music.viewMode.value !== 'conversation'
+    voiceStartPromise
   ) {
     return
   }
 
   event.preventDefault()
-  await beginPushToTalk()
+  await beginPushToTalk('keyboard')
 }
 
-async function beginPushToTalk(): Promise<void> {
-  if (spaceHeld.value || voiceStartPromise) {
-    return
-  }
-
-  clearAutoListenRecoveryTimer()
-  spaceHeld.value = true
-  voiceStartPromise = startVoiceCapture()
-  const didStart = await voiceStartPromise
-  voiceStartPromise = null
-
-  if (!didStart) {
-    spaceHeld.value = false
-    return
-  }
-
-  if (!spaceHeld.value) {
-    await finishActiveVoiceCapture()
-  }
-}
-
-async function endPushToTalk(): Promise<void> {
-  if (!spaceHeld.value && !voiceStartPromise) {
-    return
-  }
-
-  spaceHeld.value = false
-
-  if (voiceStartPromise) {
-    return
-  }
-
-  await finishActiveVoiceCapture()
-}
+async function beginPushToTalk(source: PushToTalkSource = 'button'): Promise<void> { await pushToTalk.press(source) }
+async function endPushToTalk(source: PushToTalkSource = 'button'): Promise<void> { await pushToTalk.release(source) }
+function cancelPushToTalk(): void { void pushToTalk.cancel() }
+function handleWindowBlur(): void { cancelPushToTalk() }
+function handleVisibilityChange(): void { if (document.hidden) cancelPushToTalk() }
 
 async function handleSendText(text: string, complete?: (accepted: boolean) => void): Promise<void> {
   if (textBusy.value || conversation.isListening.value ||
@@ -781,9 +803,14 @@ onMounted(() => {
   void music.loadLibrary()
   window.addEventListener('keydown', handleKeyDown)
   window.addEventListener('keyup', handleKeyUp)
+  window.addEventListener('blur', handleWindowBlur)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 
 onBeforeUnmount(() => {
+  void pushToTalk.dispose()
+  window.removeEventListener('blur', handleWindowBlur)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
   stopMemoryInvalidation?.()
   stopReminderNotice?.()
   uninstallDebugBridge()
@@ -875,7 +902,7 @@ onBeforeUnmount(() => {
         :busy="textBusy || conversation.isListening.value || conversation.particleState.value === 'thinking' || assistantAudioPlaying"
         :is-listening="conversation.isListening.value" :temporary-mode="temporaryMode"
         :service-label="serviceLabel" :music-active="viewMode === 'music'"
-        @send="handleSendText" @voice-press-start="beginPushToTalk" @voice-press-end="endPushToTalk"
+        @send="handleSendText" @voice-press-start="beginPushToTalk()" @voice-press-end="endPushToTalk()" @voice-press-cancel="cancelPushToTalk"
         @toggle-temporary="handleToggleTemporary" @toggle-auto-listen="toggleAutoListen"
         @stop-speech="releaseAssistantAudio(true)" />
     </section>
