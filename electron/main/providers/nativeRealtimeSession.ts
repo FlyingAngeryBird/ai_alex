@@ -110,6 +110,10 @@ export class NativeRealtimeSession {
       this.input.onEvent(event); return
     }
     if (this.state !== 'ready') throw new Error('session not ready')
+    if (event.type === 'conversation.item.input_audio_transcription.started' && this.activeResponse) {
+      this.cancelledResponses.add(this.activeResponse)
+      this.activeResponse = null
+    }
     const responseId = typeof event.response_id === 'string' ? event.response_id : null
     if (responseId && this.cancelledResponses.has(responseId)) return
     if (responseId && event.type.startsWith('response.output_')) this.activeResponse = responseId
@@ -129,7 +133,8 @@ export class NativeRealtimeSession {
       for (const call of calls) this.pendingCalls.set(call.callId, call)
       this.input.onToolCalls(calls); return
     }
-    if (event.type === 'response.done' || event.type === 'response.canceled') this.activeResponse = null
+    if ((event.type === 'response.done' || event.type === 'response.canceled') &&
+      (!responseId || responseId === this.activeResponse)) this.activeResponse = null
     this.input.onEvent(event)
   }
   close(code = 'REALTIME_STOPPED'): void {

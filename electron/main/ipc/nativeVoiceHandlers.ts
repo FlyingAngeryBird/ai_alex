@@ -1,4 +1,5 @@
 import { ipcMain, type WebContents } from 'electron'
+import { NativePlaybackLedger } from '../r1/nativePlayback.js'
 import { randomUUID } from 'node:crypto'
 import { NativeRealtimeSession, type NativeRealtimeEvent } from '../providers/nativeRealtimeSession.js'
 import { R1ModelRequestBoundary } from '../r1/modelBoundary.js'
@@ -16,7 +17,7 @@ export function registerNativeVoiceHandlers(deps: {
   conversations: R1Conversations; tasks: R1TaskSupervisor; mode: R1SessionMode;
   implementedTaskAliases: readonly string[]; configurationRevision(): number;
 }): { close(): void } {
-  const sessions = new Map<number, { id: string; session: NativeRealtimeSession }>()
+  const sessions = new Map<number, { id: string; session: NativeRealtimeSession; playback(input: Record<string, unknown>): void }>()
   const aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', 'notes_create']
   const fail = (code: string) => ({ ok: false, error: { code, message: code } })
   const emit = (owner: WebContents, id: string, event: NativeRealtimeEvent) => {
@@ -37,14 +38,14 @@ export function registerNativeVoiceHandlers(deps: {
     }
     let tools: R1ConversationTools | null = null
     let turnId = randomUUID(), toolCount = 0
-    const completedInputs = new Set<string>(), savedResponses = new Set<string>()
+    const playback = new NativePlaybackLedger(deps.conversations, sessionId)
+    const completedInputs = new Set<string>()
+    const sourceTurns = new Map<string, string>()
     const context = () => ({ sessionId, sessionGeneration: 1, turnId, currentTime: new Date().toISOString(),
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, temporary, contextVersion: 1,
       personaVersion: persona.version, deletionEpoch, selectedEntity: null, availableToolAliases: [],
       loadedSkillIds: tools ? [...tools.loadedSkillIds] : ['SK01'],
-      recentTurns: deps.conversations.messages(sessionId).slice(-24).map(message => ({
-        turnId: message.turnId, role: message.role, text: message.body, heardText: null,
-        status: message.status === 'interrupted' ? 'interrupted' : 'valid' })),
+      recentTurns: deps.conversations.modelTurns(sessionId),
       memories: [], activeTasks: deps.tasks.list(temporary ? sessionId : null).slice(-20).map(task => {
         const { taskId, goalVersion, status, goal } = deps.tasks.modelView(task.taskId)
         return { taskId, goalVersion, status, goal }
@@ -55,19 +56,16 @@ export function registerNativeVoiceHandlers(deps: {
       voice: persona.voiceId || process.env.VOLCENGINE_REALTIME_VOICE || '', boundary: boundary(),
       onEvent(event) {
         assertCurrent()
+        playback.receive(event, typeof event.question_id === 'string' ? sourceTurns.get(event.question_id) ?? turnId : turnId)
         if (event.type === 'conversation.item.input_audio_transcription.completed') {
           if (typeof event.item_id !== 'string' || typeof event.transcript !== 'string' || !event.transcript.trim()) return
           if (completedInputs.has(event.item_id)) return
           completedInputs.add(event.item_id); turnId = randomUUID(); toolCount = 0
+          sourceTurns.set(event.item_id, turnId)
           const source = deps.conversations.append({ sessionId, turnId, role: 'user', body: event.transcript, status: 'final' })
           tools = new R1ConversationTools(deps.db, deps.assets, deps.tasks, { source, temporary,
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, persistenceConfirmed: false, assertCurrent }, deps.implementedTaskAliases)
           connection.updateBoundary(boundary())
-        }
-        if (event.type === 'response.output_text.done' && typeof event.response_id === 'string' &&
-          typeof event.text === 'string' && event.text.trim() && !savedResponses.has(event.response_id)) {
-          deps.conversations.append({ sessionId, turnId, responseId: event.response_id, role: 'assistant',
-            body: event.text, status: 'generated' }); savedResponses.add(event.response_id)
         }
         emit(sender, id, event)
       },
@@ -83,16 +81,19 @@ export function registerNativeVoiceHandlers(deps: {
         for (const result of results) connection.returnToolResult(result.callId, result.result)
       },
       onClosed(code) {
+        try { assertCurrent(); playback.interruptPending() } catch { /* Revoked or ended context cannot publish a late partial. */ }
         if (sessions.get(sender.id)?.id === id) sessions.delete(sender.id)
         sender.removeListener('destroyed', destroyed)
         emit(sender, id, { type: 'closed', code })
       }
     })
-    sessions.set(sender.id, { id, session: connection }); sender.once('destroyed', destroyed)
+    sessions.set(sender.id, { id, session: connection, playback(input) {
+      assertCurrent(); playback.playback(input)
+    } }); sender.once('destroyed', destroyed)
     try { await connection.open(); return { ok: true, data: { connectionId: id } } }
     catch (error) { connection.close(); return fail(error instanceof Error ? error.message : 'REALTIME_START_FAILED') }
   })
-  for (const action of ['Audio', 'Mute', 'Cancel', 'Stop'] as const) {
+  for (const action of ['Audio', 'Mute', 'Cancel', 'Stop', 'Playback'] as const) {
     ipcMain.handle(`voice.native${action}`, ({ sender }, payload) => {
       const input = payload as { connectionId?: string; pcm?: Uint8Array; muted?: boolean }
       const active = sessions.get(sender.id)
@@ -101,7 +102,8 @@ export function registerNativeVoiceHandlers(deps: {
         if (action === 'Audio') {
           if (!(input.pcm instanceof Uint8Array)) return fail('REALTIME_AUDIO_INVALID')
           active.session.appendAudio(input.pcm)
-        } else if (action === 'Mute') {
+        } else if (action === 'Playback') active.playback(payload as Record<string, unknown>)
+        else if (action === 'Mute') {
           if (typeof input.muted !== 'boolean') return fail('REALTIME_INPUT_INVALID')
           active.session.setMuted(input.muted)
         } else if (action === 'Cancel') active.session.cancelResponse()

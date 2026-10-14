@@ -226,11 +226,11 @@ export function registerChatHandlers(
   }
   async function controlledReply(source: SessionMessage, messages: ChatMessage[], context: Record<string, unknown>,
     request: ReturnType<typeof captureRequest>): Promise<AssistantOutput> {
-    return conversationDriver!.reply({ messages, context: { ...context,
-      recentTurns: conversations!.messages(source.sessionId).filter(message => message.role !== 'system').slice(-24).map(message => ({
-        turnId: message.turnId, role: message.role, text: message.body, heardText: null,
-        status: message.status === 'interrupted' ? 'interrupted' : 'valid'
-      })) }, scope: { source, temporary, timezone: context.timezone as string, persistenceConfirmed: false,
+    const sharedMessages = conversations!.modelTurns(source.sessionId)
+      .filter(message => message.text.trim())
+      .map(message => ({ role: message.role as 'user' | 'assistant', content: message.text }))
+    return conversationDriver!.reply({ messages: sharedMessages.length ? sharedMessages : messages, context: { ...context,
+      recentTurns: conversations!.modelTurns(source.sessionId) }, scope: { source, temporary, timezone: context.timezone as string, persistenceConfirmed: false,
       signal: request.signal, assertCurrent() { if (!requestIsCurrent(request)) throw staleError(request) } } })
   }
 

@@ -56,6 +56,7 @@ export type LingliChannel =
   | 'tts.pushText'
   | 'tts.stopStreaming'
   | 'voice.nativeStart'
+  | 'voice.nativePlayback'
   | 'voice.nativeAudio'
   | 'voice.nativeMute'
   | 'voice.nativeCancel'

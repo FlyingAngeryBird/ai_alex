@@ -67,9 +67,11 @@ const realtimeRecorder = useRealtimeVoiceRecorder({
 })
 const assistantAudioLevel = ref(0.14)
 const assistantAudioPlaying = ref(false)
+const nativeAutoRequested = ref(false)
+let nativeResumeGeneration: number | null = null
 const nativeConversation = useNativeConversation({
   onSpeaking(value) { assistantAudioPlaying.value = value },
-  onError(message) { conversation.disableAutoListen(); conversation.particleState.value = 'idle'; conversationPartialText.value = ''; conversation.addSystemMessage(message) },
+  onError(message) { nativeAutoRequested.value = false; nativeResumeGeneration = null; conversation.disableAutoListen(); conversation.particleState.value = 'idle'; conversationPartialText.value = ''; conversation.addSystemMessage(message) },
   onText(event) {
     if (event.type === 'conversation.item.input_audio_transcription.delta') {
       conversationPartialText.value += typeof event.delta === 'string' ? event.delta : ''
@@ -95,6 +97,7 @@ const nativeConversation = useNativeConversation({
 })
 watch([assistantAudioPlaying, nativeConversation.userSpeaking], ([assistant, user]) => {
   music.setSpeechActive(assistant || user)
+  if (!assistant) void resumeNativeAfterText()
 })
 let currentVoiceTrace: VoiceLatencyTrace | null = null
 
@@ -720,14 +723,20 @@ async function finishActiveVoiceCapture(): Promise<void> {
 }
 
 async function toggleAutoListen(): Promise<void> {
-  if (nativeConversation.active.value || nativeConversation.starting.value) {
+  const generation = ++autoListenModeGeneration
+  nativeResumeGeneration = null
+  if (nativeAutoRequested.value) {
+    nativeAutoRequested.value = false
     await nativeConversation.stop()
     conversation.disableAutoListen()
     conversation.particleState.value = 'idle'
     conversationPartialText.value = ''
     return
   }
-  ++autoListenModeGeneration
+  nativeAutoRequested.value = true
+  if (textBusy.value || assistantAudioPlaying.value) {
+    nativeResumeGeneration = generation; conversation.setAutoListenState('arming'); return
+  }
   await pushToTalk.cancel()
   await pushToTalk.whenIdle()
   autoListen.stop()
@@ -736,9 +745,12 @@ async function toggleAutoListen(): Promise<void> {
   releaseAssistantAudio()
   conversation.stopCurrentReply()
   await window.lingli.invoke('chat.stopResponse')
+  if (!nativeAutoRequested.value || generation !== autoListenModeGeneration) return
   conversation.setAutoListenState('arming')
-  if (await nativeConversation.start()) conversation.setAutoListenState('armed')
-  else conversation.disableAutoListen()
+  const started = await nativeConversation.start()
+  if (generation !== autoListenModeGeneration || !nativeAutoRequested.value) { if (started) await nativeConversation.stop(); return }
+  if (started) conversation.setAutoListenState('armed')
+  else { nativeAutoRequested.value = false; conversation.disableAutoListen() }
 }
 
 async function cancelActiveVoiceCapture(): Promise<void> {
@@ -781,7 +793,8 @@ async function handleKeyDown(event: KeyboardEvent): Promise<void> {
 }
 
 async function beginPushToTalk(source: PushToTalkSource = 'button'): Promise<void> {
-  if (nativeConversation.active.value || nativeConversation.starting.value) {
+  if (nativeAutoRequested.value) {
+    nativeAutoRequested.value = false; nativeResumeGeneration = null; ++autoListenModeGeneration
     await nativeConversation.stop(); conversation.disableAutoListen(); conversation.stopCurrentReply()
   }
   await pushToTalk.press(source)
@@ -793,13 +806,16 @@ function handleVisibilityChange(): void { if (document.hidden) cancelPushToTalk(
 
 async function handleSendText(text: string, complete?: (accepted: boolean) => void): Promise<void> {
   if (textBusy.value || conversation.isListening.value ||
-    conversation.particleState.value === 'thinking') {
+    conversation.particleState.value === 'thinking' && !nativeConversation.active.value) {
     complete?.(false)
     return
   }
   textBusy.value = true
+  const resumeGeneration = nativeAutoRequested.value ? autoListenModeGeneration : null
   await nativeConversation.stop()
-  conversation.disableAutoListen()
+  conversation.stopCurrentReply()
+  if (nativeAutoRequested.value) conversation.setAutoListenState('arming')
+  else conversation.disableAutoListen()
   releaseAssistantAudio()
   try {
     const response = await conversation.stopListening(text)
@@ -813,7 +829,25 @@ async function handleSendText(text: string, complete?: (accepted: boolean) => vo
   } catch (error) {
     complete?.(false)
     conversation.addSystemMessage(error instanceof Error ? error.message : '消息没有发送成功，请重试。')
-  } finally { textBusy.value = false }
+  } finally {
+    textBusy.value = false
+    if (resumeGeneration !== null && nativeAutoRequested.value && resumeGeneration === autoListenModeGeneration) {
+      nativeResumeGeneration = resumeGeneration
+      void resumeNativeAfterText()
+    }
+  }
+}
+
+async function resumeNativeAfterText(): Promise<void> {
+  const generation = nativeResumeGeneration
+  if (generation === null || textBusy.value || assistantAudioPlaying.value) return
+  nativeResumeGeneration = null
+  if (!nativeAutoRequested.value || generation !== autoListenModeGeneration) return
+  conversation.setAutoListenState('arming')
+  if (await nativeConversation.start()) {
+    if (nativeAutoRequested.value && generation === autoListenModeGeneration) conversation.setAutoListenState('armed')
+    else await nativeConversation.stop()
+  } else { nativeAutoRequested.value = false; conversation.disableAutoListen() }
 }
 
 async function handleToggleTemporary(): Promise<void> {
@@ -822,6 +856,7 @@ async function handleToggleTemporary(): Promise<void> {
     conversation.addSystemMessage('请先结束当前语音或等待回答结束，再切换临时对话。')
     return
   }
+  nativeAutoRequested.value = false; nativeResumeGeneration = null; ++autoListenModeGeneration
   await nativeConversation.stop()
   conversation.disableAutoListen()
   const next = !temporaryMode.value
@@ -845,6 +880,7 @@ async function handleToggleTemporary(): Promise<void> {
 }
 
 async function handlePreviewVoice(voiceId: string): Promise<void> {
+  nativeAutoRequested.value = false; nativeResumeGeneration = null; ++autoListenModeGeneration
   await nativeConversation.stop()
   conversation.disableAutoListen()
   voicePreviewing.value = true
@@ -892,6 +928,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  nativeAutoRequested.value = false; nativeResumeGeneration = null; ++autoListenModeGeneration
   void nativeConversation.stop()
   taskState.dispose()
   void pushToTalk.dispose()
@@ -976,7 +1013,8 @@ onBeforeUnmount(() => {
       />
       <R1CompanionHome
           v-else
-          :assistant-name="persona?.assistantName || 'Seamo AI'"
+          :allow-text-interrupt="nativeConversation.active.value && !textBusy"
+        :assistant-name="persona?.assistantName || 'Seamo AI'"
           :messages="conversation.messages.value"
           :state="conversationPanelState"
           :partial-text="conversationPartialText"
@@ -987,6 +1025,7 @@ onBeforeUnmount(() => {
         />
     </Transition>
       <R1Composer ref="composer" :auto-listen-state="conversation.autoListenState.value"
+        :allow-text-interrupt="nativeConversation.active.value && !textBusy"
         :assistant-name="persona?.assistantName || 'Seamo AI'"
         :busy="textBusy || conversation.isListening.value || conversation.particleState.value === 'thinking' || assistantAudioPlaying"
         :is-listening="conversation.isListening.value" :temporary-mode="temporaryMode"
@@ -1012,7 +1051,8 @@ onBeforeUnmount(() => {
     <R1ItemsPanel v-if="itemsOpen" :temporary-mode="temporaryMode" @close="closePanels" @start-focus="openFocusEditor" />
     <SearchPanel v-if="searchEverOpened" v-show="searchOpen" :temporary-mode="temporaryMode" @close="closePanels" />
     <R1MemoryPanel v-if="memoryOpen" :temporary="temporaryMode" @close="closePanels" />
-    <R1HistoryPanel v-if="historyOpen" :temporary="temporaryMode" :assistant-name="persona?.assistantName || 'Seamo AI'" @close="closePanels" />
+    <R1HistoryPanel v-if="historyOpen" :temporary="temporaryMode" :allow-text-interrupt="nativeConversation.active.value && !textBusy"
+        :assistant-name="persona?.assistantName || 'Seamo AI'" @close="closePanels" />
     <R1FocusDialog v-if="focusEditorOpen" :active="focus.active.value" :busy="focus.busy.value"
       :error="focus.error.value" :track="focusTargetTrack" @close="focusEditorOpen = false" @start="startFocus" />
     <aside v-if="focusNotice || (focus.error.value && !focusEditorOpen)" class="r1-reminder-toast" role="status">

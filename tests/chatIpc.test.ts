@@ -337,3 +337,29 @@ describe('chat IPC handlers', () => {
     ])
   })
 })
+
+it('passes shared native conversation history to the text driver and omits interrupted speech', async () => {
+  const db = openR1Database(':memory:')
+  try {
+    const conversations = new R1Conversations(db), mode = { temporary: false, sessionId: null as string | null }
+    const handlers = new Map<string, (_event: unknown, payload?: unknown) => unknown>()
+    const reply = vi.fn(async (_input: unknown) => ({ intent: 'chat' as const, music: null, reply: '接着聊' }))
+    registerChatHandlers({ handle: (name, handler) => { handlers.set(name, handler) } }, undefined, undefined,
+      conversations, new R1PersonaStore(db), loadR1PromptAssets(resolve('r1-assets')), new R1MemoryStore(db), mode,
+      undefined, { reply } as unknown as import('../electron/main/r1/conversationDriver').R1ConversationDriver)
+    const sessionId = mode.sessionId!
+    conversations.append({ sessionId, turnId: 'voice-1', role: 'user', body: '这是刚才语音说的材料', status: 'final' })
+    conversations.append({ sessionId, turnId: 'voice-1', responseId: 'heard', role: 'assistant', body: '完整播出的回复', status: 'generated' })
+    conversations.recordPlayback({ sessionId, responseId: 'heard', playedUntilMs: 1000, status: 'completed' })
+    conversations.append({ sessionId, turnId: 'voice-2', responseId: 'cut', role: 'assistant', body: '未播全文', status: 'generated' })
+    conversations.recordPlayback({ sessionId, responseId: 'cut', playedUntilMs: 100, status: 'interrupted' })
+    expect(await handlers.get('chat.sendMessage')!(null, { text: '继续刚才的话题' })).toMatchObject({ ok: true })
+    const input = reply.mock.calls[0][0] as unknown as { messages: Array<{ role: string; content: string }> }
+    expect(input.messages).toEqual([
+      { role: 'user', content: '这是刚才语音说的材料' },
+      { role: 'assistant', content: '完整播出的回复' },
+      { role: 'user', content: '继续刚才的话题' }
+    ])
+    expect(conversations.messages(sessionId).some(message => message.body === '未播全文')).toBe(true)
+  } finally { db.close() }
+})

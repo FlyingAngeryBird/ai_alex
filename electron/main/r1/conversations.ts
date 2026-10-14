@@ -60,6 +60,33 @@ export class R1Conversations {
     return message
   }
 
+  modelTurns(sessionId: string) {
+    return this.messages(sessionId).filter(message => message.role !== 'system').slice(-24).map(message => {
+      const unconfirmedAudio = message.role === 'assistant' &&
+        (message.status === 'interrupted' || message.playedUntilMs !== null && message.status !== 'heard')
+      return { turnId: message.turnId, role: message.role, text: unconfirmedAudio ? '' : message.body,
+        heardText: message.role === 'assistant' && message.status === 'heard' ? message.body : null,
+        status: unconfirmedAudio ? 'interrupted' as const : 'valid' as const }
+    })
+  }
+
+  recordPlayback(input: { sessionId: string; responseId: string; playedUntilMs: number;
+    status: 'playing' | 'completed' | 'interrupted' }): void {
+    if (!Number.isSafeInteger(input.playedUntilMs) || input.playedUntilMs < 0 || input.playedUntilMs > 3_600_000 ||
+      !['playing', 'completed', 'interrupted'].includes(input.status)) throw new Error('INVALID_PLAYBACK_RECEIPT')
+    const temp = this.temporary.get(input.sessionId)
+    const status = input.status === 'completed' ? 'heard' : input.status === 'interrupted' ? 'interrupted' : 'generated'
+    if (temp) {
+      const message = temp.messages.find(message => message.responseId === input.responseId && message.role === 'assistant')
+      if (!message || message.status === 'interrupted' || message.status === 'heard') return
+      message.playedUntilMs = Math.max(message.playedUntilMs ?? 0, input.playedUntilMs); message.status = status
+      return
+    }
+    this.db.prepare(`UPDATE messages SET played_until_ms = MAX(COALESCE(played_until_ms, 0), ?), status = ?
+      WHERE session_id = ? AND response_id = ? AND role = 'assistant' AND status NOT IN ('interrupted', 'heard')`)
+      .run(input.playedUntilMs, status, input.sessionId, input.responseId)
+  }
+
   messages(sessionId: string): SessionMessage[] {
     if (typeof sessionId !== 'string' || !sessionId) throw new Error('INVALID_SESSION_ID')
     const temp = this.temporary.get(sessionId)

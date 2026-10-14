@@ -66,6 +66,7 @@ export const exposedChannels = [
   'tts.pushText',
   'tts.stopStreaming',
   'voice.nativeStart',
+  'voice.nativePlayback',
   'voice.nativeAudio',
   'voice.nativeMute',
   'voice.nativeCancel',

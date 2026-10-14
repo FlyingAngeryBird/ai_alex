@@ -7,6 +7,7 @@ const props = defineProps<{
   assistantName: string
   autoListenState: AutoListenState
   busy: boolean
+  allowTextInterrupt?: boolean
   isListening: boolean
   temporaryMode: boolean
   serviceLabel: string
@@ -35,7 +36,7 @@ defineExpose({ focusInput })
 
 function submit(): void {
   const text = draft.value.trim()
-  if (!text || props.busy || props.isListening) return
+  if (!text || props.busy && !props.allowTextInterrupt || props.isListening) return
   if ([...text].length > 8000) {
     error.value = '一次最多发送 8000 个字符；请缩短后重试。'
     return
@@ -107,7 +108,7 @@ onBeforeUnmount(() => {
       <input ref="inputElement" v-model="draft" aria-label="对话输入" :placeholder="`和 ${assistantName} 说点什么…`"
         autocomplete="off" @keydown.enter="onEnter" />
       <button v-if="busy" type="button" class="r1-stop" aria-label="停止朗读" @click="emit('stopSpeech')"><Square :size="15" /></button>
-      <button class="r1-send" type="submit" aria-label="发送消息" :disabled="!draft.trim() || busy || isListening"><ArrowUp :size="20" /></button>
+      <button class="r1-send" type="submit" aria-label="发送消息" :disabled="!draft.trim() || busy && !allowTextInterrupt || isListening"><ArrowUp :size="20" /></button>
     </form>
     <p v-if="error" class="r1-composer-error" role="alert">{{ error }}</p>
     <div class="r1-composer-foot">

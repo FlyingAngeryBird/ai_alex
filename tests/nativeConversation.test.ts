@@ -7,6 +7,7 @@ it('opens the microphone only for the active connection and clears queued audio 
   const node = () => ({ connect: vi.fn(), disconnect: vi.fn() })
   class Context {
     sampleRate = 16000; currentTime = 0
+    audioWorklet = { addModule: async () => undefined }
     destination = {}; resume = async () => undefined; close = closed
     createMediaStreamSource = node
     createScriptProcessor = () => ({ ...node(), onaudioprocess: null })
@@ -14,6 +15,16 @@ it('opens the microphone only for the active connection and clears queued audio 
     createBuffer = (_channels: number, size: number) => ({ duration: size / 24000, getChannelData: () => new Float32Array(size) })
     createBufferSource = () => ({ ...node(), buffer: null, onended: null, start: vi.fn(), stop: audioStop })
   }
+  class Worklet {
+    connect = vi.fn(); disconnect = vi.fn()
+    port = { close: vi.fn(), onmessage: null as null | ((event: { data: Record<string, unknown> }) => void),
+      postMessage: (data: Record<string, unknown>) => {
+        if (data.type === 'audio') this.port.onmessage?.({ data: { type: 'playback', status: 'started' } })
+        if (data.type === 'clear') { audioStop(); this.port.onmessage?.({ data: { type: 'cleared', requestId: data.requestId } }) }
+      } }
+  }
+  vi.stubGlobal('AudioWorkletNode', Worklet)
+  vi.stubGlobal('document', { baseURI: 'file:///test/index.html' })
   const invoke = vi.fn(async (channel: string) => ({ ok: true, data: channel === 'app.requestMicrophoneAccess' ? { granted: true } : null }))
   vi.stubGlobal('AudioContext', Context)
   vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: async () => ({ getTracks: () => [{ stop: trackStop, addEventListener: vi.fn() }] }) } })
@@ -27,7 +38,7 @@ it('opens the microphone only for the active connection and clears queued audio 
   listener({ connectionId: id, type: 'response.output_audio.delta', response_id: 'r', delta: 'AAA=' })
   expect(voice.speaking.value).toBe(true)
   await voice.interrupt()
-  expect(audioStop).toHaveBeenCalledOnce()
+  expect(audioStop).toHaveBeenCalledTimes(1)
   listener({ connectionId: id, type: 'response.output_audio.delta', response_id: 'r', delta: 'AAA=' })
   expect(voice.speaking.value).toBe(false)
   await voice.stop()
