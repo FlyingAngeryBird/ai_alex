@@ -1,3 +1,4 @@
+import { registerNativeVoiceHandlers } from './ipc/nativeVoiceHandlers.js'
 import { app, BrowserWindow, powerMonitor } from 'electron'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -38,6 +39,7 @@ import { createArkResponsesProvider } from './providers/arkResponsesProvider.js'
 import { R1ConversationDriver } from './r1/conversationDriver.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+let nativeVoice: { close(): void } | null = null
 let r1Database: R1Database | null = null
 let reminderScheduler: ReminderScheduler | null = null
 let r1PromptAssets: R1PromptAssets | null = null
@@ -125,10 +127,16 @@ void app.whenReady().then(async () => {
       createArkResponsesProvider(), () => new R1PersonaStore(r1Database!).get())
     r1ConversationDriver = new R1ConversationDriver(r1Database, r1PromptAssets, r1Tasks, createArkResponsesProvider(),
       () => new R1PersonaStore(r1Database!).get(), taskTools.implementedAliases)
+    nativeVoice = registerNativeVoiceHandlers({ db: r1Database, assets: r1PromptAssets,
+      persona: new R1PersonaStore(r1Database), memory, conversations: r1Conversations,
+      tasks: r1Tasks, mode: r1SessionMode, implementedTaskAliases: taskTools.implementedAliases,
+      configurationRevision: () => vault.revision })
+    powerMonitor.on('suspend', () => nativeVoice?.close())
     r1TaskRunner.start()
     importLegacyJson(r1Database, join(app.getPath('appData'), 'lingli'), 'lingli-json')
     importLegacyJson(r1Database, join(app.getPath('appData'), 'lingmo'), 'lingmo-json')
     registerR1Handlers(r1Database, undefined, r1SessionMode, deletionEpoch => {
+      nativeVoice?.close()
       r1Tasks?.invalidateContext()
       for (const window of BrowserWindow.getAllWindows()) {
         window.webContents.send('r1.memoryInvalidated', { deletionEpoch })
@@ -199,6 +207,7 @@ void app.whenReady().then(async () => {
 })
 
 app.on('before-quit', () => {
+  nativeVoice?.close()
   r1Tasks?.close()
   void r1TaskRunner?.close()
   r1Diagnostics?.close()

@@ -6,6 +6,7 @@ import ParticleSphere from '@/components/ParticleSphere.vue'
 import R1SettingsPanel from '@/components/R1SettingsPanel.vue'
 import R1MemoryPanel from '@/components/R1MemoryPanel.vue'
 import R1TaskPanel from '@/components/R1TaskPanel.vue'
+import { useNativeConversation } from '@/composables/useNativeConversation'
 import { useTasks } from '@/composables/useTasks'
 import R1HistoryPanel from '@/components/R1HistoryPanel.vue'
 import R1FocusChip from '@/components/R1FocusChip.vue'
@@ -66,6 +67,32 @@ const realtimeRecorder = useRealtimeVoiceRecorder({
 })
 const assistantAudioLevel = ref(0.14)
 const assistantAudioPlaying = ref(false)
+const nativeConversation = useNativeConversation({
+  onSpeaking(value) { assistantAudioPlaying.value = value },
+  onError(message) { conversation.disableAutoListen(); conversation.particleState.value = 'idle'; conversationPartialText.value = ''; conversation.addSystemMessage(message) },
+  onText(event) {
+    if (event.type === 'conversation.item.input_audio_transcription.delta') {
+      conversationPartialText.value += typeof event.delta === 'string' ? event.delta : ''
+    } else if (event.type === 'conversation.item.input_audio_transcription.started') {
+      conversationPartialText.value = ''
+      conversation.particleState.value = 'listening'
+    } else if (event.type === 'conversation.item.input_audio_transcription.completed') {
+      conversationPartialText.value = ''
+      if (typeof event.transcript === 'string' && event.transcript.trim()) {
+        conversation.messages.value.push({ id: String(event.item_id), role: 'user', text: event.transcript, createdAt: Date.now() })
+      }
+      conversation.particleState.value = 'thinking'
+    } else if (event.type === 'response.output_text.delta' || event.type === 'response.output_text.done') {
+      const id = String(event.response_id)
+      let message = conversation.messages.value.find(item => item.id === id)
+      if (!message) { conversation.messages.value.push({ id, role: 'assistant', text: '', createdAt: Date.now() }); message = conversation.messages.value.at(-1)! }
+      if (event.type.endsWith('.delta') && typeof event.delta === 'string') message.text += event.delta
+      else if (typeof event.text === 'string') message.text = event.text
+    } else if (event.type === 'response.done' || event.type === 'response.canceled') {
+      conversation.particleState.value = 'idle'
+    }
+  }
+})
 let currentVoiceTrace: VoiceLatencyTrace | null = null
 
 function startVoiceTrace(): void {
@@ -402,6 +429,7 @@ function scheduleAutoListenGraceFinish(): void {
 }
 
 function stopCurrentResponse(): void {
+  if (nativeConversation.active.value) void nativeConversation.interrupt()
   conversation.stopCurrentReply()
   void window.lingli.invoke('chat.stopResponse')
   releaseAssistantAudio(true)
@@ -689,34 +717,25 @@ async function finishActiveVoiceCapture(): Promise<void> {
 }
 
 async function toggleAutoListen(): Promise<void> {
-  const generation = ++autoListenModeGeneration
-  await pushToTalk.cancel()
-  await pushToTalk.whenIdle()
-  if (generation !== autoListenModeGeneration) return
-  if (conversation.autoListenState.value === 'off' || conversation.autoListenState.value === 'error') {
-    autoListenSession.enable()
-    conversation.setAutoListenState('arming')
-    const didStart = await autoListen.start()
-    if (generation !== autoListenModeGeneration) return
-    if (didStart) {
-      autoListenSession.ready()
-      conversation.setAutoListenState('armed')
-    } else {
-      autoListenSession.fail()
-      conversation.markAutoListenError()
-    }
+  if (nativeConversation.active.value || nativeConversation.starting.value) {
+    await nativeConversation.stop()
+    conversation.disableAutoListen()
+    conversation.particleState.value = 'idle'
+    conversationPartialText.value = ''
     return
   }
-
+  ++autoListenModeGeneration
+  await pushToTalk.cancel()
+  await pushToTalk.whenIdle()
+  autoListen.stop()
   clearAutoListenGraceTimer()
   clearAutoListenRecoveryTimer()
-  autoListenSession.disable()
-  autoListen.stop()
-  conversation.disableAutoListen()
-  if (activeVoiceInputMode === 'auto_listen') {
-    await cancelActiveVoiceCapture()
-    conversation.cancelVoiceInput('', { silent: true })
-  }
+  releaseAssistantAudio()
+  conversation.stopCurrentReply()
+  await window.lingli.invoke('chat.stopResponse')
+  conversation.setAutoListenState('arming')
+  if (await nativeConversation.start()) conversation.setAutoListenState('armed')
+  else conversation.disableAutoListen()
 }
 
 async function cancelActiveVoiceCapture(): Promise<void> {
@@ -758,7 +777,12 @@ async function handleKeyDown(event: KeyboardEvent): Promise<void> {
   await beginPushToTalk('keyboard')
 }
 
-async function beginPushToTalk(source: PushToTalkSource = 'button'): Promise<void> { await pushToTalk.press(source) }
+async function beginPushToTalk(source: PushToTalkSource = 'button'): Promise<void> {
+  if (nativeConversation.active.value || nativeConversation.starting.value) {
+    await nativeConversation.stop(); conversation.disableAutoListen(); conversation.stopCurrentReply()
+  }
+  await pushToTalk.press(source)
+}
 async function endPushToTalk(source: PushToTalkSource = 'button'): Promise<void> { await pushToTalk.release(source) }
 function cancelPushToTalk(): void { void pushToTalk.cancel() }
 function handleWindowBlur(): void { cancelPushToTalk() }
@@ -771,6 +795,8 @@ async function handleSendText(text: string, complete?: (accepted: boolean) => vo
     return
   }
   textBusy.value = true
+  await nativeConversation.stop()
+  conversation.disableAutoListen()
   releaseAssistantAudio()
   try {
     const response = await conversation.stopListening(text)
@@ -793,6 +819,8 @@ async function handleToggleTemporary(): Promise<void> {
     conversation.addSystemMessage('请先结束当前语音或等待回答结束，再切换临时对话。')
     return
   }
+  await nativeConversation.stop()
+  conversation.disableAutoListen()
   const next = !temporaryMode.value
   const result = await window.lingli.invoke<{ temporary: boolean }>('chat.setTemporary', { enabled: next })
   if (!result.ok) {
@@ -814,6 +842,8 @@ async function handleToggleTemporary(): Promise<void> {
 }
 
 async function handlePreviewVoice(voiceId: string): Promise<void> {
+  await nativeConversation.stop()
+  conversation.disableAutoListen()
   voicePreviewing.value = true
 
   try {
@@ -832,7 +862,7 @@ onMounted(() => {
     if (!credentials.ok || !currentPersona.ok ||
       !credentials.data.VOLCENGINE_ARK_API_KEY || !credentials.data.VOLCENGINE_ARK_MODEL) return
     startupGreetingTimer = window.setTimeout(() => {
-      if (conversation.messages.value.length || conversation.isListening.value) return
+      if (conversation.messages.value.length || conversation.isListening.value || nativeConversation.active.value || nativeConversation.starting.value) return
       void conversation.generateOpeningGreeting().then(() => {
         const greeting = conversation.messages.value[0]
         if (greeting?.role === 'assistant' && conversation.messages.value.length === 1) {
@@ -859,6 +889,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  void nativeConversation.stop()
   taskState.dispose()
   void pushToTalk.dispose()
   window.removeEventListener('blur', handleWindowBlur)
@@ -885,7 +916,7 @@ onBeforeUnmount(() => {
       <button class="r1-brand" type="button" @click="music.closeImmersive(); closePanels()"
         aria-label="返回 Seamo 陪伴首页"><AudioLines :size="25" /><span>Seamo <em>AI</em></span></button>
       <time>{{ currentDate }}</time>
-      <div class="r1-header-right"><button v-if="taskState.tasks.value.length && !taskOpen" type="button" class="r1-header-task" @click="openTask">查看委托</button><span class="r1-mic-state"><Mic v-if="conversation.isListening.value" :size="14" /><MicOff v-else :size="14" />{{ conversation.isListening.value ? '正在收音' : '麦克风未开启' }}</span></div>
+      <div class="r1-header-right"><button v-if="taskState.tasks.value.length && !taskOpen" type="button" class="r1-header-task" @click="openTask">查看委托</button><span class="r1-mic-state"><Mic v-if="(conversation.isListening.value || nativeConversation.active.value)" :size="14" /><MicOff v-else :size="14" />{{ conversation.isListening.value || nativeConversation.active.value ? '正在收音' : '麦克风未开启' }}</span></div>
     </header>
     <nav class="r1-rail" aria-label="主导航">
       <button type="button" :aria-current="viewMode === 'conversation' && !hasSidePanel && !searchOpen ? 'page' : undefined"

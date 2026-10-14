@@ -71,6 +71,10 @@ export class NativeRealtimeSession {
     if (this.socket.bufferedAmount > 262144) { this.close('REALTIME_UPLINK_CONGESTED'); throw new NativeRealtimeError('REALTIME_UPLINK_CONGESTED') }
     this.socket.send(JSON.stringify({ event_id: randomUUID(), ...event }))
   }
+  updateBoundary(boundary: R1ModelRequestBoundary): void {
+    this.send({ ...nativeSessionCreate(boundary, this.input.voice), type: 'session.update' })
+    this.input.boundary = boundary
+  }
   appendAudio(pcm: Uint8Array): void {
     // 16 kHz mono signed PCM16; no unbounded queue when disconnected.
     if (!pcm.byteLength || pcm.byteLength > 32000 || pcm.byteLength % 2) throw new NativeRealtimeError('REALTIME_AUDIO_INVALID')
