@@ -1,3 +1,4 @@
+import { selectedConversationEntity } from '../r1/sessionMode.js'
 import { ipcMain, type WebContents } from 'electron'
 import { NativePlaybackLedger } from '../r1/nativePlayback.js'
 import { randomUUID } from 'node:crypto'
@@ -43,7 +44,7 @@ export function registerNativeVoiceHandlers(deps: {
     const sourceTurns = new Map<string, string>()
     const context = () => ({ sessionId, sessionGeneration: 1, turnId, currentTime: new Date().toISOString(),
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, temporary, contextVersion: 1,
-      personaVersion: persona.version, deletionEpoch, selectedEntity: null, availableToolAliases: [],
+      personaVersion: persona.version, deletionEpoch, selectedEntity: selectedConversationEntity(deps.mode, deps.tasks), availableToolAliases: [],
       loadedSkillIds: tools ? [...tools.loadedSkillIds] : ['SK01'],
       recentTurns: deps.conversations.modelTurns(sessionId),
       memories: [], activeTasks: deps.tasks.list(temporary ? sessionId : null).slice(-20).map(task => {

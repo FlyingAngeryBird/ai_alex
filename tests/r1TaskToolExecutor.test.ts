@@ -146,3 +146,66 @@ it('runs registered search through the task budget, records real sources, and dr
     expect(db.prepare('SELECT COUNT(*) AS n FROM receipts WHERE task_id = ?').get(active.lease.taskId)).toMatchObject({ n: 2 })
   } finally { tasks.close(); db.close() }
 })
+
+it('binds page reading to an existing source and exposes persisted search and page evidence to the task view', async () => {
+  const { createPageReader } = await import('../electron/main/providers/pageReader')
+  const { createBraveSearchProvider } = await import('../electron/main/providers/braveSearchProvider')
+  const db = openR1Database(':memory:')
+  const conversations = new R1Conversations(db), sessionId = conversations.start()
+  const message = conversations.append({ sessionId, turnId: 'source', role: 'user', body: '查并读取介绍', status: 'final' })
+  const tasks = new R1TaskSupervisor(db, assets, () => 0)
+  try {
+    const search = createBraveSearchProvider({ key: () => 'synthetic', fetcher: (async () => new Response(JSON.stringify({ web: { results: [
+      { title: '介绍', url: 'https://example.org/park', description: '摘要' }
+    ] } }))) as typeof fetch })
+    const pages = createPageReader({ read: async url => ({ url: url.href, bytes: Buffer.from('<title>介绍</title><main>实际页面正文</main>'), contentType: 'text/html', truncated: false }) })
+    const task = tasks.accept({ requestKey: 'page', sourceMessageId: message.messageId, timezone: 'Asia/Shanghai', goal: '读取页面',
+      constraints: [], authorizedAliases: ['read_file', 'web_search', 'web_read_page'], complexity: 'complex' })
+    const active = tasks.claimNext()!, executor = new R1TaskToolExecutor(tasks, assets, undefined, search, pages)
+    executor.execute(active.lease, 'read_file', { file_path: '/skills/web-qa/SKILL.md' })
+    await executor.executeAsync(active.lease, 'web_search', { query: '介绍' }, 'search')
+    const sourceRef = tasks.get(task.taskId).webResult!.sources[0].sourceRef
+    await expect(executor.executeAsync(active.lease, 'web_read_page', { url: 'https://example.org/other', sourceRef, fields: [] }, 'wrong')).rejects.toThrow('TASK_PAGE_SOURCE_INVALID')
+    const result = await executor.executeAsync(active.lease, 'web_read_page', { url: 'https://example.org/park', sourceRef, fields: ['title'] }, 'page')
+    expect(result.status).toBe('succeeded')
+    expect(tasks.get(task.taskId).webResult).toMatchObject({ sources: [{ sourceRef, readStatus: 'read', snippet: '实际页面正文' }], candidates: [{ label: '介绍' }] })
+    expect(tasks.beginDecision(active.lease).observations.find(item => item.refId === sourceRef)?.resourcePath).toContain(result.actionId)
+  } finally { tasks.close(); db.close() }
+})
+
+it('saves a chosen real candidate once, keeps source scope, and leaves the note intact if reminder creation fails', async () => {
+  const { createBraveSearchProvider } = await import('../electron/main/providers/braveSearchProvider')
+  const db = openR1Database(':memory:')
+  const conversations = new R1Conversations(db), sessionId = conversations.start()
+  const source = conversations.append({ sessionId, turnId: 'source', role: 'user', body: '查公园并记下来', status: 'final' })
+  const tasks = new R1TaskSupervisor(db, assets, () => 0), items = new R1Items(db)
+  try {
+    const search = createBraveSearchProvider({ key: () => 'synthetic', fetcher: (async () => new Response(JSON.stringify({ web: { results: [
+      { title: '公园', url: 'https://example.org/park', description: '实际搜索摘要' }
+    ] } }))) as typeof fetch })
+    const task = tasks.accept({ requestKey: 'save-search', sourceMessageId: source.messageId, timezone: 'Asia/Shanghai', goal: '查公园',
+      constraints: [], authorizedAliases: ['read_file', 'web_search'], complexity: 'complex' })
+    const active = tasks.claimNext()!, executor = new R1TaskToolExecutor(tasks, assets, items, search)
+    executor.execute(active.lease, 'read_file', { file_path: '/skills/web-qa/SKILL.md' })
+    await executor.executeAsync(active.lease, 'web_search', { query: '公园' }, 'search')
+    const candidateId = tasks.get(task.taskId).webResult!.candidates[0].candidateId
+    const { selectedConversationEntity } = await import('../electron/main/r1/sessionMode')
+    const mode = { temporary: false, sessionId, selectedCandidate: { taskId: task.taskId, goalVersion: task.goalVersion, candidateId, candidateVersion: tasks.candidateVersion(task.taskId, candidateId) } }
+    expect(selectedConversationEntity(mode, tasks)).toEqual({ type: 'candidate', id: candidateId, version: 1 })
+    expect(selectedConversationEntity({ ...mode, selectedCandidate: { ...mode.selectedCandidate, candidateVersion: 999 } }, tasks)).toBeNull()
+    expect(selectedConversationEntity({ ...mode, temporary: true }, tasks)).toBeNull()
+    const command = { taskId: task.taskId, expectedGoalVersion: task.goalVersion, candidateId, title: '周末的公园' }
+    const saved = tasks.saveCandidate(command)
+    expect(tasks.saveCandidate(command)).toEqual(saved)
+    expect(items.list()).toHaveLength(1)
+    expect(items.list()[0].body).toContain('仅搜索摘要')
+    expect(() => tasks.saveCandidate({ ...command, candidateId: 'invented' })).toThrow('TASK_CANDIDATE_NOT_FOUND')
+    expect(() => tasks.saveCandidate({ ...command, expectedGoalVersion: 999 })).toThrow('VERSION_CONFLICT')
+    expect(() => items.createReminder({ actionId: 'bad-reminder', itemId: saved.itemId, linkPurpose: 'independent', body: '去公园', dueAtUtc: 'past', timezone: 'Asia/Shanghai' })).toThrow('INVALID_DUE_TIME')
+    expect(items.list()[0].itemId).toBe(saved.itemId)
+    const reminder = items.createReminder({ actionId: 'reminder', itemId: saved.itemId, linkPurpose: 'independent', body: '去公园',
+      dueAtUtc: new Date(Date.now() + 3600000).toISOString(), timezone: 'Asia/Shanghai' })
+    expect(reminder.reminder.itemId).toBe(saved.itemId)
+    expect(items.listReminders()).toHaveLength(1)
+  } finally { tasks.close(); db.close() }
+})

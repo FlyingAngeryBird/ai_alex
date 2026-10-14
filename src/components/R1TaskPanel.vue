@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import R1WebResult from './R1WebResult.vue'
 import R1ArtifactEditor from './R1ArtifactEditor.vue'
 import { Pause, Play, X } from 'lucide-vue-next'
 import type { R1Task, TaskStatus } from '../../electron/main/r1/taskSupervisor'
@@ -29,6 +30,7 @@ const labels: Record<TaskStatus, string> = { accepted: '等待处理', running: 
           <button v-if="['paused','needs_resume'].includes(selected.status)" type="button" :disabled="busy" @click="emit('control', 'resume')"><Play :size="14" />继续</button>
           <button v-if="['accepted','running','paused','needs_resume','waiting_input'].includes(selected.status)" type="button" :disabled="busy" @click="emit('control', 'cancel')"><X :size="14" />取消任务</button>
         </div>
+        <R1WebResult :task="selected" />
         <template v-if="selected.result"><p class="task-summary">{{ selected.result.replyBrief }}</p>
           
           <p v-for="(issue, index) in selected.result.unresolved" :key="index">{{ issue }}</p>

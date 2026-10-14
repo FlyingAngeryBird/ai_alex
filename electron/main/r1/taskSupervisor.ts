@@ -1,7 +1,9 @@
+import type { WebSource } from '../providers/pageReader.js'
 import { createHash, randomUUID } from 'node:crypto'
 import { inTransaction, type R1Database } from './database.js'
 import type { R1TaskInput, R1TaskAuthority } from './taskBoundary.js'
 import type { R1PromptAssets } from './promptAssets.js'
+import { R1Items } from './items.js'
 import { R1Artifacts, type ArtifactDraft } from './artifacts.js'
 
 export type TaskStatus = 'accepted' | 'running' | 'waiting_input' | 'paused' | 'needs_resume' |
@@ -30,7 +32,8 @@ type TaskDraft = { status: TaskResult['completionStatus']; goalVersion: number; 
   candidates: Array<{ candidateId: string; label: string; summary: string; sourceRefs: string[] }>; unresolved: string[] }
 export type TaskToolReceipt = { kind: 'receipt'; actionId: string; tool: string; status: 'succeeded' | 'failed' | 'cancelled' | 'unknown';
   entityId: string | null; entityVersion: number | null; data: Record<string, unknown>; errorCode: string | null; retryable: boolean; runId: string | null }
-export type R1Task = { taskId: string; goal: string; constraints: string[]; goalVersion: number;
+export type WebCandidate = { candidateId: string; label: string; sourceRefs: string[]; fields: Array<{ key: string; value: string | null; verification: 'verified' | 'unconfirmed' | 'conflicting'; sourceRefs: string[] }> }
+export type R1Task = { webResult?: { sources: WebSource[]; candidates: WebCandidate[] }; taskId: string; goal: string; constraints: string[]; goalVersion: number;
   status: TaskStatus; assetReleaseId: string; planVersion: number; progressBrief: string;
   queuePosition: number | null; temporary: boolean; budget: R1TaskInput['budget']; runId: string | null;
   resultId: string | null; result: TaskResult | null }
@@ -121,7 +124,60 @@ export class R1TaskSupervisor {
       status: record.status, assetReleaseId: record.assetReleaseId, planVersion: record.checkpoint.planVersion,
       progressBrief: record.checkpoint.progressBrief, temporary: record.temporary,
       queuePosition: position >= 0 ? position + (running ? 1 : 0) : null, budget: record.budget, runId: record.checkpoint.runId,
-      resultId: result?.resultId ?? null, result })
+      resultId: result?.resultId ?? null, result,
+      webResult: record.checkpoint.deletionEpoch === this.deletionEpoch() ? this.webResult(record) : { sources: [], candidates: [] } })
+  }
+  private webResult(record: RecordTask): { sources: WebSource[]; candidates: WebCandidate[] } {
+    const sources = new Map<string, WebSource>(), candidates = new Map<string, WebCandidate>()
+    for (const receipt of record.checkpoint.toolReceipts ?? []) {
+      if (receipt.status !== 'succeeded') continue
+      if (receipt.tool === 'web.search') {
+        for (const source of receipt.data.sources as WebSource[]) if (!sources.has(source.sourceRef)) sources.set(source.sourceRef, source)
+        for (const candidate of receipt.data.candidates as WebCandidate[]) candidates.set(candidate.candidateId, candidate)
+      } else if (receipt.tool === 'web.readPage') {
+        const source = receipt.data.source as WebSource
+        sources.set(source.sourceRef, source)
+      }
+    }
+    return { sources: [...sources.values()], candidates: [...candidates.values()] }
+  }
+  candidateVersion(taskId: string, candidateId: string): number {
+    if (!this.contextIsCurrent(taskId)) throw new Error('TASK_CONTEXT_STALE')
+    const observation = this.checked(taskId).checkpoint.observations.find(item => item.refId === candidateId && item.kind === 'candidate')
+    if (!observation) throw new Error('TASK_CANDIDATE_NOT_FOUND')
+    return observation.version ?? 1
+  }
+  saveCandidate(input: { taskId: string; expectedGoalVersion: number; candidateId: string; title: string; temporarySaveConfirmed?: boolean }) {
+    const record = this.checked(input.taskId)
+    if (record.goalVersion !== input.expectedGoalVersion) throw new Error('VERSION_CONFLICT')
+    if (!this.contextIsCurrent(input.taskId)) throw new Error('TASK_CONTEXT_STALE')
+    if (record.temporary && !input.temporarySaveConfirmed) throw new Error('TEMPORARY_SAVE_CONFIRMATION_REQUIRED')
+    requireText(input.title, 80, 'CANDIDATE_TITLE_INVALID')
+    const web = this.webResult(record), candidate = web.candidates.find(item => item.candidateId === input.candidateId)
+    if (!candidate) throw new Error('TASK_CANDIDATE_NOT_FOUND')
+    const actionId = `candidate-save:${createHash('sha256').update(`${input.taskId}:${input.candidateId}`).digest('hex')}`
+    const items = new R1Items(this.db)
+    const prior = this.db.prepare('SELECT entity_id FROM receipts WHERE action_id = ? AND status = ?').get(actionId, 'succeeded') as { entity_id: string } | undefined
+    if (prior) {
+      const item = items.toolView(prior.entity_id)
+      return { itemId: item.itemId, title: item.title, version: item.version }
+    }
+    const sources = web.sources.filter(source => candidate.sourceRefs.includes(source.sourceRef))
+    if (!sources.length) throw new Error('TASK_CANDIDATE_SOURCE_MISSING')
+    const body = sources.map(source => `${source.title}
+${source.snippet}
+
+来源：${source.url}
+访问时间：${source.accessedAt}
+页面日期：${source.publishedAt ?? '未提供'}
+读取范围：${source.readStatus === 'read' ? '已读取页面' : source.readStatus === 'partial' ? '部分页面' : '仅搜索摘要'}`).join('\n\n')
+    const saved = items.create({ actionId, kind: 'note', title: input.title, body, sourceRefs: candidate.sourceRefs })
+    return { itemId: saved.item.itemId, title: saved.item.title, version: saved.item.version }
+  }
+  assertPageSource(lease: TaskLease, sourceRef: string, url: string): void {
+    this.assertLease(lease)
+    const source = this.webResult(this.checked(lease.taskId)).sources.find(item => item.sourceRef === sourceRef)
+    if (!source || source.url !== url) throw new Error('TASK_PAGE_SOURCE_INVALID')
   }
   list(temporarySessionId: string | null = null): R1Task[] {
     return [...this.records.values()].filter(record => temporarySessionId
@@ -136,7 +192,7 @@ export class R1TaskSupervisor {
   modelView(taskId: string): R1Task {
     const task = this.get(taskId)
     return this.contextIsCurrent(taskId) ? task : { ...task, goal: '任务上下文已变化，需要重新提供条件。', constraints: [],
-      progressBrief: '需要核对当前条件。', result: null, resultId: null }
+      progressBrief: '需要核对当前条件。', result: null, resultId: null, webResult: { sources: [], candidates: [] } }
   }
   onChanged(listener: (event: TaskEvent) => void): () => void {
     this.listeners.add(listener); return () => { this.listeners.delete(listener) }
@@ -351,17 +407,18 @@ export class R1TaskSupervisor {
     run: () => Promise<Record<string, unknown>>, callId?: string): Promise<TaskToolReceipt> {
     this.assertLease(lease)
     this.assets.validateToolInput(alias, input)
-    if (alias !== 'web_search') throw new Error('TASK_EXTERNAL_READ_UNAVAILABLE')
+    if (!['web_search', 'web_read_page'].includes(alias)) throw new Error('TASK_EXTERNAL_READ_UNAVAILABLE')
     if (callId !== undefined && (!callId || callId.length > 300)) throw new Error('TASK_TOOL_CALL_ID_INVALID')
     const fingerprint = createHash('sha256').update(JSON.stringify(input)).digest('hex')
     const actionId = this.consumeTool(lease, alias, callId ? { callId, fingerprint } : undefined)
     const record = this.checked(lease.taskId)
     if (record.checkpoint.receiptActionIds.includes(actionId)) return this.readReceipt(lease, actionId)
     if (record.checkpoint.actions!.find(action => action.actionId === actionId)!.runId !== lease.runId) throw new Error('TASK_RECEIPT_RECONCILIATION_REQUIRED')
-    if (record.budget.searchQueriesRemaining < 1) throw new Error('TASK_SEARCH_BUDGET_EXHAUSTED')
-    record.budget.searchQueriesRemaining--; this.persist(record)
+    const budgetKey = alias === 'web_search' ? 'searchQueriesRemaining' : 'pagesRemaining'
     let receipt: TaskToolReceipt
     try {
+      if (record.budget[budgetKey] < 1) throw new Error(alias === 'web_search' ? 'TASK_SEARCH_BUDGET_EXHAUSTED' : 'TASK_PAGE_BUDGET_EXHAUSTED')
+      record.budget[budgetKey]--; this.persist(record)
       const data = await run()
       receipt = { kind: 'receipt', actionId, tool: this.assets.toolDefinition(alias).name,
         status: 'succeeded', entityId: null, entityVersion: null, data, errorCode: null, retryable: false, runId: lease.runId }
@@ -377,22 +434,26 @@ export class R1TaskSupervisor {
       inTransaction(this.db, () => {
         this.storeLocalReceipt(lease, receipt)
         if (receipt.status === 'succeeded') {
-          const sources = receipt.data.sources as Array<{ sourceRef: string; title: string }>
-          const candidates = receipt.data.candidates as Array<{ candidateId: string; label: string }>
+          const sources = (alias === 'web_search' ? receipt.data.sources : [receipt.data.source]) as Array<{ sourceRef: string; title: string }>
+          const candidates = (alias === 'web_search' ? receipt.data.candidates : []) as Array<{ candidateId: string; label: string }>
           const resourcePath = `/task/${lease.taskId}/receipts/${actionId}.json`
           for (const source of sources) {
             if (!current.checkpoint.sourceRefs.includes(source.sourceRef)) current.checkpoint.sourceRefs.push(source.sourceRef)
-            if (!current.checkpoint.observations.some(item => item.refId === source.sourceRef)) current.checkpoint.observations.push({
-              refId: source.sourceRef, kind: 'source', version: 1, summary: source.title, resourcePath })
+            const prior = current.checkpoint.observations.find(item => item.refId === source.sourceRef)
+            if (prior) { prior.resourcePath = resourcePath; prior.summary = source.title; prior.version = (prior.version ?? 0) + 1 }
+            else if (alias === 'web_read_page') current.checkpoint.observations.push({ refId: source.sourceRef, kind: 'source', version: 1, summary: source.title, resourcePath })
           }
-          for (const candidate of candidates) if (!current.checkpoint.observations.some(item => item.refId === candidate.candidateId)) {
-            current.checkpoint.observations.push({ refId: candidate.candidateId, kind: 'candidate', version: 1, summary: candidate.label, resourcePath })
+          for (const candidate of candidates) {
+            const prior = current.checkpoint.observations.find(item => item.refId === candidate.candidateId && item.kind === 'candidate')
+            if (prior) { prior.version = (prior.version ?? 1) + 1; prior.summary = candidate.label; prior.resourcePath = resourcePath }
+            else current.checkpoint.observations.push({ refId: candidate.candidateId, kind: 'candidate', version: 1, summary: candidate.label, resourcePath })
           }
           if (current.checkpoint.sourceRefs.length > 50 || current.checkpoint.observations.length > 50) throw new Error('TASK_OBSERVATION_LIMIT')
           this.persist(current)
         }
       })
     } catch (error) { this.records.set(current.taskId, previous); throw error }
+    this.emit(current, 'updated')
     return structuredClone(receipt)
   }
   private storeLocalReceipt(lease: TaskLease, receipt: TaskToolReceipt): void {

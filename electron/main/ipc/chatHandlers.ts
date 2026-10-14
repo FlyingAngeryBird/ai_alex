@@ -199,7 +199,7 @@ export function registerChatHandlers(
         temporary, contextVersion: sessionEpoch + 1,
         personaVersion: persona.version,
         deletionEpoch,
-        selectedEntity: null, availableToolAliases: [], loadedSkillIds: ['SK01'],
+        selectedEntity: conversationDriver?.selectedEntity?.(sessionMode) ?? null, availableToolAliases: [], loadedSkillIds: ['SK01'],
         recentTurns: [], memories: [], activeTasks: []
       }
       const boundary = new R1ModelRequestBoundary(promptAssets, persona, context)
@@ -245,6 +245,7 @@ export function registerChatHandlers(
     sessionEpoch += 1
     endCurrentSession()
     temporary = enabled
+    if (sessionMode) sessionMode.selectedCandidate = null
     if (sessionMode) sessionMode.temporary = enabled
     sessionId = conversations.start(temporary)
     if (sessionMode) sessionMode.sessionId = sessionId

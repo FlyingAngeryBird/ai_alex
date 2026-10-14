@@ -19,6 +19,9 @@ type MethodOutput<K extends keyof R1Items> = R1Items[K] extends (...args: never[
 
 export type R1Api = {
   tasks: {
+    selectCandidate(input: { taskId: string; expectedGoalVersion: number; candidateId: string }): Promise<R1Result<{ type: 'candidate'; id: string; version: number }>>
+    saveCandidate(input: { taskId: string; expectedGoalVersion: number; candidateId: string; title: string; temporarySaveConfirmed?: boolean }): Promise<R1Result<{ itemId: string; title: string; version: number }>>
+    openSource(input: { taskId: string; sourceRef: string }): Promise<R1Result<null>>
     list(): Promise<R1Result<R1Task[]>>
     get(taskId: string): Promise<R1Result<R1Task>>
     pause(input: { taskId: string; expectedGoalVersion: number }): Promise<R1Result<R1Task>>

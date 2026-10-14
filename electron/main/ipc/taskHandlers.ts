@@ -1,5 +1,6 @@
 import { exportArtifact, type ArtifactExportInput } from '../r1/artifactExport.js'
-import { ipcMain, dialog } from 'electron'
+import { publicPageUrl } from '../providers/pageReader.js'
+import { ipcMain, dialog, shell } from 'electron'
 import type { R1TaskSupervisor } from '../r1/taskSupervisor.js'
 import type { R1Artifacts } from '../r1/artifacts.js'
 import type { R1SessionMode } from '../r1/sessionMode.js'
@@ -30,6 +31,29 @@ export function registerTaskHandlers(tasks: R1TaskSupervisor, artifacts: R1Artif
       return { ok: true, data }
     } catch { return { ok: false, error: { code: 'ARTIFACT_EXPORT_FAILED', message: '导出未完成，请检查版本和保存位置后重试。' } } }
   })
+  ipc.handle('r1.tasks.openSource', async (_event, input) => {
+    try {
+      const value = input as { taskId?: string; sourceRef?: string }
+      const task = tasks.modelView(permitted(value?.taskId))
+      const source = task.webResult?.sources.find(source => source.sourceRef === value.sourceRef)
+      if (!source) throw new Error('TASK_SOURCE_NOT_FOUND')
+      await shell.openExternal(publicPageUrl(source.url).href)
+      return { ok: true, data: null }
+    } catch { return { ok: false, error: { code: 'TASK_SOURCE_OPEN_FAILED', message: '来源暂时无法打开，请刷新结果后重试。' } } }
+  })
+  ipc.handle('r1.tasks.selectCandidate', action(input => {
+    const taskId = permitted(input.taskId), task = tasks.modelView(taskId)
+    if (task.goalVersion !== input.expectedGoalVersion) throw new Error('VERSION_CONFLICT')
+    const candidateId = input.candidateId
+    if (typeof candidateId !== 'string') throw new Error('TASK_CANDIDATE_NOT_FOUND')
+    const candidateVersion = tasks.candidateVersion(taskId, candidateId)
+    mode.selectedCandidate = { taskId, goalVersion: task.goalVersion, candidateId, candidateVersion }
+    return { type: 'candidate', id: candidateId, version: candidateVersion }
+  }))
+  ipc.handle('r1.tasks.saveCandidate', action(input => tasks.saveCandidate({
+    taskId: permitted(input.taskId), expectedGoalVersion: input.expectedGoalVersion as number,
+    candidateId: input.candidateId as string, title: input.title as string,
+    temporarySaveConfirmed: input.temporarySaveConfirmed === true })))
   ipc.handle('r1.tasks.list', () => ({ ok: true, data: tasks.list(owner()) }))
   ipc.handle('r1.tasks.get', action(input => tasks.get(permitted(input.taskId))))
   for (const method of ['pause', 'resume', 'cancel'] as const) {

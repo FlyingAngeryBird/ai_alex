@@ -11,7 +11,7 @@ type Delegation = { toolAliases: string[]; requiredActions: Array<{ alias: strin
 const code = (error: unknown): string => error instanceof Error && /^[A-Z][A-Z0-9_]{1,80}$/.test(error.message)
   ? error.message : 'CONVERSATION_TOOL_FAILED'
 function taskView(task: R1Task) {
-  const { temporary: _temporary, budget: _budget, runId: _runId, ...view } = task
+  const { temporary: _temporary, budget: _budget, runId: _runId, webResult: _webResult, ...view } = task
   return view
 }
 

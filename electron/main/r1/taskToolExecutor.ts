@@ -1,3 +1,4 @@
+import { createPageReader } from '../providers/pageReader.js'
 import { createBraveSearchProvider, SearchProviderError } from '../providers/braveSearchProvider.js'
 import { randomUUID } from 'node:crypto'
 import type { R1PromptAssets } from './promptAssets.js'
@@ -9,10 +10,17 @@ type PlanInput = Parameters<R1TaskSupervisor['updatePlan']>[1]
 export class R1TaskToolExecutor {
   readonly implementedAliases: readonly string[]
   constructor(private readonly tasks: R1TaskSupervisor, private readonly assets: R1PromptAssets,
-    private readonly items?: R1Items, private readonly search?: ReturnType<typeof createBraveSearchProvider>) {
-    this.implementedAliases = Object.freeze(['read_file', 'write_todos', ...(items ? ['notes_create'] : []), ...(search ? ['web_search'] : [])])
+    private readonly items?: R1Items, private readonly search?: ReturnType<typeof createBraveSearchProvider>, private readonly pages?: ReturnType<typeof createPageReader>) {
+    this.implementedAliases = Object.freeze(['read_file', 'write_todos', ...(items ? ['notes_create'] : []), ...(search ? ['web_search'] : []), ...(pages ? ['web_read_page'] : [])])
   }
   async executeAsync(lease: TaskLease, alias: string, input: unknown, callId?: string, signal?: AbortSignal): Promise<TaskToolReceipt> {
+    if (alias === 'web_read_page') {
+      if (!this.pages) throw new Error('TASK_TOOL_IMPLEMENTATION_UNAVAILABLE')
+      const args = input as Parameters<NonNullable<typeof this.pages>['read']>[0]
+      this.tasks.assertLease(lease); this.assets.validateToolInput(alias, input)
+      if (args.sourceRef) this.tasks.assertPageSource(lease, args.sourceRef, args.url)
+      return this.tasks.executeReadTool(lease, alias, input, () => this.pages!.read(args, signal), callId)
+    }
     if (alias !== 'web_search') return this.execute(lease, alias, input, callId)
     if (!this.search) throw new Error('TASK_TOOL_IMPLEMENTATION_UNAVAILABLE')
     return this.tasks.executeReadTool(lease, alias, input, async () => {
