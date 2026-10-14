@@ -3,6 +3,14 @@ import type { R1MemoryConfirmations } from '../r1/memoryConfirmations.js'
 export function registerMemoryConfirmationHandlers(confirmations: R1MemoryConfirmations, ipc: {
   handle(channel: string, handler: (event: unknown, payload: unknown) => unknown): void
 } = ipcMain): void {
+  ipc.handle('r1.memory.prepareSelection', (event, payload) => {
+    try {
+      const ownerId = (event as { sender?: { id?: number } })?.sender?.id
+      if (!ownerId || !payload || typeof payload !== 'object' || Array.isArray(payload) || Object.keys(payload).some(key => !['confirmationId', 'content', 'category'].includes(key)) ||
+        typeof (payload as { confirmationId?: unknown }).confirmationId !== 'string') throw new Error('INVALID_MEMORY_CONFIRMATION')
+      return { ok: true, data: confirmations.prepareSelection(ownerId, payload as Parameters<R1MemoryConfirmations['prepareSelection']>[1]) }
+    } catch (error) { const code = error instanceof Error ? error.message : 'MEMORY_CONFIRMATION_FAILED'; return { ok: false, error: { code, message: code } } }
+  })
   for (const operation of ['confirm', 'cancel'] as const) ipc.handle(`r1.memory.${operation}Save`, (event, payload) => {
     try {
       const ownerId = (event as { sender?: { id?: number } })?.sender?.id

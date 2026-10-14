@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createR1Backup, restoreR1BackupOffline } from '../electron/main/r1/backup'
 import { openR1Database, R1_SCHEMA_VERSION } from '../electron/main/r1/database'
+import { R1MemoryPolicy } from '../electron/main/r1/memoryPolicy'
 import { R1MemoryStore } from '../electron/main/r1/memory'
 import { R1Conversations } from '../electron/main/r1/conversations'
 
@@ -17,6 +18,17 @@ function directory(): string {
 afterEach(() => { for (const path of directories.splice(0)) rmSync(path, { recursive: true, force: true }) })
 
 describe('R1 offline backup and restore', () => {
+  it('keeps the current opt-out when restoring a backup taken while automatic memory was enabled', async () => {
+    const root = directory(), currentPath = join(root, 'r1.sqlite'), backupPath = join(root, 'enabled.sqlite')
+    const db = openR1Database(currentPath), policy = new R1MemoryPolicy(db)
+    policy.update({ enabled: true, expectedVersion: 1 })
+    await createR1Backup(db, backupPath)
+    policy.update({ enabled: false, expectedVersion: 2 }); db.close()
+    restoreR1BackupOffline(currentPath, backupPath)
+    const restored = openR1Database(currentPath)
+    try { expect(new R1MemoryPolicy(restored).get()).toEqual({ enabled: false, version: 4 }) }
+    finally { restored.close() }
+  })
   it('migrates an older v2 backup in a staging copy and preserves the source backup', async () => {
     const root = directory()
     const currentPath = join(root, 'r1.sqlite')

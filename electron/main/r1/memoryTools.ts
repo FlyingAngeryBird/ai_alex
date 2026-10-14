@@ -6,7 +6,7 @@ export const memoryView = ({ memoryId, content, category, version, sourceRefs }:
 export type MemorySaveCandidate = { operation: 'remember' | 'update'; content: string; category: R1Memory['category'];
   validUntil: string | null; memoryId?: string; expectedVersion?: number }
 export const isSensitiveMemory = (source: string, content: string): boolean =>
-  /健康|病|诊断|药|过敏|怀孕|抑郁|焦虑症|手术|血压|血糖|财务|收入|薪资|工资|存款|负债|欠款|资产|银行卡|身份证|护照|密码|密钥|验证码|住址|手机号|电话|邮箱|性取向|宗教|政治|\b\d{11,}\b/.test(`${source}\n${content}`)
+  /健康|病|诊断|药|疼|痛|发烧|发热|咳嗽|失眠|眩晕|晕厥|呕吐|腹泻|就诊|就医|住院|体检|过敏|怀孕|抑郁|焦虑症|手术|血压|血糖|财务|收入|薪资|工资|存款|负债|欠款|资产|银行卡|身份证|护照|密码|密钥|验证码|住址|手机号|电话|邮箱|性取向|宗教|政治|\b\d{11,}\b/.test(`${source}\n${content}`)
 
 /** Authorization check after the model proposes a tool; it does not select or route actions.
  * Ambiguous/quoted instructions and sensitive writes require a separate confirmation flow. */

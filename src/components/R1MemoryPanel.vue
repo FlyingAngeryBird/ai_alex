@@ -12,7 +12,7 @@ const query = ref('')
 const page = ref(0)
 const hasMore = ref(false)
 const draft = ref('')
-const category = ref<'profile' | 'preference'>('preference')
+const category = ref<R1Memory['category']>('preference')
 const editingId = ref<string | null>(null)
 const editorOpen = ref(false)
 const confirmingId = ref<string | null>(null)
@@ -22,11 +22,10 @@ const loading = ref(false)
 watch(() => props.revision, () => { void load() })
 let loadRevision = 0
 
-const visible = computed(() => records.value.filter((record) =>
-  ['profile', 'preference'].includes(record.category)))
+const visible = computed(() => records.value)
 
 function label(categoryValue: R1Memory['category']): string {
-  return categoryValue === 'profile' ? '近况' : categoryValue === 'preference' ? '偏好' : '共同结论'
+  return categoryValue === 'profile' ? '关于我' : categoryValue === 'preference' ? '偏好' : categoryValue === 'ongoing' ? '近况' : '共同结论'
 }
 
 async function load(): Promise<void> {
@@ -36,7 +35,7 @@ async function load(): Promise<void> {
   loading.value = true
   try {
     const result = await window.seamoR1.memory.list({ query: query.value, page: page.value,
-      scope: 'about' })
+      scope: 'all' })
     if (revision !== loadRevision) return
     if (result.ok) {
       records.value = result.data.entries
@@ -89,7 +88,7 @@ function edit(record: R1Memory): void {
   message.value = ''
   editingId.value = record.memoryId
   draft.value = record.content
-  category.value = record.category === 'profile' ? 'profile' : 'preference'
+  category.value = record.category
   confirmingId.value = null
   editorOpen.value = true
 }
@@ -162,7 +161,7 @@ function confirmForget(): void {
           <div v-else-if="!visible.length" class="r1-memory-empty"><p>{{ query ? '没有找到这段记忆' : '这里还没有你保存的记忆' }}</p>
             <button v-if="!query" type="button" @click="newMemory"><Plus :size="14" />添加一段</button></div>
           <article v-for="record in visible" :key="record.memoryId" class="r1-memory-row">
-            <small>{{ label(record.category) }} · v{{ record.version }}</small><p>{{ record.content }}</p>
+            <small>{{ label(record.category) }} · {{ record.authorization === 'automatic' ? '自动记住' : '你确认的内容' }} · v{{ record.version }}</small><p>{{ record.content }}</p>
             <details @toggle="showSources(record.memoryId)"><summary>这段记忆从哪里来</summary>
               <p v-for="source in sources[record.memoryId] ?? []" :key="source.messageId">
                 {{ source.body }}<small>{{ new Date(source.createdAt).toLocaleString('zh-CN') }}</small></p>
@@ -189,7 +188,7 @@ function confirmForget(): void {
       <textarea id="r1-memory-content" v-model="draft" maxlength="1000" rows="4" required />
       <label for="r1-memory-category">归类</label>
       <select id="r1-memory-category" v-model="category"><option value="preference">偏好</option>
-        <option value="profile">近况</option></select>
+        <option value="profile">关于我</option><option value="ongoing">近况</option><option value="conclusion">共同结论</option></select>
       <div class="r1-memory-dialog-actions"><button type="button" @click="editorOpen = false">取消</button>
         <button type="submit" :disabled="busy || !draft.trim()">{{ editingId ? '保存更正' : '保存记忆' }}</button></div>
       <p v-if="message" role="status">{{ message }}</p>

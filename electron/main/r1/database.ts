@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-export const R1_SCHEMA_VERSION = 5
+export const R1_SCHEMA_VERSION = 6
 
 export type R1Database = DatabaseSync
 
@@ -325,6 +325,17 @@ export function openR1Database(databasePath: string): R1Database {
       const columns = new Set((db.prepare('PRAGMA table_info(artifacts)').all() as { name: string }[]).map(row => row.name))
       if (!columns.has('saved_item_version')) db.exec('ALTER TABLE artifacts ADD COLUMN saved_item_version INTEGER')
       db.exec('PRAGMA user_version = 5')
+    })
+  }
+  if (migratedVersion < 6) {
+    inTransaction(db, () => {
+      db.exec(`CREATE TABLE IF NOT EXISTS memory_policy (
+        id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+        version INTEGER NOT NULL, updated_at TEXT NOT NULL)`)
+      db.prepare('INSERT OR IGNORE INTO memory_policy VALUES (1, 0, 1, ?)').run(new Date().toISOString())
+      const columns = new Set((db.prepare('PRAGMA table_info(memory)').all() as { name: string }[]).map(row => row.name))
+      if (!columns.has('authorization_version')) db.exec('ALTER TABLE memory ADD COLUMN authorization_version INTEGER')
+      db.exec('PRAGMA user_version = 6')
     })
   }
   return db

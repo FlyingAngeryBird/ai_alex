@@ -79,6 +79,7 @@ const memoryConfirmation = ref<MemoryConfirmation | null>(null)
 const memoryConfirmationBusy = ref(false)
 const memoryConfirmationError = ref('')
 const memoryRevision = ref(0)
+let stopMemoryChanged: (() => void) | null = null
 let stopMemoryConfirmation: (() => void) | null = null
 let nativeResumeGeneration: number | null = null
 const nativeConversation = useNativeConversation({
@@ -896,6 +897,21 @@ async function handleToggleTemporary(): Promise<void> {
     : '已退出临时对话。刚才的临时聊天已清除。')
 }
 
+async function prepareMemorySelection(input: { content: string; category: 'profile' | 'preference' | 'ongoing' | 'conclusion' }): Promise<void> {
+  const pending = memoryConfirmation.value
+  if (!pending?.requiresSelection || memoryConfirmationBusy.value) return
+  memoryConfirmationBusy.value = true; memoryConfirmationError.value = ''
+  try {
+    const result = await window.seamoR1.memory.prepareSelection({ confirmationId: pending.confirmationId, ...input })
+    if (result.ok) {
+      if (!memoryConfirmation.value || memoryConfirmation.value.confirmationId === pending.confirmationId) memoryConfirmation.value = result.data
+    } else if (memoryConfirmation.value?.confirmationId === pending.confirmationId) {
+      memoryConfirmationError.value = result.error.code === 'MEMORY_SELECTION_NOT_FROM_SOURCE' ? '请选取上面原话中的连续一段内容。' : '选取未完成。请检查内容，或取消后重新发起。'
+    }
+  } catch { if (memoryConfirmation.value?.confirmationId === pending.confirmationId) memoryConfirmationError.value = '选取未完成，请重试。' }
+  finally { memoryConfirmationBusy.value = false }
+}
+
 async function resolveMemoryConfirmation(save: boolean): Promise<void> {
   const pending = memoryConfirmation.value
   if (!pending || memoryConfirmationBusy.value) return
@@ -948,6 +964,7 @@ onMounted(() => {
   stopMemoryConfirmation = window.seamoR1.memory.onConfirmation(value => {
     memoryConfirmation.value = value; memoryConfirmationError.value = ''
   })
+  stopMemoryChanged = window.seamoR1.memory.onChanged(() => { memoryRevision.value++ })
   taskState.start()
   void Promise.all([window.seamoR1.credentials.status(), window.seamoR1.persona.get()]).then(([credentials, currentPersona]) => {
     if (credentials.ok) credentialStatus.value = credentials.data
@@ -991,6 +1008,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   stopMemoryInvalidation?.()
   stopMemoryConfirmation?.()
+  stopMemoryChanged?.()
   stopReminderNotice?.()
   uninstallDebugBridge()
   window.removeEventListener('keydown', handleKeyDown)
@@ -1108,7 +1126,7 @@ onBeforeUnmount(() => {
     <SearchPanel v-if="searchEverOpened" v-show="searchOpen" :temporary-mode="temporaryMode" @close="closePanels" />
     <R1MemoryPanel v-if="memoryOpen" :temporary="temporaryMode" :revision="memoryRevision" @close="closePanels" />
     <R1MemoryConfirmationDialog v-if="memoryConfirmation" :key="memoryConfirmation.confirmationId" :confirmation="memoryConfirmation"
-      :busy="memoryConfirmationBusy" :error="memoryConfirmationError" @confirm="resolveMemoryConfirmation(true)" @cancel="resolveMemoryConfirmation(false)" />
+      :busy="memoryConfirmationBusy" :error="memoryConfirmationError" @selection="prepareMemorySelection" @confirm="resolveMemoryConfirmation(true)" @cancel="resolveMemoryConfirmation(false)" />
     <R1HistoryPanel v-if="historyOpen" :temporary="temporaryMode" :allow-text-interrupt="nativeConversation.active.value && !textBusy"
         :assistant-name="persona?.assistantName || 'Seamo AI'" @close="closePanels" />
     <R1FocusDialog v-if="focusEditorOpen" :active="focus.active.value" :busy="focus.busy.value"

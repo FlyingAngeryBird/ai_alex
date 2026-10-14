@@ -2,6 +2,7 @@ import { focusToolAliases, type FocusToolServices } from '../r1/focusTools.js'
 import { reminderToolAliases } from '../r1/reminderTools.js'
 import { memoryToolAliases, memoryMutationReply } from '../r1/memoryTools.js'
 import type { R1MemoryConfirmations } from '../r1/memoryConfirmations.js'
+import type { R1AutomaticMemory } from '../r1/automaticMemory.js'
 import { selectedConversationEntity } from '../r1/sessionMode.js'
 import { ipcMain, type WebContents } from 'electron'
 import { NativePlaybackLedger } from '../r1/nativePlayback.js'
@@ -23,6 +24,7 @@ export function registerNativeVoiceHandlers(deps: {
   implementedTaskAliases: readonly string[]; configurationRevision(): number; focusServices?: FocusToolServices;
   onMemoryInvalidated?(deletionEpoch: number): void;
   memoryConfirmations?: R1MemoryConfirmations;
+  automaticMemory?: R1AutomaticMemory;
 }): { close(): void } {
   const sessions = new Map<number, { id: string; session: NativeRealtimeSession; playback(input: Record<string, unknown>): void }>()
   const aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', ...memoryToolAliases, 'notes_create', ...reminderToolAliases, ...(deps.focusServices ? focusToolAliases : [])]
@@ -34,8 +36,9 @@ export function registerNativeVoiceHandlers(deps: {
     if (sessions.has(sender.id)) return fail('REALTIME_ALREADY_STARTED')
     const id = (payload as { connectionId?: unknown })?.connectionId
     if (typeof id !== 'string' || !/^[\da-f-]{36}$/i.test(id)) return fail('REALTIME_INPUT_INVALID')
-    const sessionId = deps.mode.sessionId
-    if (!sessionId) return fail('REALTIME_SESSION_MISSING')
+    const activeSessionId = deps.mode.sessionId
+    if (!activeSessionId) return fail('REALTIME_SESSION_MISSING')
+    const sessionId: string = activeSessionId
     const persona = deps.persona.get(), deletionEpoch = deps.memory.currentDeletionEpoch()
     const revision = deps.configurationRevision(), temporary = deps.mode.temporary
     const assertCurrent = () => {
@@ -49,6 +52,24 @@ export function registerNativeVoiceHandlers(deps: {
     const playback = new NativePlaybackLedger(deps.conversations, sessionId)
     const completedInputs = new Set<string>()
     const sourceTurns = new Map<string, string>()
+    const automaticSourceTurns = new Map<string, string>()
+    function extractMemory(responseId: unknown): void {
+      if (temporary || !deps.automaticMemory || !deps.memoryConfirmations || typeof responseId !== 'string') return
+      const boundTurnId = automaticSourceTurns.get(responseId)
+      if (!boundTurnId) return
+      const messages = deps.conversations.messages(sessionId)
+      const reply = messages.find(message => message.responseId === responseId && message.role === 'assistant' && message.turnId === boundTurnId)
+      const source = reply && messages.find(message => message.turnId === reply.turnId && message.role === 'user')
+      if (!source || deps.memoryConfirmations.hasPendingForSource(source.messageId)) return
+      deps.automaticMemory.enqueue({ source, temporary: false, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        assertSession() { if (deps.mode.sessionId !== sessionId || deps.mode.temporary) throw new Error('AUTO_MEMORY_SESSION_REVOKED') },
+        assertLatest() { assertCurrent(); if (turnId !== source.turnId) throw new Error('AUTO_MEMORY_SOURCE_REVOKED') },
+        confirmSensitive() {
+          const version = deps.automaticMemory!.getPolicy().version
+          deps.memoryConfirmations!.offerSelection({ source, ownerId: sender.id, temporary: false, sensitive: true, automatic: true,
+            assertCurrent() { assertCurrent(); deps.automaticMemory!.assertAuthorized(version); if (turnId !== source.turnId) throw new Error('AUTO_MEMORY_SOURCE_REVOKED') } })
+        } })
+    }
     const context = () => ({ sessionId, sessionGeneration: 1, turnId, currentTime: new Date().toISOString(),
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, temporary, contextVersion: 1,
       personaVersion: persona.version, deletionEpoch, selectedEntity: selectedConversationEntity(deps.mode, deps.tasks), availableToolAliases: [],
@@ -64,6 +85,8 @@ export function registerNativeVoiceHandlers(deps: {
       voice: persona.voiceId || process.env.VOLCENGINE_REALTIME_VOICE || '', boundary: boundary(),
       onEvent(event) {
         assertCurrent()
+        const actualSourceTurn = typeof event.question_id === 'string' ? sourceTurns.get(event.question_id) : undefined
+        if (actualSourceTurn && typeof event.response_id === 'string') automaticSourceTurns.set(event.response_id, actualSourceTurn)
         playback.receive(event, typeof event.question_id === 'string' ? sourceTurns.get(event.question_id) ?? turnId : turnId)
         if (event.type === 'conversation.item.input_audio_transcription.completed') {
           if (typeof event.item_id !== 'string' || typeof event.transcript !== 'string' || !event.transcript.trim()) return
@@ -84,6 +107,7 @@ export function registerNativeVoiceHandlers(deps: {
           connection.updateBoundary(boundary())
         }
         emit(sender, id, event)
+        if (event.type === 'response.done') extractMemory(event.response_id)
       },
       onToolCalls(calls) {
         assertCurrent()
@@ -115,6 +139,7 @@ export function registerNativeVoiceHandlers(deps: {
     })
     sessions.set(sender.id, { id, session: connection, playback(input) {
       assertCurrent(); playback.playback(input)
+      if (input.status === 'completed') extractMemory(input.responseId)
     } }); sender.once('destroyed', destroyed)
     try { await connection.open(); return { ok: true, data: { connectionId: id } } }
     catch (error) { connection.close(); return fail(error instanceof Error ? error.message : 'REALTIME_START_FAILED') }

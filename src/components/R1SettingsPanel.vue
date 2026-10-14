@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { X } from 'lucide-vue-next'
+import type { AutomaticMemoryState } from '../../electron/main/r1/automaticMemory'
+import type { MemoryPolicy } from '../../electron/main/r1/memoryPolicy'
 import type { R1Persona } from '../../electron/main/r1/persona'
 import type { CredentialField, CredentialPatch, CredentialStatus } from '../../electron/main/r1/credentials'
 import type { ServiceCheckReport, ServiceCheckTarget } from '../../electron/main/r1/serviceDiagnostics'
@@ -19,6 +21,37 @@ const style = ref('balanced')
 const voiceId = ref('')
 const busy = ref(false)
 const message = ref('')
+const memoryPolicy = ref<(MemoryPolicy & AutomaticMemoryState) | null>(null)
+const memoryPolicyBusy = ref(false)
+const memoryPolicyError = ref('')
+let stopMemoryPolicy: (() => void) | null = null
+onMounted(async () => {
+  stopMemoryPolicy = window.seamoR1.memory.onPolicyChanged(value => { if (!disposed) memoryPolicy.value = value })
+  try {
+    const result = await window.seamoR1.memory.policy()
+    if (!disposed) { if (result.ok) memoryPolicy.value = result.data; else memoryPolicyError.value = '记忆设置暂时无法读取。' }
+  } catch { if (!disposed) memoryPolicyError.value = '记忆设置暂时无法读取。' }
+})
+onBeforeUnmount(() => stopMemoryPolicy?.())
+async function toggleAutomaticMemory(event: Event): Promise<void> {
+  const checkbox = event.target as HTMLInputElement
+  const policy = memoryPolicy.value
+  const enabled = checkbox.checked
+  checkbox.checked = policy?.enabled ?? false
+  if (!policy || memoryPolicyBusy.value) return
+  memoryPolicyBusy.value = true; memoryPolicyError.value = ''
+  try {
+    const result = await window.seamoR1.memory.setPolicy({ enabled, expectedVersion: policy.version })
+    if (disposed) return
+    if (result.ok) memoryPolicy.value = result.data
+    else {
+      memoryPolicyError.value = result.error.code === 'VERSION_CONFLICT' ? '设置已有变化，已重新读取，请再试一次。' : '设置未保存，请重试。'
+      const current = await window.seamoR1.memory.policy()
+      if (!disposed && current.ok) memoryPolicy.value = current.data
+    }
+  } catch { if (!disposed) memoryPolicyError.value = '设置未保存，请重试。' }
+  finally { memoryPolicyBusy.value = false }
+}
 const credentialFields: { key: CredentialField; label: string; secret: boolean }[] = [
   { key: 'VOLCENGINE_ARK_API_KEY', label: '豆包 API Key', secret: true },
   { key: 'VOLCENGINE_ARK_MODEL', label: '豆包模型名', secret: false },
@@ -197,7 +230,14 @@ async function clearCredential(field: CredentialField): Promise<void> {
       </section>
       <section class="r1-settings-section">
         <h3>记忆与临时对话</h3>
-        <p>自动记忆目前关闭。临时对话在输入框下方开启；临时内容不写入普通聊天历史。</p>
+        <div class="setting-line"><div><strong>记住重要的事</strong><small>自动记忆 · {{ memoryPolicy ? (memoryPolicy.enabled ? '已开启' : '未开启') : '正在读取' }}</small></div>
+          <label class="switch"><input type="checkbox" aria-label="设置自动记忆" :checked="memoryPolicy?.enabled ?? false"
+            :disabled="!memoryPolicy || memoryPolicyBusy" @change="toggleAutomaticMemory" /><span /></label></div>
+        <p>开启后，从接下来的普通对话中提取明确事实。敏感内容由你选择并单独确认；临时对话不读取或自动保存记忆。</p>
+        <p>关闭会停止待处理的提取，已保存的记忆仍可查看、更正或忘记。</p>
+        <p v-if="memoryPolicy?.state === 'processing'" role="status">正在整理这一轮明确的信息…</p>
+        <p v-else-if="memoryPolicy?.state === 'failed' || memoryPolicy?.state === 'unavailable'" role="status">这次自动整理未完成，记忆页只显示已保存的内容。请检查对话服务配置。</p>
+        <p v-if="memoryPolicyError" role="alert">{{ memoryPolicyError }}</p>
       </section>
       <section class="r1-settings-section">
         <h3>服务状态</h3>
@@ -234,4 +274,15 @@ async function clearCredential(field: CredentialField): Promise<void> {
 .r1-settings-check button { flex-shrink: 0; min-height: 30px; padding: 4px 9px; border: 1px solid var(--r1-line); border-radius: 5px; background: #1b2422; color: var(--r1-aqua); font: inherit; }
 .r1-settings-check button:disabled { opacity: .45; }
 .r1-settings-check span { color: #91a09b; }
+.setting-line { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 0; }
+.setting-line strong { display: block; font-size: 12px; font-weight: 400; color: #c1cbbd; }
+.setting-line small { display: block; font-size: 10px; color: #6b806e; line-height: 1.8; margin-top: 4px; }
+.r1-settings-section .switch { position: relative; display: inline-flex; flex-shrink: 0; width: 34px; height: 20px; cursor: pointer; }
+.r1-settings-section .switch input { position: absolute; width: 100%; height: 100%; min-height: 0; padding: 0; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
+.switch > span { position: absolute; inset: 0; border-radius: 20px; background: #303b33; border: 1px solid #4b5b4e; transition: background 180ms; }
+.switch > span::before { content: ''; position: absolute; width: 12px; height: 12px; top: 3px; left: 3px; background: #87988b; border-radius: 50%; transition: transform 180ms; }
+.switch input:checked + span { background: #80aa95; border-color: #98c6af; }
+.switch input:checked + span::before { transform: translateX(14px); background: #183326; }
+.switch input:focus-visible + span { outline: 2px solid var(--r1-gold); outline-offset: 4px; }
+.switch input:disabled + span { opacity: .45; }
 </style>

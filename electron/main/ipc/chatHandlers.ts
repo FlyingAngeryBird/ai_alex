@@ -13,6 +13,7 @@ import type { R1PersonaStore } from '../r1/persona.js'
 import type { R1PromptAssets } from '../r1/promptAssets.js'
 import type { R1MemoryStore } from '../r1/memory.js'
 import type { R1MemoryConfirmations } from '../r1/memoryConfirmations.js'
+import type { R1AutomaticMemory } from '../r1/automaticMemory.js'
 import type { R1SessionMode } from '../r1/sessionMode.js'
 import { R1ModelRequestBoundary } from '../r1/modelBoundary.js'
 import type { R1ConversationDriver } from '../r1/conversationDriver.js'
@@ -135,7 +136,8 @@ export function registerChatHandlers(
   onSessionEnded: (sessionId: string, temporary: boolean) => void = () => undefined,
   conversationDriver?: R1ConversationDriver,
   onMemoryInvalidated: (deletionEpoch: number) => void = () => undefined,
-  memoryConfirmations?: R1MemoryConfirmations
+  memoryConfirmations?: R1MemoryConfirmations,
+  automaticMemory?: R1AutomaticMemory
 ): void {
   clearMemory()
   let activeSystemPrompt: string | null = null
@@ -186,6 +188,21 @@ export function registerChatHandlers(
     if (!userStored) conversations.append({ sessionId, turnId, role: 'user', body: text, status: 'final' })
     conversations.append({ sessionId, turnId, responseId: randomUUID(), role: 'assistant',
       body: reply, status: 'generated' })
+  }
+  function extractMemory(source: SessionMessage | undefined, event: unknown, request: ReturnType<typeof captureRequest>): void {
+    if (!source || !automaticMemory || !memoryConfirmations) return
+    const ownerId = (event as { sender?: { id?: number } })?.sender?.id
+    if (!ownerId || memoryConfirmations.hasPendingForSource(source.messageId)) return
+    automaticMemory.enqueue({ source, temporary, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      assertSession() { if (request.epoch !== sessionEpoch || sessionId !== source.sessionId || temporary) throw new Error('AUTO_MEMORY_SESSION_REVOKED') },
+      assertLatest() { if (!requestIsCurrent(request)) throw staleError(request) },
+      confirmSensitive() {
+        const authorizationVersion = automaticMemory.getPolicy().version
+        memoryConfirmations.offerSelection({ source, ownerId, temporary: false, sensitive: true, automatic: true, assertCurrent() {
+          if (!requestIsCurrent(request)) throw staleError(request)
+          automaticMemory.assertAuthorized(authorizationVersion)
+        } })
+      } })
   }
 
   function getSystemPrompt(turnId: string | null = null): { text: string; boundary?: R1ModelRequestBoundary; context?: Record<string, unknown> } {
@@ -317,6 +334,7 @@ export function registerChatHandlers(
         : await provider.sendMessage(messages)
       if (!requestIsCurrent(request)) throw new Error('SESSION_CHANGED')
       persistTurn(text, result.reply, turnId, Boolean(source))
+      extractMemory(source, _event, request)
 
       appendMemory({
         content: text,
@@ -365,6 +383,7 @@ export function registerChatHandlers(
         : await provider.streamMessage(messages, callbacks)
       if (!requestIsCurrent(request)) throw new Error('SESSION_CHANGED')
       persistTurn(text, result.reply, turnId, Boolean(source))
+      extractMemory(source, event, request)
 
       appendMemory({
         content: text,

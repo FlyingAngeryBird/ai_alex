@@ -20,6 +20,19 @@ afterEach(() => {
 })
 
 describe('R1 database and legacy import', () => {
+  it('migrates a v5 database with automatic memory off and preserves explicit memory and sources', () => {
+    const path = join(makeDirectory(), 'v5.sqlite'), db = openR1Database(path)
+    const now = new Date().toISOString()
+    db.prepare(`INSERT INTO memory (memory_id, content, category, source_refs_json, authorization, version, created_at, updated_at)
+      VALUES ('old', '喜欢公园', 'preference', '[]', 'explicit', 1, ?, ?)`).run(now, now)
+    db.exec('DROP TABLE memory_policy; ALTER TABLE memory DROP COLUMN authorization_version; PRAGMA user_version = 5'); db.close()
+    const migrated = openR1Database(path)
+    try {
+      expect(migrated.prepare('SELECT enabled, version FROM memory_policy').get()).toMatchObject({ enabled: 0, version: 1 })
+      expect(migrated.prepare('SELECT content, authorization, authorization_version FROM memory WHERE memory_id = ?').get('old'))
+        .toMatchObject({ content: '喜欢公园', authorization: 'explicit', authorization_version: null })
+    } finally { migrated.close() }
+  })
   it('upgrades the existing v2 focus row without losing its countdown or creating a second active timer', () => {
     const path = join(makeDirectory(), 'r1.sqlite')
     const db = openR1Database(path)

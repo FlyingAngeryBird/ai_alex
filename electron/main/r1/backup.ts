@@ -101,6 +101,10 @@ export function restoreR1BackupOffline(currentPath: string, backupPath: string):
     current.exec('PRAGMA wal_checkpoint(TRUNCATE)')
     copyFileSync(backupPath, stagedPath)
     staged = openR1Database(stagedPath)
+    // Restoring data cannot silently restore an earlier grant or revoke the user's latest choice.
+    const currentPolicy = current.prepare('SELECT enabled, version FROM memory_policy WHERE id = 1').get() as { enabled: number; version: number }
+    staged.prepare('UPDATE memory_policy SET enabled = ?, version = MAX(version, ?) + 1, updated_at = ? WHERE id = 1')
+      .run(currentPolicy.enabled, currentPolicy.version, new Date().toISOString())
     preserveSuppression(current, staged)
     staged.exec('PRAGMA wal_checkpoint(TRUNCATE)')
     staged.close()

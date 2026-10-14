@@ -30,8 +30,8 @@ export type R1PromptAssets = {
   toolAliases: readonly string[]
   compose(persona: R1Persona, context: Record<string, unknown>, mode?: 'textOnly' | 'realtime'): string
   composeTask(persona: R1Persona, taskInput: Record<string, unknown>): R1CompiledPrompt
-  validateStructured(schema: 'task-input' | 'task-draft' | 'tool-output', input: unknown): void
-  structuredSchema(schema: 'task-draft'): Record<string, unknown>
+  validateStructured(schema: 'task-input' | 'task-draft' | 'tool-output' | 'memory-candidates' | 'context-summary', input: unknown): void
+  structuredSchema(schema: 'task-draft' | 'memory-candidates' | 'context-summary'): Record<string, unknown>
   toolDefinition(alias: string): R1ToolDefinition
   validateToolOutput(alias: string, input: unknown): void
   taskBudget(complexity: 'light' | 'complex'): { decisionsRemaining: number; toolsRemaining: number;

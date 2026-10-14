@@ -24,6 +24,9 @@ export const exposedChannels = [
   'r1.items.list',
   'r1.persona.get',
   'r1.persona.update',
+  'r1.memory.policy',
+  'r1.memory.setPolicy',
+  'r1.memory.prepareSelection',
   'r1.memory.list',
   'r1.memory.addManual',
   'r1.memory.update',
@@ -93,6 +96,8 @@ export const eventChannels = [
   'r1.reminderDue',
   'r1.memoryInvalidated',
   'r1.memoryConfirmation',
+  'r1.memoryPolicyChanged',
+  'r1.memoryChanged',
   'r1.focusChanged',
   'r1.taskChanged'
 ] as const
@@ -180,6 +185,19 @@ function exposeLingliApi(
       update: (input) => invokeR1('r1.persona.update', input)
     },
     memory: {
+      policy: () => invokeR1('r1.memory.policy'),
+      setPolicy: input => invokeR1('r1.memory.setPolicy', input),
+      prepareSelection: input => invokeR1('r1.memory.prepareSelection', input),
+      onPolicyChanged: handler => {
+        const listener = (_event: unknown, value: unknown) => handler(value as Parameters<typeof handler>[0])
+        renderer.on('r1.memoryPolicyChanged', listener)
+        return () => renderer.removeListener('r1.memoryPolicyChanged', listener)
+      },
+      onChanged: handler => {
+        const listener = () => handler()
+        renderer.on('r1.memoryChanged', listener)
+        return () => renderer.removeListener('r1.memoryChanged', listener)
+      },
       confirmSave: confirmationId => invokeR1('r1.memory.confirmSave', { confirmationId }),
       cancelSave: confirmationId => invokeR1('r1.memory.cancelSave', { confirmationId }),
       onConfirmation: handler => {

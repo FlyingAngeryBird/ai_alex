@@ -150,17 +150,31 @@ receiptActionIds使用TaskInput.validReceiptActionIds或实际工具回执中的
 
 ### 22.4.05 PR05 授权后的事实候选提取
 
-实际文件：prompts/memory-extract.md，版本1.0.0。
+实际文件：prompts/memory-extract.md，版本1.0.1。
 
 ```text
 从以下已授权且仍有效的消息中提取长期记忆候选：
 {{memory_input_json}}
-只处理user明确陈述的普通事实、明确偏好、正在推进的事情，以及用户明确确认的共同结论。assistant单方面建议、反问、玩笑、引用材料和推测情绪不作为用户事实。
-临时会话、自动提取未授权、已删除来源、取消后尚未播出的assistant内容、当前已被更正的旧事实，都输出空候选。事实必须关联输入中实际存在的sourceTurnIds。
-category仅用profile、preference、ongoing、conclusion。保留用户原意，可压缩表达；不得补出姓名、职业、人格或长期情绪。时间范围只根据原话与currentTime解析；没有明确有效期则validUntil=null。
-需要进一步确认的健康、财务、身份凭证等敏感内容仅列入sensitiveSourceTurnIds，程序在内存中根据来源发起确认；不要将敏感原文写入自动候选或日志。
-与已提供有效记忆相同的内容不重复提取；发现更正时返回替代候选及supersedesMemoryIds，不直接修改数据库。
-输出符合MemoryCandidates Schema的JSON；候选不等于已保存，提交前由MemoryService再次检查授权版本、来源有效性和删除抑制。
+
+这是用户个人记忆的事实筛选，不是对聊天内容做摘要。默认输出空 candidates；只有能从有效 user 原话确认「用户本人」的一项明确事实、偏好、正在推进的事情或明确确认的共同结论，才可输出该项。
+
+逐项先判断，再生成结果：
+1. 主体必须是当前用户本人。文章、网页、书、小说、他人的原话、举例和角色扮演中的「我」均不是用户本人。即使可以准确总结作者或朋友的偏好，也不能存成用户事实。引用与转述内容不进入 candidates。
+2. 话语必须是明确陈述，含义已澄清。讽刺、反话、玩笑、夸张、反问、假设、推测和一次情绪都不提取。不能删掉语气线索后把反话变成偏好，也不能将一次烦躁推断为长期性格。对真实意图有疑问时输出空候选，交由主会话澄清。
+3. 健康信息（症状、疼痛、过敏、疾病、用药、就诊、心理健康）、财务隐私、身份证明与凭证等都属于敏感内容。敏感事实不得出现在 candidates，即使是用户明确说出的真实事实、未要求保密或同轮还说了普通偏好。只把该条有效 user 的实际 turnId 加入 sensitiveSourceTurnIds，由程序在当轮单独确认；不得输出敏感原文或改写。
+4. candidates 只保留满足上述条件的非敏感事实。assistant 的建议、模型生成的结论、未经用户确认的内容不作为事实。临时会话、自动提取未授权、已删除来源、未播放或被打断的 assistant 内容、当前已被更正的旧事实，均输出空候选。
+5. 每项的 sourceTurnIds 必须来自输入中支撑该事实的实际 user turnId。category 仅用 profile、preference、ongoing、conclusion；不猜姓名、职业、人格、长期情绪。时间范围只根据用户原话与 currentTime 解析；没有明确有效期则 validUntil=null。
+6. 已提供的有效记忆与原话相同则不重复提取；用户明确更正旧事实时返回替代候选及实际 supersedesMemoryIds。候选不等于保存，由程序再次核验授权版本、来源与删除抑制。
+
+边界示例（示例不是当前来源，输出时使用当前输入的实际 ID）：
+- 用户说「我平时喜欢喝无糖茶。」：可提取本人偏好。
+- 用户说「今天真烦，什么都不想做。」：candidates=[]；不生成长期情绪或性格。
+- 用户说「文章里写：我喜欢甜饮料。这是作者的原话。」：candidates=[]；不能保存「作者喜欢甜饮料」。
+- 用户说「对对对，我最喜欢加班了，呵呵。」：未澄清讽刺，candidates=[]；不能保存「最喜欢加班」。
+- 用户说「我有偏头痛。我平时喜欢喝无糖茶。」：偏头痛是健康敏感信息，只返回实际 user turnId 至 sensitiveSourceTurnIds。普通偏好可单独作为候选，不能将健康事实放进 candidates。
+- 用户说「如果我是医生，我可能会喜欢夜班。」：假设不是当前用户的职业或偏好，candidates=[]。
+
+输出符合 MemoryCandidates Schema 的 JSON，且只输出该 JSON。提交结果前再次检查：是否误存了他人的话、反话或敏感健康事实；若是则移除该候选，敏感的实际 user 来源只进入 sensitiveSourceTurnIds。
 ```
 
 ### 22.4.06 PR06 保留来源和未完成目标的上下文压缩
@@ -1256,12 +1270,20 @@ patch：表达澄清或修错且行为合同不变。minor：在已批准范围�
 - 回滚：代码及资产包整体回退。旧资产只能使用旧请求合同；活动 Task 保留其绑定发布包，不自动迁移。确认候选仅内存，应用退出不会在重启后自动提交。当前数据库不降级或覆盖删除抑制。
 - 验证记录：见 docs/r1/2026-10-14-memory-confirmation-progress.md；未完成的自动提取、敏感语义评估与设备语音验收不以确认桥接代替。
 
+#### DEC-R1-AUTO-MEMORY-019：自动提取的真实语义失败修正
+- 原因：实际 Ark 合成测试把文章作者的偏好、未澄清讽刺与偏头痛健康事实写入用户 Memory；原 PR05 简短约束没有阻止这些失败。
+- 影响：F04b；同一 PR05 源细化本人主体、引用/反话排除与健康敏感边界，加入对应案例，不增加 Prompt、工具、模型路由或产品能力。
+- 版本：releaseId 2.2.1，PR05 1.0.1；工具/schemaVersion 保持 2.2.0，其余 Prompt/Skill 不变。M03 仍仅 PR01 + PR05、无工具、无云响应存储。
+- 执行：用户版本化授权，默认关闭，不回溯旧聊天；提交前重验来源、授权、epoch、人格与服务版本。敏感来源只在内存提示，混合来源先选择原话中的单一事实，再固定内容确认。该保守来源级行为避免同轮敏感原文被自动提交。
+- 验证：docs/r1/2026-10-14-automatic-memory-progress.md 记录首轮失败及修正后的真实复测，不能以 Schema 有效代替语义验收。
+- 兼容与回退：数据库迁移到 6，授权版本单独保存，旧备份恢复沿用当前授权并提升版本。旧代码不得打开新库；代码和资产一起回到 e6f17f5，使用隔离测试库或对应备份，不覆盖当前删除抑制。旧 Task 保留原发布绑定，旧发布归档仍待完成。
+
 
 ### 25.3 完整默认配置
 
 ```json
 {
-  "releaseId": "seamo-ai-r1-agent-assets-2.2.0",
+  "releaseId": "seamo-ai-r1-agent-assets-2.2.1",
   "schemaVersion": "2.2.0",
   "providerPolicy": {
     "primary": "volcengine",
@@ -1636,3 +1658,6 @@ evals/behavior-cases.jsonl提供E01至E16行为评测基线，覆盖六个Skill�
 | E14 | PR07结果不抢话 | {"cardVisible": true, "speechMustWait": true, "announcementMax": 1, "deliveryMustNotExecuteTools": true} |
 | E15 | PR09勿扰到期 | {"cardVisible": true, "activeSpeech": false, "schedulerNotModelDecidesDue": true} |
 | E16 | PR10输出修复 | {"repairAttemptsMax": 1, "repairToolSet": [], "mustNotPublishCompleted": true, "committedReceiptRetained": true} |
+| E17 | PR05排除他人引用 | {"candidates": [], "sensitiveSourceTurnIds": []} |
+| E18 | PR05未澄清讽刺 | {"candidates": [], "sensitiveSourceTurnIds": []} |
+| E19 | PR05健康与偏好混合 | {"sensitiveSourceRequired": true, "healthMustNotBeCandidate": true, "noAutomaticWriteForMixedSensitiveSource": true} |

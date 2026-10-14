@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { inTransaction, type R1Database } from './database.js'
 import { invalidateMemoryContext, memoryContextCutoff, memoryContextEpoch } from './memoryContext.js'
+import { R1MemoryPolicy } from './memoryPolicy.js'
 
 export type R1Memory = {
   memoryId: string
@@ -10,6 +11,8 @@ export type R1Memory = {
   expiresAt: string | null
   version: number
   deletionEpoch: number
+  authorization: 'explicit' | 'automatic'
+  authorizationVersion: number | null
 }
 
 export type R1MemorySource = { messageId: string; body: string; createdAt: string }
@@ -19,12 +22,14 @@ type MemoryRow = {
   memory_id: string; content: string; category: R1Memory['category']
   source_refs_json: string; expires_at: string | null; version: number
   deletion_epoch: number; deleted_at: string | null
+  authorization: string; authorization_version: number | null
 }
 
 function view(row: MemoryRow): R1Memory {
   return { memoryId: row.memory_id, content: row.content, category: row.category,
     sourceRefs: JSON.parse(row.source_refs_json) as string[], expiresAt: row.expires_at,
-    version: row.version, deletionEpoch: row.deletion_epoch }
+    version: row.version, deletionEpoch: row.deletion_epoch,
+    authorization: row.authorization === 'automatic' ? 'automatic' : 'explicit', authorizationVersion: row.authorization_version }
 }
 
 export class R1MemoryStore {
@@ -91,12 +96,19 @@ export class R1MemoryStore {
 
   update(input: { memoryId: string; expectedVersion: number; content: string;
     category: R1Memory['category']; sourceMessageIds?: string[]; expiresAt?: string | null }): R1Memory {
+    return this.patch(input, null)
+  }
+  updateAutomatically(input: Parameters<R1MemoryStore['update']>[0] & { authorizationVersion: number }): R1Memory {
+    return this.patch(input, input.authorizationVersion)
+  }
+  private patch(input: Parameters<R1MemoryStore['update']>[0], authorizationVersion: number | null): R1Memory {
     if (typeof input.memoryId !== 'string' || !input.memoryId ||
       !Number.isInteger(input.expectedVersion) || input.expectedVersion < 1) {
       throw new Error('INVALID_MEMORY_PATCH')
     }
     this.validateContent(input.content, input.category)
     return inTransaction(this.db, () => {
+      if (authorizationVersion !== null) new R1MemoryPolicy(this.db).assertAuthorized(authorizationVersion)
       const row = this.db.prepare('SELECT * FROM memory WHERE memory_id = ? AND deleted_at IS NULL')
         .get(input.memoryId) as MemoryRow | undefined
       if (!row || this.isSuppressed(row)) throw new Error('MEMORY_NOT_FOUND')
@@ -109,8 +121,8 @@ export class R1MemoryStore {
       const expiry = requestedExpiry === null ? null : new Date(requestedExpiry).toISOString()
       const epoch = this.currentDeletionEpoch() + 1
       this.db.prepare(`UPDATE memory SET content = ?, category = ?, deletion_epoch = ?, version = version + 1,
-        source_refs_json = ?, expires_at = ?, updated_at = ? WHERE memory_id = ?`)
-        .run(input.content.trim(), input.category, epoch, JSON.stringify(refs), expiry, new Date().toISOString(), input.memoryId)
+        source_refs_json = ?, expires_at = ?, authorization = ?, authorization_version = ?, updated_at = ? WHERE memory_id = ?`)
+        .run(input.content.trim(), input.category, epoch, JSON.stringify(refs), expiry, authorizationVersion === null ? 'explicit' : 'automatic', authorizationVersion, new Date().toISOString(), input.memoryId)
       invalidateMemoryContext(this.db, epoch)
       this.invalidateTopics(input.memoryId, epoch)
       return view(this.db.prepare('SELECT * FROM memory WHERE memory_id = ?')
@@ -128,7 +140,7 @@ export class R1MemoryStore {
   }
 
   private insertMemory(content: string, category: R1Memory['category'],
-    sourceMessageIds: string[], expiresAt: string | null, now: string): R1Memory {
+    sourceMessageIds: string[], expiresAt: string | null, now: string, authorizationVersion: number | null = null): R1Memory {
     const duplicateRows = this.db.prepare(`SELECT * FROM memory WHERE deleted_at IS NULL
       AND content = ? AND category = ? AND (expires_at IS NULL OR expires_at > ?)
       ORDER BY updated_at DESC`).all(content, category, now) as MemoryRow[]
@@ -137,19 +149,21 @@ export class R1MemoryStore {
       const existing = JSON.parse(duplicate.source_refs_json) as string[]
       const refs = [...new Set([...existing, ...sourceMessageIds])]
       if (refs.length > 50) throw new Error('MEMORY_SOURCE_LIMIT')
-      if (refs.length === existing.length && duplicate.expires_at === expiresAt) return view(duplicate)
+      const promote = authorizationVersion === null && duplicate.authorization === 'automatic'
+      if (refs.length === existing.length && duplicate.expires_at === expiresAt && !promote) return view(duplicate)
       this.db.prepare(`UPDATE memory SET source_refs_json = ?, expires_at = ?, version = version + 1,
-        updated_at = ? WHERE memory_id = ?`)
-        .run(JSON.stringify(refs), expiresAt, now, duplicate.memory_id)
+        authorization = ?, authorization_version = ?, updated_at = ? WHERE memory_id = ?`)
+        .run(JSON.stringify(refs), expiresAt, promote ? 'explicit' : duplicate.authorization,
+          promote ? null : duplicate.authorization_version, now, duplicate.memory_id)
       return view(this.db.prepare('SELECT * FROM memory WHERE memory_id = ?')
         .get(duplicate.memory_id) as MemoryRow)
     }
     const id = randomUUID()
     this.db.prepare(`INSERT INTO memory
       (memory_id, content, category, source_refs_json, authorization, occurred_at,
-       expires_at, version, created_at, updated_at)
-      VALUES (?, ?, ?, ?, 'explicit', ?, ?, 1, ?, ?)`)
-      .run(id, content, category, JSON.stringify(sourceMessageIds), now, expiresAt, now, now)
+       expires_at, version, created_at, updated_at, authorization_version)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`)
+      .run(id, content, category, JSON.stringify(sourceMessageIds), authorizationVersion === null ? 'explicit' : 'automatic', now, expiresAt, now, now, authorizationVersion)
     return view(this.db.prepare('SELECT * FROM memory WHERE memory_id = ?').get(id) as MemoryRow)
   }
 
@@ -171,13 +185,20 @@ export class R1MemoryStore {
 
   remember(input: { content: string; category: R1Memory['category']; sourceMessageIds: string[];
     expiresAt?: string | null }): R1Memory {
+    return this.save(input, null)
+  }
+  rememberAutomatically(input: Parameters<R1MemoryStore['remember']>[0] & { authorizationVersion: number }): R1Memory {
+    return this.save(input, input.authorizationVersion)
+  }
+  private save(input: Parameters<R1MemoryStore['remember']>[0], authorizationVersion: number | null): R1Memory {
     this.validateContent(input.content, input.category)
     this.validateExpiry(input.expiresAt ?? null)
     return inTransaction(this.db, () => {
+      if (authorizationVersion !== null) new R1MemoryPolicy(this.db).assertAuthorized(authorizationVersion)
       this.validateSources(input.sourceMessageIds)
       const now = new Date().toISOString()
       return this.insertMemory(input.content.trim(), input.category, input.sourceMessageIds,
-        input.expiresAt ? new Date(input.expiresAt).toISOString() : null, now)
+        input.expiresAt ? new Date(input.expiresAt).toISOString() : null, now, authorizationVersion)
     })
   }
 

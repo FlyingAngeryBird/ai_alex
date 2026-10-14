@@ -9,6 +9,8 @@ import type { FocusCommand, FocusEvent, FocusState, R1Focus } from '../main/r1/f
 import type { R1ServiceDiagnostics, ServiceCheckReport } from '../main/r1/serviceDiagnostics.js'
 import type { R1Task, TaskEvent } from '../main/r1/taskSupervisor.js'
 import type { Artifact, R1Artifacts } from '../main/r1/artifacts.js'
+import type { AutomaticMemoryState } from '../main/r1/automaticMemory.js'
+import type { MemoryPolicy } from '../main/r1/memoryPolicy.js'
 import type { ConfirmedMemory, MemoryConfirmation } from '../main/r1/memoryConfirmations.js'
 
 export type R1Result<T> =
@@ -42,6 +44,11 @@ export type R1Api = {
     update(input: Parameters<R1PersonaStore['update']>[0]): Promise<R1Result<R1Persona>>
   }
   memory: {
+    policy(): Promise<R1Result<MemoryPolicy & AutomaticMemoryState>>
+    setPolicy(input: { enabled: boolean; expectedVersion: number }): Promise<R1Result<MemoryPolicy & AutomaticMemoryState>>
+    onPolicyChanged(handler: (value: MemoryPolicy & AutomaticMemoryState) => void): () => void
+    onChanged(handler: () => void): () => void
+    prepareSelection(input: { confirmationId: string; content: string; category: R1Memory['category'] }): Promise<R1Result<MemoryConfirmation>>
     confirmSave(confirmationId: string): Promise<R1Result<ConfirmedMemory>>
     cancelSave(confirmationId: string): Promise<R1Result<null>>
     onConfirmation(handler: (value: MemoryConfirmation | null) => void): () => void

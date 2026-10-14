@@ -5,9 +5,9 @@ import { R1MemoryStore, type R1Memory } from './memory.js'
 import type { MemorySaveCandidate } from './memoryTools.js'
 
 export type MemoryConfirmation = { confirmationId: string; operation: 'remember' | 'update'; content: string;
-  category: R1Memory['category']; validUntil: string | null; temporary: boolean; sensitive: boolean; expiresAt: string }
+  category: R1Memory['category']; validUntil: string | null; temporary: boolean; sensitive: boolean; expiresAt: string; requiresSelection?: boolean }
 export type ConfirmedMemory = { memory: R1Memory; temporary: false; sessionChanged: boolean }
-type Context = { ownerId: number; source: SessionMessage; temporary: boolean; sensitive: boolean; assertCurrent(): void }
+type Context = { ownerId: number; source: SessionMessage; temporary: boolean; sensitive: boolean; automatic?: boolean; assertCurrent(): void }
 type Pending = { view: MemoryConfirmation; candidate: MemorySaveCandidate; context: Context; fingerprint: string }
 
 /** Candidates and confirmation authority stay in memory. IPC can submit only an opaque token. */
@@ -29,6 +29,31 @@ export class R1MemoryConfirmations {
     if (removed) this.options.notify(ownerId, null)
   }
   revokeAll(): void { for (const owner of new Set([...this.pending.values()].map(record => record.context.ownerId))) this.revoke(owner) }
+  hasPendingForSource(sourceId: string): boolean { return [...this.pending.values()].some(record => record.context.source.messageId === sourceId) }
+  revokeAutomatic(): void {
+    for (const [id, record] of this.pending) if (record.context.automatic) { this.pending.delete(id); this.options.notify(record.context.ownerId, null) }
+  }
+  offerSelection(context: Context): MemoryConfirmation {
+    context.assertCurrent(); this.prune()
+    if (context.temporary || context.source.role !== 'user' || !context.ownerId) throw new Error('AUTO_MEMORY_SOURCE_INVALID')
+    if (this.hasPendingForSource(context.source.messageId)) throw new Error('MEMORY_CONFIRMATION_ALREADY_PENDING')
+    if (this.cancelledSources.has(`${context.ownerId}:${context.source.messageId}`)) throw new Error('MEMORY_CONFIRMATION_CANCELLED')
+    this.revoke(context.ownerId)
+    const view: MemoryConfirmation = { confirmationId: randomUUID(), operation: 'remember', content: context.source.body,
+      category: 'profile', validUntil: null, temporary: false, sensitive: true, expiresAt: new Date(this.now() + 300_000).toISOString(), requiresSelection: true }
+    this.pending.set(view.confirmationId, { view, candidate: { operation: 'remember', content: '', category: 'profile', validUntil: null },
+      context: { ...context, source: structuredClone(context.source) }, fingerprint: `selection:${context.source.messageId}` })
+    this.options.notify(context.ownerId, structuredClone(view)); return structuredClone(view)
+  }
+  prepareSelection(ownerId: number, input: { confirmationId: string; content: string; category: R1Memory['category'] }): MemoryConfirmation {
+    const record = this.record(ownerId, input.confirmationId)
+    record.context.assertCurrent()
+    if (!record.view.requiresSelection || typeof input.content !== 'string' || !input.content.trim() ||
+      !record.context.source.body.includes(input.content.trim())) throw new Error('MEMORY_SELECTION_NOT_FROM_SOURCE')
+    new R1MemoryStore(this.db).validateCandidate({ content: input.content, category: input.category, expiresAt: null })
+    this.pending.delete(input.confirmationId)
+    return this.offer({ operation: 'remember', content: input.content.trim(), category: input.category, validUntil: null }, record.context)
+  }
   offer(candidate: MemorySaveCandidate, context: Context): MemoryConfirmation {
     context.assertCurrent()
     new R1MemoryStore(this.db).validateCandidate({ content: candidate.content, category: candidate.category, expiresAt: candidate.validUntil })
@@ -66,6 +91,7 @@ export class R1MemoryConfirmations {
       return structuredClone(completed.result)
     }
     const record = this.record(ownerId, id)
+    if (record.view.requiresSelection) throw new Error('MEMORY_SELECTION_REQUIRED')
     try { record.context.assertCurrent() } catch { this.pending.delete(id); this.options.notify(ownerId, null); throw new Error('MEMORY_CONFIRMATION_STALE') }
     const { candidate, context } = record
     if (context.temporary && !this.exitTemporary) throw new Error('MEMORY_TEMPORARY_EXIT_UNAVAILABLE')
