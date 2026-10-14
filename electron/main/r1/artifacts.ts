@@ -5,10 +5,10 @@ import { R1Items, runOnce } from './items.js'
 export type ArtifactDraft = { kind: 'text' | 'plan' | 'comparison'; title: string; content: string;
   baseArtifactId: string | null; baseArtifactVersion: number | null; sourceRefs: string[] }
 export type Artifact = { artifactId: string; version: number; sourceTurnId: string; kind: ArtifactDraft['kind'];
-  title: string; content: string; sourceRefs: string[]; savedItemId: string | null; temporary: boolean }
+  title: string; content: string; sourceRefs: string[]; savedItemId: string | null; savedItemVersion: number | null; temporary: boolean }
 export type ArtifactRange = { start: number; end: number }
 type Metadata = { kind: ArtifactDraft['kind']; title: string; sourceRefs: string[] }
-type Row = { artifact_id: string; current_version: number; source_turn_id: string; saved_item_id: string | null }
+type Row = { artifact_id: string; current_version: number; source_turn_id: string; saved_item_id: string | null; saved_item_version: number | null }
 type VersionRow = { version: number; body: string; metadata_json: string; base_version: number | null }
 type TemporaryArtifact = { owner: string; versions: Artifact[] }
 const text = (value: unknown, max: number, code: string): string => {
@@ -66,7 +66,7 @@ export class R1Artifacts {
     const meta = metadata({ kind: data.kind ?? 'text', title: data.title ?? '工作稿',
       sourceRefs: data.sourceRefs ?? [], content: value.body })
     this.assertSources(meta.sourceRefs)
-    return { artifactId, sourceTurnId: row.source_turn_id, savedItemId: row.saved_item_id,
+    return { artifactId, sourceTurnId: row.source_turn_id, savedItemId: row.saved_item_id, savedItemVersion: row.saved_item_version,
       version: value.version, content: value.body, ...meta, temporary: false }
   }
   create(input: { sourceTurnId: string; draft: ArtifactDraft; temporaryOwner?: string | null }): Artifact {
@@ -75,7 +75,7 @@ export class R1Artifacts {
     const meta = metadata(input.draft)
     this.assertSources(meta.sourceRefs)
     const result: Artifact = { artifactId: randomUUID(), version: 1, sourceTurnId: input.sourceTurnId,
-      ...meta, content: input.draft.content, savedItemId: null, temporary: !!input.temporaryOwner }
+      ...meta, content: input.draft.content, savedItemId: null, savedItemVersion: null, temporary: !!input.temporaryOwner }
     if (input.temporaryOwner) {
       text(input.temporaryOwner, 160, 'ARTIFACT_OWNER_INVALID')
       this.temporary.set(result.artifactId, { owner: input.temporaryOwner, versions: [result] })
@@ -131,8 +131,9 @@ export class R1Artifacts {
     return this.revise({ ...input, content: old.content, title: old.title })
   }
   save(input: { artifactId: string; expectedVersion: number; actionId: string;
-    expectedItemVersion?: number; temporaryOwner?: string | null; temporarySaveConfirmed?: boolean }):
+    kind?: 'note' | 'todo'; expectedItemVersion?: number; replacementConfirmed?: boolean; temporaryOwner?: string | null; temporarySaveConfirmed?: boolean }):
     ReturnType<R1Items['create']> {
+    if (input.kind !== undefined && !['note', 'todo'].includes(input.kind)) throw new Error('ARTIFACT_SAVE_KIND_INVALID')
     const artifact = this.get(input.artifactId, input.temporaryOwner ?? null)
     if (artifact.temporary && input.temporarySaveConfirmed !== true) throw new Error('TEMPORARY_SAVE_CONFIRMATION_REQUIRED')
     const result = runOnce(this.db, input.actionId, input, () => {
@@ -141,17 +142,22 @@ export class R1Artifacts {
       const saved = artifact.savedItemId ? this.db.prepare('SELECT kind FROM items WHERE item_id = ? AND deleted_at IS NULL')
         .get(artifact.savedItemId) as { kind: 'note' | 'todo' } | undefined : undefined
       if (artifact.savedItemId && !saved) throw new Error('ITEM_NOT_FOUND')
+      if (artifact.savedItemId && input.replacementConfirmed !== true &&
+        (artifact.savedItemVersion === null || input.expectedItemVersion !== artifact.savedItemVersion)) throw new Error('VERSION_CONFLICT')
       const itemActionId = randomUUID()
       const result = artifact.savedItemId
         ? items.update({ actionId: itemActionId, itemId: artifact.savedItemId, expectedVersion: input.expectedItemVersion!, kind: saved!.kind,
           title: artifact.title, body: artifact.content })
-        : items.create({ actionId: itemActionId, kind: 'note', title: artifact.title, body: artifact.content })
-      if (!artifact.temporary) this.db.prepare('UPDATE artifacts SET saved_item_id = ?, updated_at = ? WHERE artifact_id = ?')
-        .run(result.item.itemId, new Date().toISOString(), artifact.artifactId)
+        : items.create({ actionId: itemActionId, kind: input.kind ?? 'note', title: artifact.title, body: artifact.content })
+      if (!artifact.temporary) this.db.prepare('UPDATE artifacts SET saved_item_id = ?, saved_item_version = ?, updated_at = ? WHERE artifact_id = ?')
+        .run(result.item.itemId, result.item.version, new Date().toISOString(), artifact.artifactId)
       return { item: result.item, receipt: { ...result.receipt, actionId: input.actionId } }
     })
     if (artifact.temporary) {
-      for (const version of this.temporary.get(artifact.artifactId)!.versions) version.savedItemId = result.item.itemId
+      for (const version of this.temporary.get(artifact.artifactId)!.versions) {
+        version.savedItemId = result.item.itemId
+        version.savedItemVersion = result.item.version
+      }
     }
     return result
   }

@@ -56,6 +56,40 @@ describe('versioned R1 artifacts', () => {
       expect(() => store.save({ ...command, expectedVersion: 2, actionId: 'save-3', expectedItemVersion: 2 })).toThrow('VERSION_CONFLICT')
     } finally { db.close() }
   })
+  it('requires review before overwriting a linked item changed outside the draft', () => {
+    const db = openR1Database(':memory:')
+    try {
+      const store = new R1Artifacts(db)
+      const first = store.create({ sourceTurnId: 'source', draft: draft('工作稿') })
+      const saved = store.save({ artifactId: first.artifactId, expectedVersion: 1, actionId: 'initial' })
+      expect(store.get(first.artifactId).savedItemVersion).toBe(1)
+      new R1Items(db).update({ actionId: 'elsewhere', itemId: saved.item.itemId, expectedVersion: 1,
+        kind: 'note', title: '手边的事修改', body: '应保留的新内容' })
+      const command = { artifactId: first.artifactId, expectedVersion: 1, expectedItemVersion: 2, actionId: 'overwrite' }
+      expect(() => store.save(command)).toThrow('VERSION_CONFLICT')
+      expect(new R1Items(db).list()[0].body).toBe('应保留的新内容')
+      expect(store.save({ ...command, replacementConfirmed: true }).item)
+        .toMatchObject({ itemId: saved.item.itemId, version: 3, body: '工作稿' })
+      expect(store.get(first.artifactId).savedItemVersion).toBe(3)
+      expect(new R1Items(db).list()).toHaveLength(1)
+    } finally { db.close() }
+  })
+  it('saves a draft as a todo and updates that same todo without creating a duplicate', () => {
+    const db = openR1Database(':memory:')
+    try {
+      const store = new R1Artifacts(db)
+      const artifact = store.create({ sourceTurnId: 'source', draft: draft('待办正文') })
+      const saved = store.save({ artifactId: artifact.artifactId, expectedVersion: 1, actionId: 'todo-save', kind: 'todo' })
+      expect(saved.item.kind).toBe('todo')
+      store.revise({ artifactId: artifact.artifactId, expectedVersion: 1, content: '更新后的待办' })
+      const updated = store.save({ artifactId: artifact.artifactId, expectedVersion: 2,
+        expectedItemVersion: saved.item.version, actionId: 'todo-update' })
+      expect(updated.item).toMatchObject({ itemId: saved.item.itemId, kind: 'todo', body: '更新后的待办' })
+      expect(new R1Items(db).list()).toHaveLength(1)
+      expect(() => store.save({ artifactId: artifact.artifactId, expectedVersion: 2,
+        actionId: 'invalid-kind', kind: 'invalid' as 'note' })).toThrow('ARTIFACT_SAVE_KIND_INVALID')
+    } finally { db.close() }
+  })
   it('keeps temporary drafts in memory, requires explicit save, and preserves the saved item on temporary exit', () => {
     const db = openR1Database(':memory:')
     try {

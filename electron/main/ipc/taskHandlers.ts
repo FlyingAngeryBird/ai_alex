@@ -46,6 +46,7 @@ export function registerTaskHandlers(tasks: R1TaskSupervisor, artifacts: R1Artif
     expectedVersion: input.expectedVersion as number, restoreVersion: input.restoreVersion as number, temporaryOwner: owner() })))
   ipc.handle('r1.artifacts.save', action(input => artifacts.save({ artifactId: input.artifactId as string,
     expectedVersion: input.expectedVersion as number, actionId: input.actionId as string,
+    kind: input.kind as 'note' | 'todo' | undefined,
     expectedItemVersion: input.expectedItemVersion as number | undefined, temporaryOwner: owner(),
-    temporarySaveConfirmed: input.temporarySaveConfirmed === true })))
+    temporarySaveConfirmed: input.temporarySaveConfirmed === true, replacementConfirmed: input.replacementConfirmed === true })))
 }

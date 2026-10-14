@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-export const R1_SCHEMA_VERSION = 4
+export const R1_SCHEMA_VERSION = 5
 
 export type R1Database = DatabaseSync
 
@@ -291,6 +291,13 @@ export function openR1Database(databasePath: string): R1Database {
       const columns = new Set((db.prepare('PRAGMA table_info(artifact_versions)').all() as { name: string }[]).map(row => row.name))
       if (!columns.has('metadata_json')) db.exec("ALTER TABLE artifact_versions ADD COLUMN metadata_json TEXT NOT NULL DEFAULT '{}'")
       db.exec('PRAGMA user_version = 4')
+    })
+  }
+  if (migratedVersion < 5) {
+    inTransaction(db, () => {
+      const columns = new Set((db.prepare('PRAGMA table_info(artifacts)').all() as { name: string }[]).map(row => row.name))
+      if (!columns.has('saved_item_version')) db.exec('ALTER TABLE artifacts ADD COLUMN saved_item_version INTEGER')
+      db.exec('PRAGMA user_version = 5')
     })
   }
   return db
