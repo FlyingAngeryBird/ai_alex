@@ -99,3 +99,19 @@ describe('registered main-conversation tool execution', () => {
     } finally { s.tasks.close(); s.db.close() }
   })
 })
+
+it('recalls only real valid memories through the registered tool and excludes forgotten and temporary context', async () => {
+  const { R1MemoryStore } = await import('../electron/main/r1/memory')
+  const s = setup()
+  try {
+    const store = new R1MemoryStore(s.db)
+    const saved = store.addManual({ content: '喜欢无糖茶', category: 'preference' })
+    const recall = s.tools.execute('memory_recall', { query: '无糖茶', category: 'preference' }, 'recall')
+    expect(recall).toMatchObject({ status: 'succeeded', data: { matchStatus: 'matched', memories: [{ memoryId: saved.memoryId, content: saved.content, version: 1 }] } })
+    store.forget(saved.memoryId, saved.version)
+    expect(s.tools.execute('memory_recall', { query: '无糖茶' }, 'after-forget')).toMatchObject({ status: 'succeeded', data: { matchStatus: 'no_match', memories: [] } })
+  } finally { s.tasks.close(); s.db.close() }
+  const temp = setup(true)
+  try { expect(() => temp.tools.execute('memory_recall', { query: '无糖茶' }, 'temporary')).toThrow('MODEL_TOOL_NOT_EXPOSED') }
+  finally { temp.tasks.close(); temp.db.close() }
+})

@@ -1,3 +1,4 @@
+import { R1MemoryStore, type R1Memory } from './memory.js'
 import { R1FocusTools, focusToolAliases, type FocusToolServices } from './focusTools.js'
 import { R1ReminderTools, reminderToolAliases } from './reminderTools.js'
 import { randomUUID, createHash } from 'node:crypto'
@@ -19,7 +20,7 @@ function taskView(task: R1Task) {
 
 /** Tools operate on the actual user turn. The model cannot supply source bodies, mode or confirmation. */
 export class R1ConversationTools {
-  readonly aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', 'notes_create', ...reminderToolAliases]
+  readonly aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', 'memory_recall', 'notes_create', ...reminderToolAliases]
   private readonly focus?: R1FocusTools
   private readonly reminders: R1ReminderTools
   private readonly calls = new Map<string, { fingerprint: string; output: Record<string, unknown> }>()
@@ -94,6 +95,13 @@ export class R1ConversationTools {
           errorCode: null, retryable: false, runId: null }
         this.assets.validateToolOutput(alias, output)
         this.loadedSkillIds.add(args.skillId as string)
+      } else if (alias === 'memory_recall') {
+        if (this.scope.temporary) throw new Error('MEMORY_UNAVAILABLE_IN_TEMPORARY_SESSION')
+        const entries = new R1MemoryStore(this.db).recall(args.query as string, false, args.category as R1Memory['category'] | null ?? null)
+        output = { kind: 'receipt', actionId: randomUUID(), tool: this.assets.toolDefinition(alias).name,
+          status: 'succeeded', entityId: null, entityVersion: null,
+          data: { matchStatus: entries.length ? 'matched' : 'no_match', memories: entries.map(({ memoryId, content, category, version, sourceRefs }) => ({ memoryId, content, category, version, sourceRefs })) },
+          errorCode: null, retryable: false, runId: null }
       } else if ((focusToolAliases as readonly string[]).includes(alias)) {
         output = inTransaction(this.db, () => {
           const actionId = randomUUID(), result = this.focus!.execute(alias, args, actionId)

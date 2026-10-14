@@ -179,15 +179,15 @@ export class R1MemoryStore {
     })
   }
 
-  recall(query: string, temporary = false): R1Memory[] {
+  recall(query: string, temporary = false, category: R1Memory['category'] | null = null): R1Memory[] {
     if (temporary) return []
     const normalized = query.trim()
     if (!normalized) return []
     const escaped = normalized.replace(/[\\%_]/g, '\\$&')
     const rows = this.db.prepare(`SELECT * FROM memory WHERE deleted_at IS NULL
       AND (expires_at IS NULL OR expires_at > ?)
-      AND content LIKE ? ESCAPE '\\' ORDER BY updated_at DESC LIMIT 20`)
-      .all(new Date().toISOString(), `%${escaped}%`) as MemoryRow[]
+      AND content LIKE ? ESCAPE '\\' AND (? IS NULL OR category = ?) ORDER BY updated_at DESC LIMIT 20`)
+      .all(new Date().toISOString(), `%${escaped}%`, category, category) as MemoryRow[]
     return rows.filter((row) => !this.isSuppressed(row)).slice(0, 5).map(view)
   }
 

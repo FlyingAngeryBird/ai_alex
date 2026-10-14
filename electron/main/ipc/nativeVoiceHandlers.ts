@@ -21,7 +21,7 @@ export function registerNativeVoiceHandlers(deps: {
   implementedTaskAliases: readonly string[]; configurationRevision(): number; focusServices?: FocusToolServices;
 }): { close(): void } {
   const sessions = new Map<number, { id: string; session: NativeRealtimeSession; playback(input: Record<string, unknown>): void }>()
-  const aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', 'notes_create', ...reminderToolAliases, ...(deps.focusServices ? focusToolAliases : [])]
+  const aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', 'memory_recall', 'notes_create', ...reminderToolAliases, ...(deps.focusServices ? focusToolAliases : [])]
   const fail = (code: string) => ({ ok: false, error: { code, message: code } })
   const emit = (owner: WebContents, id: string, event: NativeRealtimeEvent) => {
     if (!owner.isDestroyed()) owner.send('voice.nativeEvent', { ...event, connectionId: id })
