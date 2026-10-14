@@ -1,4 +1,5 @@
 import type { FocusToolServices } from './focusTools.js'
+import { memoryMutationReply } from './memoryTools.js'
 import { selectedConversationEntity } from './sessionMode.js'
 import type { ChatMessage, AssistantOutput } from '../providers/llmProvider.js'
 import type { createArkResponsesProvider, ArkResponseRound } from '../providers/arkResponsesProvider.js'
@@ -34,10 +35,12 @@ export class R1ConversationDriver {
       if (response.calls.length) {
         if (response.calls.length > remainingTools) throw new Error('CONVERSATION_TOOL_BUDGET_EXHAUSTED')
         for (const call of response.calls) boundary.validateToolCall(call.name, JSON.parse(call.arguments))
-        const results = response.calls.map(call => {
+        const results: ArkResponseRound['results'] = []
+        for (const call of response.calls) {
           remainingTools--
-          return { callId: call.call_id, output: tools.execute(call.name, JSON.parse(call.arguments), call.call_id) }
-        })
+          results.push({ callId: call.call_id, output: tools.execute(call.name, JSON.parse(call.arguments), call.call_id) })
+          if (tools.memoryMutationReceipt) return { intent: 'chat', music: null, reply: memoryMutationReply(tools.memoryMutationReceipt) }
+        }
         rounds.push({ output: response.output, results }); continue
       }
       return { intent: 'chat', music: null, reply: response.text }

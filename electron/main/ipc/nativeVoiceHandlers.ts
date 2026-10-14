@@ -1,5 +1,6 @@
 import { focusToolAliases, type FocusToolServices } from '../r1/focusTools.js'
 import { reminderToolAliases } from '../r1/reminderTools.js'
+import { memoryToolAliases, memoryMutationReply } from '../r1/memoryTools.js'
 import { selectedConversationEntity } from '../r1/sessionMode.js'
 import { ipcMain, type WebContents } from 'electron'
 import { NativePlaybackLedger } from '../r1/nativePlayback.js'
@@ -19,9 +20,10 @@ export function registerNativeVoiceHandlers(deps: {
   db: R1Database; assets: R1PromptAssets; persona: R1PersonaStore; memory: R1MemoryStore;
   conversations: R1Conversations; tasks: R1TaskSupervisor; mode: R1SessionMode;
   implementedTaskAliases: readonly string[]; configurationRevision(): number; focusServices?: FocusToolServices;
+  onMemoryInvalidated?(deletionEpoch: number): void;
 }): { close(): void } {
   const sessions = new Map<number, { id: string; session: NativeRealtimeSession; playback(input: Record<string, unknown>): void }>()
-  const aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', 'memory_recall', 'notes_create', ...reminderToolAliases, ...(deps.focusServices ? focusToolAliases : [])]
+  const aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', ...memoryToolAliases, 'notes_create', ...reminderToolAliases, ...(deps.focusServices ? focusToolAliases : [])]
   const fail = (code: string) => ({ ok: false, error: { code, message: code } })
   const emit = (owner: WebContents, id: string, event: NativeRealtimeEvent) => {
     if (!owner.isDestroyed()) owner.send('voice.nativeEvent', { ...event, connectionId: id })
@@ -40,6 +42,7 @@ export function registerNativeVoiceHandlers(deps: {
         deps.configurationRevision() !== revision) throw new Error('REALTIME_CONTEXT_INVALIDATED')
     }
     let tools: R1ConversationTools | null = null
+    let invalidatedEpoch: number | null = null
     let turnId = randomUUID(), toolCount = 0
     const playback = new NativePlaybackLedger(deps.conversations, sessionId)
     const completedInputs = new Set<string>()
@@ -67,7 +70,8 @@ export function registerNativeVoiceHandlers(deps: {
           sourceTurns.set(event.item_id, turnId)
           const source = deps.conversations.append({ sessionId, turnId, role: 'user', body: event.transcript, status: 'final' })
           tools = new R1ConversationTools(deps.db, deps.assets, deps.tasks, { source, sourceMessages: deps.conversations.messages(sessionId).slice(-20), temporary,
-            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, persistenceConfirmed: false, assertCurrent }, deps.implementedTaskAliases, deps.focusServices)
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, persistenceConfirmed: false, assertCurrent,
+            onMemoryInvalidated: deps.onMemoryInvalidated ? epoch => { invalidatedEpoch = epoch } : undefined }, deps.implementedTaskAliases, deps.focusServices)
           connection.updateBoundary(boundary())
         }
         emit(sender, id, event)
@@ -75,11 +79,21 @@ export function registerNativeVoiceHandlers(deps: {
       onToolCalls(calls) {
         assertCurrent()
         if (!tools || toolCount + calls.length > 6) { connection.close('REALTIME_TOOL_SOURCE_OR_BUDGET_INVALID'); return }
-        const results = calls.map(call => {
+        const results = []
+        for (const call of calls) {
           const result = tools!.execute(call.name, call.arguments, call.callId)
           toolCount++
-          return { callId: call.callId, result }
-        })
+          results.push({ callId: call.callId, result })
+          if (tools!.memoryMutationReceipt) {
+            // Do not ask a cloud session containing revoked facts to generate the acknowledgement.
+            const reply = memoryMutationReply(result), responseId = randomUUID()
+            deps.conversations.append({ sessionId, turnId, responseId, role: 'assistant', body: reply, status: 'generated' })
+            emit(sender, id, { type: 'response.output_text.done', response_id: responseId, text: reply })
+            connection.close('MEMORY_CONTEXT_REFRESH_REQUIRED')
+            deps.onMemoryInvalidated!(invalidatedEpoch!)
+            return
+          }
+        }
         connection.updateBoundary(boundary())
         for (const result of results) connection.returnToolResult(result.callId, result.result)
       },

@@ -6,8 +6,36 @@ import { R1PersonaStore } from '../electron/main/r1/persona'
 import { loadR1PromptAssets } from '../electron/main/r1/promptAssets'
 import { resolve } from 'node:path'
 import { R1MemoryStore } from '../electron/main/r1/memory'
+import { R1TaskSupervisor } from '../electron/main/r1/taskSupervisor'
+import { R1ConversationDriver } from '../electron/main/r1/conversationDriver'
+import { createArkResponsesProvider } from '../electron/main/providers/arkResponsesProvider'
 
 describe('chat IPC handlers', () => {
+  it('keeps the committed correction acknowledgement valid and rebuilds the following request without old facts', async () => {
+    const db = openR1Database(':memory:'), memory = new R1MemoryStore(db), conversations = new R1Conversations(db)
+    const assets = loadR1PromptAssets(resolve('r1-assets')), persona = new R1PersonaStore(db)
+    const tasks = new R1TaskSupervisor(db, assets, () => memory.currentDeletionEpoch())
+    try {
+      const old = memory.addManual({ content: '喜欢红茶', category: 'preference' })
+      const handlers = new Map<string, (_event: unknown, payload?: unknown) => unknown>(), requests: string[] = []
+      const ark = createArkResponsesProvider({ env: { VOLCENGINE_ARK_API_KEY: 'synthetic', VOLCENGINE_ARK_MODEL: 'synthetic' }, fetch: async (_url, init) => {
+        requests.push(String(init?.body))
+        const decision = requests.length
+        const output = decision === 3 ? [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '继续聊聊。' }] }] : [{ type: 'function_call', call_id: `call-${decision}`,
+          name: decision === 1 ? 'memory_recall' : 'memory_update', arguments: JSON.stringify(decision === 1 ? { query: '红茶' } : { memoryId: old.memoryId, expectedVersion: 1, content: '喜欢绿茶' }) }]
+        return new Response(JSON.stringify({ id: `response-${decision}`, status: 'completed', output }))
+      } })
+      const driver = new R1ConversationDriver(db, assets, tasks, ark, () => persona.get(), [])
+      const invalidated = vi.fn((epoch: number) => { expect(db.isTransaction).toBe(false); expect(epoch).toBe(1); tasks.invalidateContext() })
+      registerChatHandlers({ handle: (name, handler) => { handlers.set(name, handler) } }, undefined, undefined, conversations, persona, assets, memory, undefined, undefined, driver, invalidated)
+      expect(await handlers.get('chat.sendMessage')!(null, { text: '更正关于茶的记忆，我喜欢绿茶。' })).toMatchObject({ ok: true, data: { reply: expect.stringContaining('已更正') } })
+      expect(invalidated).toHaveBeenCalledOnce()
+      expect(await handlers.get('chat.sendMessage')!(null, { text: '我们继续聊。' })).toMatchObject({ ok: true, data: { reply: '继续聊聊。' } })
+      expect(requests[2]).not.toContain('红茶')
+      expect(conversations.listPersistentSessions()).toHaveLength(1)
+      expect(memory.recall('绿茶')).toHaveLength(1)
+    } finally { tasks.close(); db.close() }
+  })
   it.each(['correct', 'forget'])('discards in-flight text after memory %s and does not persist the stale answer', async (operation) => {
     const db = openR1Database(':memory:')
     try {

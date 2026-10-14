@@ -4,6 +4,17 @@ import { R1Conversations } from '../electron/main/r1/conversations'
 import { R1MemoryStore } from '../electron/main/r1/memory'
 
 describe('R1 memory source and forgetting boundary', () => {
+  it('normalizes explicit expiry offsets and rejects invalid calendar dates without a write', () => {
+    const db = openR1Database(':memory:')
+    try {
+      const conversations = new R1Conversations(db), store = new R1MemoryStore(db)
+      const source = conversations.append({ sessionId: conversations.start(), turnId: 'expiry', role: 'user', body: '记住这段近况', status: 'final' })
+      expect(() => store.remember({ content: '近况', category: 'ongoing', sourceMessageIds: [source.messageId], expiresAt: '2099-02-30T08:00:00+08:00' })).toThrow('INVALID_EXPIRY')
+      expect(store.list().entries).toEqual([])
+      const saved = store.remember({ content: '近况', category: 'ongoing', sourceMessageIds: [source.messageId], expiresAt: '2099-01-01T08:00:00+08:00' })
+      expect(saved.expiresAt).toBe('2099-01-01T00:00:00.000Z')
+    } finally { db.close() }
+  })
   it('keeps manual memory provenance separate from normal chat and enforces edit versions', () => {
     const db = openR1Database(':memory:')
     try {

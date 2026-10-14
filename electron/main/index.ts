@@ -53,6 +53,11 @@ let r1ConversationDriver: R1ConversationDriver | null = null
 let r1Artifacts: R1Artifacts | null = null
 let r1Conversations: R1Conversations | null = null
 const r1SessionMode: R1SessionMode = { temporary: false }
+function invalidateMemoryContexts(deletionEpoch: number): void {
+  nativeVoice?.close()
+  r1Tasks?.invalidateContext()
+  for (const window of BrowserWindow.getAllWindows()) window.webContents.send('r1.memoryInvalidated', { deletionEpoch })
+}
 
 // R1 keeps its data separate from every legacy lingmo build. The old directory
 // is only read by the explicit migration path; opening R1 never writes to it.
@@ -134,18 +139,12 @@ void app.whenReady().then(async () => {
     nativeVoice = registerNativeVoiceHandlers({ db: r1Database, assets: r1PromptAssets,
       persona: new R1PersonaStore(r1Database), memory, conversations: r1Conversations,
       tasks: r1Tasks, mode: r1SessionMode, implementedTaskAliases: taskTools.implementedAliases,
-      configurationRevision: () => vault.revision, focusServices })
+      configurationRevision: () => vault.revision, focusServices, onMemoryInvalidated: invalidateMemoryContexts })
     powerMonitor.on('suspend', () => nativeVoice?.close())
     r1TaskRunner.start()
     importLegacyJson(r1Database, join(app.getPath('appData'), 'lingli'), 'lingli-json')
     importLegacyJson(r1Database, join(app.getPath('appData'), 'lingmo'), 'lingmo-json')
-    registerR1Handlers(r1Database, undefined, r1SessionMode, deletionEpoch => {
-      nativeVoice?.close()
-      r1Tasks?.invalidateContext()
-      for (const window of BrowserWindow.getAllWindows()) {
-        window.webContents.send('r1.memoryInvalidated', { deletionEpoch })
-      }
-    })
+    registerR1Handlers(r1Database, undefined, r1SessionMode, invalidateMemoryContexts)
     registerCredentialHandlers(vault)
     r1Diagnostics = new R1ServiceDiagnostics(vault, r1PromptAssets, new R1PersonaStore(r1Database))
     registerServiceHandlers(r1Diagnostics)
@@ -176,7 +175,7 @@ void app.whenReady().then(async () => {
       new R1PersonaStore(r1Database), r1PromptAssets ?? undefined,
       new R1MemoryStore(r1Database), r1SessionMode, (sessionId, temporary) => {
         if (temporary) { r1Tasks?.endTemporary(sessionId); r1Artifacts?.endTemporary(sessionId) }
-      }, r1ConversationDriver ?? undefined)
+      }, r1ConversationDriver ?? undefined, invalidateMemoryContexts)
   }
   if (r1Database && !existsSync(configPath)) {
     const persona = r1Database.prepare('SELECT voice_id FROM persona WHERE id = 1')

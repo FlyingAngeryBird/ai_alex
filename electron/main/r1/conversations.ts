@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { R1Database } from './database.js'
+import { memoryContextCutoff } from './memoryContext.js'
 
 export type SessionMessage = {
   messageId: string
@@ -61,7 +62,10 @@ export class R1Conversations {
   }
 
   modelTurns(sessionId: string) {
-    return this.messages(sessionId).filter(message => message.role !== 'system').slice(-24).map(message => {
+    const cutoff = memoryContextCutoff(this.db)
+    const eligible = this.temporary.has(sessionId) ? null : new Set((this.db.prepare(
+      'SELECT message_id FROM messages WHERE session_id = ? AND rowid > ?').all(sessionId, cutoff) as { message_id: string }[]).map(row => row.message_id))
+    return this.messages(sessionId).filter(message => message.role !== 'system' && (!eligible || eligible.has(message.messageId))).slice(-24).map(message => {
       const unconfirmedAudio = message.role === 'assistant' &&
         (message.status === 'interrupted' || message.playedUntilMs !== null && message.status !== 'heard')
       return { turnId: message.turnId, role: message.role, text: unconfirmedAudio ? '' : message.body,

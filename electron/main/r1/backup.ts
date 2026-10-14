@@ -2,6 +2,8 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, renameSync, rmSync } fr
 import { dirname } from 'node:path'
 import { backup, DatabaseSync } from 'node:sqlite'
 import { inTransaction, openR1Database, R1_SCHEMA_VERSION, type R1Database } from './database.js'
+import { R1MemoryStore } from './memory.js'
+import { invalidateMemoryContext } from './memoryContext.js'
 
 function validateBackup(path: string): void {
   const db = new DatabaseSync(path, { readOnly: true })
@@ -45,13 +47,22 @@ function preserveSuppression(current: R1Database, restored: R1Database): void {
     .all() as DeletedRow[]
   const all = [...suppressions, ...deletedMemories.map((row) => ({ source_ref: row.id, deletion_epoch: row.deletion_epoch })),
     ...deletedTopics.map((row) => ({ source_ref: row.id, deletion_epoch: row.deletion_epoch }))]
-  if (!all.length) return
+  // An older backup must not restore a fact replaced by a newer correction.
+  const corrected = current.prepare('SELECT memory_id, version, content, expires_at, deletion_epoch FROM memory WHERE deletion_epoch > 0 AND deleted_at IS NULL')
+    .all() as { memory_id: string; version: number; content: string; expires_at: string | null; deletion_epoch: number }[]
+  for (const row of corrected) {
+    const old = restored.prepare('SELECT version, content, expires_at FROM memory WHERE memory_id = ?').get(row.memory_id) as typeof row | undefined
+    if (old && (old.version < row.version || old.content !== row.content || old.expires_at !== row.expires_at)) all.push({ source_ref: row.memory_id, deletion_epoch: row.deletion_epoch })
+  }
+  const epoch = new R1MemoryStore(current).currentDeletionEpoch()
+  if (!all.length && !epoch) return
 
   inTransaction(restored, () => {
     const insert = restored.prepare(`INSERT INTO source_suppression (source_ref, deletion_epoch, created_at)
       VALUES (?, ?, ?) ON CONFLICT(source_ref) DO UPDATE SET
       deletion_epoch = MAX(source_suppression.deletion_epoch, excluded.deletion_epoch)`)
     const now = new Date().toISOString()
+    if (epoch) invalidateMemoryContext(restored, epoch)
     for (const row of all) insert.run(row.source_ref, Math.max(1, row.deletion_epoch), now)
     const active = new Map((restored.prepare('SELECT source_ref, deletion_epoch FROM source_suppression')
       .all() as SuppressionRow[]).map((row) => [row.source_ref, row.deletion_epoch]))

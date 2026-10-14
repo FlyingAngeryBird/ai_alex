@@ -5,6 +5,8 @@ import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createR1Backup, restoreR1BackupOffline } from '../electron/main/r1/backup'
 import { openR1Database, R1_SCHEMA_VERSION } from '../electron/main/r1/database'
+import { R1MemoryStore } from '../electron/main/r1/memory'
+import { R1Conversations } from '../electron/main/r1/conversations'
 
 const directories: string[] = []
 function directory(): string {
@@ -77,5 +79,32 @@ describe('R1 offline backup and restore', () => {
     const stillGood = new DatabaseSync(currentPath, { readOnly: true })
     expect(stillGood.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: R1_SCHEMA_VERSION })
     stillGood.close()
+  })
+
+  it('never restores a corrected fact or derived model history from an older backup, while preserving raw history', async () => {
+    const root = directory(), currentPath = join(root, 'r1.sqlite'), backupPath = join(root, 'before-correction.sqlite')
+    const db = openR1Database(currentPath), conversations = new R1Conversations(db), memory = new R1MemoryStore(db)
+    const sessionId = conversations.start()
+    const source = conversations.append({ sessionId, turnId: 'old', role: 'user', body: '记住，我喜欢红茶。', status: 'final' })
+    const old = memory.remember({ content: '喜欢红茶', category: 'preference', sourceMessageIds: [source.messageId] })
+    const unrelated = memory.remember({ content: '喜欢公园', category: 'preference', sourceMessageIds: [source.messageId] })
+    conversations.append({ sessionId, turnId: 'derived', role: 'assistant', body: '可以选红茶。', status: 'generated' })
+    await createR1Backup(db, backupPath)
+    const correction = conversations.append({ sessionId, turnId: 'new', role: 'user', body: '更正记忆，我喜欢绿茶。', status: 'final' })
+    memory.update({ memoryId: old.memoryId, expectedVersion: 1, content: '喜欢绿茶', category: 'preference', sourceMessageIds: [correction.messageId] })
+    db.close()
+    restoreR1BackupOffline(currentPath, backupPath)
+    const restored = openR1Database(currentPath)
+    try {
+      const store = new R1MemoryStore(restored), history = new R1Conversations(restored)
+      expect(store.currentDeletionEpoch()).toBe(1)
+      expect(store.recall('红茶')).toEqual([])
+      expect(store.recall('公园')).toEqual([unrelated])
+      expect(history.messages(sessionId)).toHaveLength(2)
+      expect(history.modelTurns(sessionId)).toEqual([])
+      expect(() => store.remember({ content: '喜欢红茶', category: 'preference', sourceMessageIds: [source.messageId] })).toThrow('MEMORY_SOURCE_SUPPRESSED')
+      history.append({ sessionId, turnId: 'after-restore', role: 'user', body: '今天聊公园。', status: 'final' })
+      expect(history.modelTurns(sessionId)).toMatchObject([{ text: '今天聊公园。' }])
+    } finally { restored.close() }
   })
 })

@@ -1,4 +1,6 @@
-import { R1MemoryStore, type R1Memory } from './memory.js'
+import { R1MemoryStore } from './memory.js'
+import { R1MemoryTools, memoryToolAliases } from './memoryTools.js'
+import { memoryContextCutoff } from './memoryContext.js'
 import { R1FocusTools, focusToolAliases, type FocusToolServices } from './focusTools.js'
 import { R1ReminderTools, reminderToolAliases } from './reminderTools.js'
 import { randomUUID, createHash } from 'node:crypto'
@@ -6,10 +8,11 @@ import type { SessionMessage } from './conversations.js'
 import type { R1PromptAssets } from './promptAssets.js'
 import type { R1Task, R1TaskSupervisor } from './taskSupervisor.js'
 import { R1Items } from './items.js'
-import { inTransaction, type R1Database } from './database.js'
+import { afterTransactionCommit, inTransaction, type R1Database } from './database.js'
 
 export type ConversationToolScope = { source: SessionMessage; temporary: boolean; timezone: string;
-  assertCurrent(): void; persistenceConfirmed: boolean; signal?: AbortSignal; sourceMessages?: SessionMessage[] }
+  assertCurrent(): void; persistenceConfirmed: boolean; signal?: AbortSignal; sourceMessages?: SessionMessage[];
+  onMemoryInvalidated?(deletionEpoch: number): void }
 type Delegation = { toolAliases: string[]; requiredActions: Array<{ alias: string; minimumCount: number }> }
 const code = (error: unknown): string => error instanceof Error && /^[A-Z][A-Z0-9_]{1,80}$/.test(error.message)
   ? error.message : 'CONVERSATION_TOOL_FAILED'
@@ -20,7 +23,9 @@ function taskView(task: R1Task) {
 
 /** Tools operate on the actual user turn. The model cannot supply source bodies, mode or confirmation. */
 export class R1ConversationTools {
-  readonly aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', 'memory_recall', 'notes_create', ...reminderToolAliases]
+  readonly aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', ...memoryToolAliases, 'notes_create', ...reminderToolAliases]
+  memoryMutationReceipt: Record<string, unknown> | null = null
+  private readonly memories: R1MemoryTools
   private readonly focus?: R1FocusTools
   private readonly reminders: R1ReminderTools
   private readonly calls = new Map<string, { fingerprint: string; output: Record<string, unknown> }>()
@@ -29,6 +34,7 @@ export class R1ConversationTools {
     private readonly tasks: R1TaskSupervisor, private readonly scope: ConversationToolScope,
     private readonly implementedTaskAliases: readonly string[], services?: FocusToolServices) {
     scope.assertCurrent()
+    this.memories = new R1MemoryTools(new R1MemoryStore(db), scope.source)
     if (services) { this.aliases.push(...focusToolAliases); this.focus = new R1FocusTools(services, scope.source, scope.assertCurrent) }
     this.reminders = new R1ReminderTools(new R1Items(db), { source: { ...scope.source, timezone: scope.timezone },
       assertCurrent: scope.assertCurrent, checkSources: refs => this.checkReminderSources(refs), timeSource: refs => this.reminderSource(refs), requirePersistence: () => {
@@ -36,11 +42,11 @@ export class R1ConversationTools {
         if (scope.temporary && !scope.persistenceConfirmed) throw new Error('TEMPORARY_SAVE_CONFIRMATION_REQUIRED')
       } })
     if (scope.source.role !== 'user') throw new Error('CONVERSATION_SOURCE_INVALID')
-    const source = db.prepare(`SELECT m.body, m.session_id FROM messages m JOIN sessions s ON s.session_id = m.session_id
+    const source = db.prepare(`SELECT m.rowid AS sequence, m.body, m.session_id FROM messages m JOIN sessions s ON s.session_id = m.session_id
       WHERE m.message_id = ? AND m.role = 'user' AND s.temporary = 0 AND s.status <> 'memory_source'`).get(scope.source.messageId) as {
-      body: string; session_id: string
+      sequence: number; body: string; session_id: string
     } | undefined
-    if (scope.temporary ? source !== undefined : !source || source.body !== scope.source.body || source.session_id !== scope.source.sessionId) {
+    if (scope.temporary ? source !== undefined : !source || source.sequence <= memoryContextCutoff(db) || source.body !== scope.source.body || source.session_id !== scope.source.sessionId) {
       throw new Error('CONVERSATION_SOURCE_NOT_AVAILABLE')
     }
   }
@@ -55,8 +61,10 @@ export class R1ConversationTools {
   }
   private reminderSources(): SessionMessage[] {
     const known = [...(this.scope.sourceMessages ?? []), this.scope.source]
+    const cutoff = memoryContextCutoff(this.db)
     return known.filter(message => message.role === 'user' && message.sessionId === this.scope.source.sessionId &&
       Date.parse(message.createdAt) <= Date.parse(this.scope.source.createdAt) &&
+      (this.scope.temporary || Boolean(this.db.prepare('SELECT 1 FROM messages WHERE message_id = ? AND rowid > ?').get(message.messageId, cutoff))) &&
       !this.db.prepare('SELECT 1 FROM source_suppression WHERE source_ref IN (?, ?)').get(message.messageId, message.turnId))
   }
   private checkReminderSources(refs: string[]): void {
@@ -85,6 +93,7 @@ export class R1ConversationTools {
       if (previous.fingerprint !== fingerprint) throw new Error('CONVERSATION_CALL_ID_REUSED')
       return structuredClone(previous.output)
     }
+    if (this.memoryMutationReceipt) throw new Error('MEMORY_CONTEXT_REVOKED')
     const args = input as Record<string, unknown>
     let output: Record<string, unknown>
     try {
@@ -95,13 +104,25 @@ export class R1ConversationTools {
           errorCode: null, retryable: false, runId: null }
         this.assets.validateToolOutput(alias, output)
         this.loadedSkillIds.add(args.skillId as string)
-      } else if (alias === 'memory_recall') {
+      } else if ((memoryToolAliases as readonly string[]).includes(alias)) {
         if (this.scope.temporary) throw new Error('MEMORY_UNAVAILABLE_IN_TEMPORARY_SESSION')
-        const entries = new R1MemoryStore(this.db).recall(args.query as string, false, args.category as R1Memory['category'] | null ?? null)
-        output = { kind: 'receipt', actionId: randomUUID(), tool: this.assets.toolDefinition(alias).name,
-          status: 'succeeded', entityId: null, entityVersion: null,
-          data: { matchStatus: entries.length ? 'matched' : 'no_match', memories: entries.map(({ memoryId, content, category, version, sourceRefs }) => ({ memoryId, content, category, version, sourceRefs })) },
-          errorCode: null, retryable: false, runId: null }
+        if (['memory_update', 'memory_forget'].includes(alias) && !this.scope.onMemoryInvalidated) throw new Error('MEMORY_CONTEXT_REFRESH_UNAVAILABLE')
+        output = inTransaction(this.db, () => {
+          this.scope.assertCurrent()
+          const result = this.memories.execute(alias, args)
+          const receipt = { kind: 'receipt', actionId: randomUUID(), tool: this.assets.toolDefinition(alias).name,
+            status: 'succeeded', entityId: result.entityId ?? null, entityVersion: result.entityVersion ?? null,
+            data: result.data, errorCode: null, retryable: false, runId: null }
+          this.assets.validateToolOutput(alias, receipt)
+          if (result.invalidatedEpoch !== undefined) {
+            // Only our synchronous mutation may refresh its owner; every other request keeps its old epoch.
+            afterTransactionCommit(this.db, () => {
+              this.memoryMutationReceipt = receipt
+              this.scope.onMemoryInvalidated!(result.invalidatedEpoch!)
+            })
+          } else this.scope.assertCurrent()
+          return receipt
+        })
       } else if ((focusToolAliases as readonly string[]).includes(alias)) {
         output = inTransaction(this.db, () => {
           const actionId = randomUUID(), result = this.focus!.execute(alias, args, actionId)

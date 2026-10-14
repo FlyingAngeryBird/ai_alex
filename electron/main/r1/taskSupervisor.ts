@@ -5,6 +5,7 @@ import type { R1TaskInput, R1TaskAuthority } from './taskBoundary.js'
 import type { R1PromptAssets } from './promptAssets.js'
 import { R1Items } from './items.js'
 import { R1Artifacts, type ArtifactDraft } from './artifacts.js'
+import { memoryContextCutoff } from './memoryContext.js'
 
 export type TaskStatus = 'accepted' | 'running' | 'waiting_input' | 'paused' | 'needs_resume' |
   'succeeded' | 'partially_succeeded' | 'failed' | 'cancelled'
@@ -82,12 +83,12 @@ export class R1TaskSupervisor {
   private source(messageId: string): TaskSource {
     const temporary = this.options.temporarySource?.(messageId)
     if (temporary) return structuredClone(temporary)
-    const row = this.db.prepare(`SELECT m.message_id, m.session_id, m.turn_id, m.body, m.created_at
+    const row = this.db.prepare(`SELECT m.rowid AS sequence, m.message_id, m.session_id, m.turn_id, m.body, m.created_at
       FROM messages m JOIN sessions s ON s.session_id = m.session_id WHERE m.message_id = ?
       AND m.role = 'user' AND s.temporary = 0 AND s.status <> 'memory_source'`)
-      .get(messageId) as { message_id: string; session_id: string; turn_id: string; body: string; created_at: string } | undefined
+      .get(messageId) as { sequence: number; message_id: string; session_id: string; turn_id: string; body: string; created_at: string } | undefined
     if (!row) throw new Error('TASK_SOURCE_NOT_FOUND')
-    if (this.db.prepare('SELECT 1 FROM source_suppression WHERE source_ref = ?').get(messageId)) throw new Error('TASK_SOURCE_SUPPRESSED')
+    if (row.sequence <= memoryContextCutoff(this.db) || this.db.prepare('SELECT 1 FROM source_suppression WHERE source_ref = ?').get(messageId)) throw new Error('TASK_SOURCE_SUPPRESSED')
     return { messageId: row.message_id, sessionId: row.session_id, turnId: row.turn_id,
       body: row.body, createdAt: row.created_at, timezone: '', temporary: false }
   }

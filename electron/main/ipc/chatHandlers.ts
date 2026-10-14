@@ -132,7 +132,8 @@ export function registerChatHandlers(
   memoryStore?: R1MemoryStore,
   sessionMode?: R1SessionMode,
   onSessionEnded: (sessionId: string, temporary: boolean) => void = () => undefined,
-  conversationDriver?: R1ConversationDriver
+  conversationDriver?: R1ConversationDriver,
+  onMemoryInvalidated: (deletionEpoch: number) => void = () => undefined
 ): void {
   clearMemory()
   let activeSystemPrompt: string | null = null
@@ -231,7 +232,13 @@ export function registerChatHandlers(
       .map(message => ({ role: message.role as 'user' | 'assistant', content: message.text }))
     return conversationDriver!.reply({ messages: sharedMessages.length ? sharedMessages : messages, context: { ...context,
       recentTurns: conversations!.modelTurns(source.sessionId) }, scope: { source, sourceMessages: conversations!.messages(source.sessionId).slice(-20), temporary, timezone: context.timezone as string, persistenceConfirmed: false,
-      signal: request.signal, assertCurrent() { if (!requestIsCurrent(request)) throw staleError(request) } } })
+      signal: request.signal, assertCurrent() { if (!requestIsCurrent(request)) throw staleError(request) },
+      onMemoryInvalidated(deletionEpoch) {
+        request.deletionEpoch = deletionEpoch
+        activeDeletionEpoch = deletionEpoch
+        clearMemory()
+        onMemoryInvalidated(deletionEpoch)
+      } } })
   }
 
   ipc.handle('chat.setTemporary', (_event, payload) => {

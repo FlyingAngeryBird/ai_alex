@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { inTransaction, type R1Database } from './database.js'
+import { invalidateMemoryContext, memoryContextCutoff, memoryContextEpoch } from './memoryContext.js'
 
 export type R1Memory = {
   memoryId: string
@@ -84,7 +85,7 @@ export class R1MemoryStore {
   }
 
   update(input: { memoryId: string; expectedVersion: number; content: string;
-    category: R1Memory['category'] }): R1Memory {
+    category: R1Memory['category']; sourceMessageIds?: string[]; expiresAt?: string | null }): R1Memory {
     if (typeof input.memoryId !== 'string' || !input.memoryId ||
       !Number.isInteger(input.expectedVersion) || input.expectedVersion < 1) {
       throw new Error('INVALID_MEMORY_PATCH')
@@ -95,10 +96,18 @@ export class R1MemoryStore {
         .get(input.memoryId) as MemoryRow | undefined
       if (!row || this.isSuppressed(row)) throw new Error('MEMORY_NOT_FOUND')
       if (row.version !== input.expectedVersion) throw new Error('VERSION_CONFLICT')
+      if (input.sourceMessageIds) this.validateSources(input.sourceMessageIds)
+      const refs = [...new Set([...JSON.parse(row.source_refs_json) as string[], ...(input.sourceMessageIds ?? [])])]
+      if (refs.length > 50) throw new Error('MEMORY_SOURCE_LIMIT')
+      const requestedExpiry = input.expiresAt === undefined ? row.expires_at : input.expiresAt
+      this.validateExpiry(requestedExpiry)
+      const expiry = requestedExpiry === null ? null : new Date(requestedExpiry).toISOString()
       const epoch = this.currentDeletionEpoch() + 1
       this.db.prepare(`UPDATE memory SET content = ?, category = ?, deletion_epoch = ?, version = version + 1,
-        updated_at = ? WHERE memory_id = ?`)
-        .run(input.content.trim(), input.category, epoch, new Date().toISOString(), input.memoryId)
+        source_refs_json = ?, expires_at = ?, updated_at = ? WHERE memory_id = ?`)
+        .run(input.content.trim(), input.category, epoch, JSON.stringify(refs), expiry, new Date().toISOString(), input.memoryId)
+      invalidateMemoryContext(this.db, epoch)
+      this.invalidateTopics(input.memoryId, epoch)
       return view(this.db.prepare('SELECT * FROM memory WHERE memory_id = ?')
         .get(input.memoryId) as MemoryRow)
     })
@@ -123,10 +132,10 @@ export class R1MemoryStore {
       const existing = JSON.parse(duplicate.source_refs_json) as string[]
       const refs = [...new Set([...existing, ...sourceMessageIds])]
       if (refs.length > 50) throw new Error('MEMORY_SOURCE_LIMIT')
-      if (refs.length === existing.length) return view(duplicate)
-      this.db.prepare(`UPDATE memory SET source_refs_json = ?, version = version + 1,
+      if (refs.length === existing.length && duplicate.expires_at === expiresAt) return view(duplicate)
+      this.db.prepare(`UPDATE memory SET source_refs_json = ?, expires_at = ?, version = version + 1,
         updated_at = ? WHERE memory_id = ?`)
-        .run(JSON.stringify(refs), now, duplicate.memory_id)
+        .run(JSON.stringify(refs), expiresAt, now, duplicate.memory_id)
       return view(this.db.prepare('SELECT * FROM memory WHERE memory_id = ?')
         .get(duplicate.memory_id) as MemoryRow)
     }
@@ -152,42 +161,58 @@ export class R1MemoryStore {
       .get() as { epoch: number | null }).epoch ?? 0
     const suppression = (this.db.prepare('SELECT MAX(deletion_epoch) AS epoch FROM source_suppression')
       .get() as { epoch: number | null }).epoch ?? 0
-    return Math.max(memory, suppression)
+    return Math.max(memory, suppression, memoryContextEpoch(this.db))
   }
 
   remember(input: { content: string; category: R1Memory['category']; sourceMessageIds: string[];
     expiresAt?: string | null }): R1Memory {
     this.validateContent(input.content, input.category)
-    if (!Array.isArray(input.sourceMessageIds) || !input.sourceMessageIds.length ||
-      input.sourceMessageIds.length > 50 ||
-      input.sourceMessageIds.some((id) => typeof id !== 'string')) {
-      throw new Error('MEMORY_SOURCE_REQUIRED')
-    }
-    if (input.expiresAt && !Number.isFinite(Date.parse(input.expiresAt))) throw new Error('INVALID_EXPIRY')
+    this.validateExpiry(input.expiresAt ?? null)
     return inTransaction(this.db, () => {
-      for (const sourceId of input.sourceMessageIds) {
-        const row = this.db.prepare(`SELECT 1 FROM messages m JOIN sessions s ON s.session_id = m.session_id
-          WHERE m.message_id = ? AND m.role = 'user' AND s.temporary = 0`).get(sourceId)
-        if (!row) throw new Error('MEMORY_SOURCE_NOT_PERSISTED')
-        if (this.db.prepare('SELECT 1 FROM source_suppression WHERE source_ref = ?').get(sourceId)) {
-          throw new Error('MEMORY_SOURCE_SUPPRESSED')
-        }
-      }
+      this.validateSources(input.sourceMessageIds)
       const now = new Date().toISOString()
       return this.insertMemory(input.content.trim(), input.category, input.sourceMessageIds,
-        input.expiresAt ?? null, now)
+        input.expiresAt ? new Date(input.expiresAt).toISOString() : null, now)
     })
+  }
+
+  private validateExpiry(expiry: string | null): void {
+    if (expiry !== null && (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(expiry) ||
+      !Number.isFinite(Date.parse(expiry)) || Date.parse(expiry) <= Date.now())) throw new Error('INVALID_EXPIRY')
+    if (expiry) {
+      const [year, month, day, hour, minute, second] = expiry.match(/\d+/g)!.slice(0, 6).map(Number)
+      const end = new Date(0); end.setUTCFullYear(year, month, 0)
+      if (month < 1 || month > 12 || day < 1 || day > end.getUTCDate() || hour > 23 || minute > 59 || second > 59) throw new Error('INVALID_EXPIRY')
+    }
+  }
+
+  private validateSources(ids: string[]): void {
+    if (!Array.isArray(ids) || !ids.length || ids.length > 50 || ids.some(id => typeof id !== 'string')) throw new Error('MEMORY_SOURCE_REQUIRED')
+    const cutoff = memoryContextCutoff(this.db)
+    for (const id of ids) {
+      const row = this.db.prepare(`SELECT m.rowid AS sequence FROM messages m JOIN sessions s ON s.session_id = m.session_id
+        WHERE m.message_id = ? AND m.role = 'user' AND s.temporary = 0`).get(id) as { sequence: number } | undefined
+      if (!row) throw new Error('MEMORY_SOURCE_NOT_PERSISTED')
+      if (row.sequence <= cutoff || this.db.prepare('SELECT 1 FROM source_suppression WHERE source_ref = ?').get(id)) throw new Error('MEMORY_SOURCE_SUPPRESSED')
+    }
   }
 
   recall(query: string, temporary = false, category: R1Memory['category'] | null = null): R1Memory[] {
     if (temporary) return []
     const normalized = query.trim()
     if (!normalized) return []
+    // Models may supply a descriptive query ("用户喜欢的茶相关记忆"). Remove only
+    // search wrappers, preserving the original query and the factual term. No semantic score is fabricated.
+    let term = normalized.replace(/^(?:关于|用户(?:的)?|我的|你的)/, '').trim()
+    for (let count = 0; count < 3; count++) term = term.replace(/(?:相关)?(?:记忆|偏好|喜好|记录)$/, '').trim()
+    term = term.replace(/^喜欢(?:的)?/, '').replace(/的$/, '').trim()
     const escaped = normalized.replace(/[\\%_]/g, '\\$&')
+    const escapedTerm = term.replace(/[\\%_]/g, '\\$&')
     const rows = this.db.prepare(`SELECT * FROM memory WHERE deleted_at IS NULL
       AND (expires_at IS NULL OR expires_at > ?)
-      AND content LIKE ? ESCAPE '\\' AND (? IS NULL OR category = ?) ORDER BY updated_at DESC LIMIT 20`)
-      .all(new Date().toISOString(), `%${escaped}%`, category, category) as MemoryRow[]
+      AND (content LIKE ? ESCAPE '\\' OR (? <> '' AND content LIKE ? ESCAPE '\\'))
+      AND (? IS NULL OR category = ?) ORDER BY updated_at DESC LIMIT 20`)
+      .all(new Date().toISOString(), `%${escaped}%`, term, `%${escapedTerm}%`, category, category) as MemoryRow[]
     return rows.filter((row) => !this.isSuppressed(row)).slice(0, 5).map(view)
   }
 
@@ -196,11 +221,7 @@ export class R1MemoryStore {
       const row = this.db.prepare('SELECT * FROM memory WHERE memory_id = ?').get(memoryId) as MemoryRow | undefined
       if (!row || row.deleted_at) throw new Error('MEMORY_NOT_FOUND')
       if (row.version !== expectedVersion) throw new Error('VERSION_CONFLICT')
-      const maxMemory = (this.db.prepare('SELECT MAX(deletion_epoch) AS epoch FROM memory')
-        .get() as { epoch: number | null }).epoch ?? 0
-      const maxSuppression = (this.db.prepare('SELECT MAX(deletion_epoch) AS epoch FROM source_suppression')
-        .get() as { epoch: number | null }).epoch ?? 0
-      const epoch = Math.max(maxMemory, maxSuppression) + 1
+      const epoch = this.currentDeletionEpoch() + 1
       const now = new Date().toISOString()
       this.db.prepare(`UPDATE memory SET deleted_at = ?, deletion_epoch = ?,
         version = version + 1, updated_at = ? WHERE memory_id = ?`)
@@ -208,19 +229,21 @@ export class R1MemoryStore {
       this.db.prepare(`INSERT INTO source_suppression (source_ref, deletion_epoch, created_at)
         VALUES (?, ?, ?) ON CONFLICT(source_ref) DO UPDATE SET deletion_epoch = excluded.deletion_epoch`)
         .run(memoryId, epoch, now)
-      const topics = this.db.prepare('SELECT topic_id, source_refs_json FROM topics WHERE deleted_at IS NULL')
-        .all() as { topic_id: string; source_refs_json: string }[]
-      for (const topic of topics) {
-        const refs = JSON.parse(topic.source_refs_json) as string[]
-        if (refs.includes(memoryId)) {
-          this.db.prepare(`UPDATE topics SET deleted_at = ?, deletion_epoch = ?,
-            version = version + 1, updated_at = ? WHERE topic_id = ?`)
-            .run(now, epoch, now, topic.topic_id)
-        }
-      }
+      this.invalidateTopics(memoryId, epoch)
       this.db.prepare('INSERT INTO event_log (event_id, occurred_at, kind, owner_id, payload_json) VALUES (?, ?, ?, ?, ?)')
         .run(randomUUID(), now, 'memory_forgotten', memoryId, JSON.stringify({ deletionEpoch: epoch }))
+      invalidateMemoryContext(this.db, epoch)
       return { memoryId, deletionEpoch: epoch }
     })
+  }
+
+  private invalidateTopics(memoryId: string, epoch: number): void {
+    const topics = this.db.prepare('SELECT topic_id, source_refs_json FROM topics WHERE deleted_at IS NULL')
+      .all() as { topic_id: string; source_refs_json: string }[]
+    const now = new Date().toISOString()
+    for (const topic of topics) {
+      if ((JSON.parse(topic.source_refs_json) as string[]).includes(memoryId)) this.db.prepare(`UPDATE topics SET deleted_at = ?, deletion_epoch = ?,
+        version = version + 1, updated_at = ? WHERE topic_id = ?`).run(now, epoch, now, topic.topic_id)
+    }
   }
 }
