@@ -39,6 +39,41 @@ describe('chat IPC handlers', () => {
       expect(db.prepare("SELECT COUNT(*) AS count FROM messages WHERE role = 'assistant'").get()).toMatchObject({ count: 0 })
     } finally { db.close() }
   })
+  it('stops an in-flight response without ending its session and permits the next turn', async () => {
+    const db = openR1Database(':memory:')
+    try {
+      const handlers = new Map<string, (_event: unknown, payload?: unknown) => unknown>()
+      let release!: (value: { intent: 'chat'; music: null; reply: string }) => void
+      let emit!: (text: string) => void
+      const provider = {
+        sendMessage: vi.fn(async () => ({ intent: 'chat' as const, music: null, reply: '新的回答' })),
+        streamMessage: vi.fn((_messages: unknown, callbacks: { onChunk: (text: string) => void }) => {
+          emit = callbacks.onChunk
+          return new Promise<{ intent: 'chat'; music: null; reply: string }>(resolve => { release = resolve })
+        })
+      }
+      const ended = vi.fn()
+      registerChatHandlers({ handle: (name, handler) => { handlers.set(name, handler) } }, provider,
+        undefined, new R1Conversations(db), undefined, undefined, undefined, undefined, ended)
+      const sent: unknown[] = []
+      const pending = handlers.get('chat.streamMessage')!({ sender: {
+        send: (_name: string, chunk: unknown) => sent.push(chunk)
+      } }, { text: '第一轮', requestId: 'first' })
+      expect(handlers.get('chat.stopResponse')!(null)).toMatchObject({ ok: true, data: { stopped: true } })
+      emit('过期内容')
+      release({ intent: 'chat', music: null, reply: '旧回答' })
+      expect(await pending).toMatchObject({ ok: false, error: { code: 'RESPONSE_STOPPED' } })
+      expect(sent).toEqual([{ done: true, requestId: 'first', error: {
+        code: 'RESPONSE_STOPPED', message: expect.any(String)
+      } }])
+      expect(ended).not.toHaveBeenCalled()
+      expect(await handlers.get('chat.sendMessage')!(null, { text: '下一轮' }))
+        .toMatchObject({ ok: true, data: { reply: '新的回答' } })
+      expect(db.prepare("SELECT body FROM messages WHERE role = 'assistant'").all())
+        .toEqual([{ body: '新的回答' }])
+    } finally { db.close() }
+  })
+
   it('uses the current versioned persona on the next conversation turn', async () => {
     const db = openR1Database(':memory:')
     try {

@@ -14,6 +14,8 @@ import type { R1PromptAssets } from '../r1/promptAssets.js'
 import type { R1MemoryStore } from '../r1/memory.js'
 import type { R1SessionMode } from '../r1/sessionMode.js'
 import { R1ModelRequestBoundary } from '../r1/modelBoundary.js'
+import type { R1ConversationDriver } from '../r1/conversationDriver.js'
+import type { SessionMessage } from '../r1/conversations.js'
 
 type AppResult<T> =
   | {
@@ -38,6 +40,7 @@ type ElectronRuntime = {
 
 type ChatPayload = {
   text: string
+  requestId?: string
 }
 
 const MAX_MEMORY_MESSAGES = 40
@@ -65,7 +68,8 @@ function fail(code: string, message: string): AppResult<never> {
 function isChatPayload(payload: unknown): payload is ChatPayload {
   const value = payload as ChatPayload
 
-  return typeof value?.text === 'string' && value.text.trim().length > 0
+  return typeof value?.text === 'string' && value.text.trim().length > 0 &&
+    (value.requestId === undefined || typeof value.requestId === 'string' && value.requestId.length > 0 && value.requestId.length <= 160)
 }
 
 function getIpcMain(): IpcMainLike {
@@ -101,6 +105,7 @@ function createLlmMessages(text: string, systemPrompt: string): ChatMessage[] {
 }
 
 function normalizeChatError(error: unknown): { code: string; message: string } {
+  if (error instanceof Error && error.message === 'RESPONSE_STOPPED') return { code: 'RESPONSE_STOPPED', message: '已停止当前回答。' }
   if (error instanceof Error && error.message === 'SESSION_CHANGED') {
     return { code: 'SESSION_CHANGED', message: '会话已切换，旧回答已丢弃。' }
   }
@@ -126,7 +131,8 @@ export function registerChatHandlers(
   promptAssets?: R1PromptAssets,
   memoryStore?: R1MemoryStore,
   sessionMode?: R1SessionMode,
-  onSessionEnded: (sessionId: string, temporary: boolean) => void = () => undefined
+  onSessionEnded: (sessionId: string, temporary: boolean) => void = () => undefined,
+  conversationDriver?: R1ConversationDriver
 ): void {
   clearMemory()
   let activeSystemPrompt: string | null = null
@@ -137,6 +143,11 @@ export function registerChatHandlers(
   let sessionId = conversations?.start(false) ?? null
   if (sessionMode) sessionMode.sessionId = sessionId
   let sessionEpoch = 0
+  let responseGeneration = 0
+  let responseController: AbortController | null = null
+  function beginResponse(): void {
+    responseController?.abort(); responseController = new AbortController(); responseGeneration++
+  }
   function endCurrentSession(): void {
     if (conversations && sessionId) {
       onSessionEnded(sessionId, temporary)
@@ -145,23 +156,27 @@ export function registerChatHandlers(
   }
 
   function captureRequest() {
-    return { epoch: sessionEpoch, personaVersion: personaStore?.get().version,
+    return { epoch: sessionEpoch, responseGeneration, signal: responseController?.signal, personaVersion: personaStore?.get().version,
       deletionEpoch: memoryStore?.currentDeletionEpoch() }
   }
   function requestIsCurrent(request: ReturnType<typeof captureRequest>): boolean {
-    return request.epoch === sessionEpoch &&
+    return request.epoch === sessionEpoch && request.responseGeneration === responseGeneration &&
       request.personaVersion === personaStore?.get().version &&
       request.deletionEpoch === memoryStore?.currentDeletionEpoch()
   }
+  function staleError(request: ReturnType<typeof captureRequest>): Error {
+    return new Error(request.epoch === sessionEpoch && request.personaVersion === personaStore?.get().version &&
+      request.deletionEpoch === memoryStore?.currentDeletionEpoch() ? 'RESPONSE_STOPPED' : 'SESSION_CHANGED')
+  }
 
-  function persistTurn(text: string, reply: string, turnId: string): void {
+  function persistTurn(text: string, reply: string, turnId: string, userStored = false): void {
     if (!conversations || !sessionId) return
-    conversations.append({ sessionId, turnId, role: 'user', body: text, status: 'final' })
+    if (!userStored) conversations.append({ sessionId, turnId, role: 'user', body: text, status: 'final' })
     conversations.append({ sessionId, turnId, responseId: randomUUID(), role: 'assistant',
       body: reply, status: 'generated' })
   }
 
-  function getSystemPrompt(turnId: string | null = null): { text: string; boundary?: R1ModelRequestBoundary } {
+  function getSystemPrompt(turnId: string | null = null): { text: string; boundary?: R1ModelRequestBoundary; context?: Record<string, unknown> } {
     if (personaStore && promptAssets) {
       const persona = personaStore.get()
       const deletionEpoch = memoryStore?.currentDeletionEpoch() ?? 0
@@ -177,7 +192,7 @@ export function registerChatHandlers(
       }
       activePersonaVersion = persona.version
       activeDeletionEpoch = deletionEpoch
-      const boundary = new R1ModelRequestBoundary(promptAssets, persona, {
+      const context = {
         sessionId, sessionGeneration: sessionEpoch + 1, turnId,
         currentTime: new Date().toISOString(),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -186,8 +201,9 @@ export function registerChatHandlers(
         deletionEpoch,
         selectedEntity: null, availableToolAliases: [], loadedSkillIds: ['SK01'],
         recentTurns: [], memories: [], activeTasks: []
-      })
-      return { text: boundary.systemText, boundary }
+      }
+      const boundary = new R1ModelRequestBoundary(promptAssets, persona, context)
+      return { text: boundary.systemText, boundary, context }
     }
     const systemPrompt = configStore.getConfig().persona.systemPrompt
 
@@ -204,6 +220,19 @@ export function registerChatHandlers(
     activeSystemPrompt = systemPrompt
     return { text: systemPrompt }
   }
+  function storeUser(text: string, turnId: string): SessionMessage | undefined {
+    return conversationDriver && conversations && sessionId
+      ? conversations.append({ sessionId, turnId, role: 'user', body: text, status: 'final' }) : undefined
+  }
+  async function controlledReply(source: SessionMessage, messages: ChatMessage[], context: Record<string, unknown>,
+    request: ReturnType<typeof captureRequest>): Promise<AssistantOutput> {
+    return conversationDriver!.reply({ messages, context: { ...context,
+      recentTurns: conversations!.messages(source.sessionId).filter(message => message.role !== 'system').slice(-24).map(message => ({
+        turnId: message.turnId, role: message.role, text: message.body, heardText: null,
+        status: message.status === 'interrupted' ? 'interrupted' : 'valid'
+      })) }, scope: { source, temporary, timezone: context.timezone as string, persistenceConfirmed: false,
+      signal: request.signal, assertCurrent() { if (!requestIsCurrent(request)) throw staleError(request) } } })
+  }
 
   ipc.handle('chat.setTemporary', (_event, payload) => {
     if (!conversations || typeof (payload as { enabled?: unknown })?.enabled !== 'boolean') {
@@ -212,6 +241,7 @@ export function registerChatHandlers(
     const enabled = (payload as { enabled: boolean }).enabled
     if (enabled === temporary) return ok({ temporary })
     clearMemory()
+    responseController?.abort()
     sessionEpoch += 1
     endCurrentSession()
     temporary = enabled
@@ -220,8 +250,13 @@ export function registerChatHandlers(
     if (sessionMode) sessionMode.sessionId = sessionId
     return ok({ temporary })
   })
+  ipc.handle('chat.stopResponse', () => {
+    responseController?.abort(); responseGeneration++
+    return ok({ stopped: true })
+  })
 
   ipc.handle('chat.greeting', async (): Promise<AppResult<AssistantOutput>> => {
+    beginResponse()
     const instructions = getSystemPrompt()
     const request = captureRequest()
     try {
@@ -234,7 +269,7 @@ export function registerChatHandlers(
       if (!requestIsCurrent(request)) throw new Error('SESSION_CHANGED')
       return ok({ intent: 'chat', music: null, reply: result.reply })
     } catch (error) {
-      const normalized = normalizeChatError(error)
+      const normalized = normalizeChatError(requestIsCurrent(request) ? error : staleError(request))
       return fail(normalized.code, normalized.message)
     }
   })
@@ -245,16 +280,19 @@ export function registerChatHandlers(
     }
 
     const text = payload.text.trim()
+    beginResponse()
     const turnId = randomUUID()
     const instructions = getSystemPrompt(turnId)
     const request = captureRequest()
 
     try {
       const messages = createLlmMessages(text, instructions.text)
-      const result = instructions.boundary ? await provider.sendMessage(messages, instructions.boundary)
+      const source = storeUser(text, turnId)
+      const result = source && instructions.context ? await controlledReply(source, messages, instructions.context, request)
+        : instructions.boundary ? await provider.sendMessage(messages, instructions.boundary)
         : await provider.sendMessage(messages)
       if (!requestIsCurrent(request)) throw new Error('SESSION_CHANGED')
-      persistTurn(text, result.reply, turnId)
+      persistTurn(text, result.reply, turnId, Boolean(source))
 
       appendMemory({
         content: text,
@@ -267,7 +305,7 @@ export function registerChatHandlers(
 
       return ok(result)
     } catch (error) {
-      const normalized = normalizeChatError(error)
+      const normalized = normalizeChatError(requestIsCurrent(request) ? error : staleError(request))
       return fail(normalized.code, normalized.message)
     }
   })
@@ -278,26 +316,31 @@ export function registerChatHandlers(
     }
 
     const text = payload.text.trim()
+    beginResponse()
     const turnId = randomUUID()
     const instructions = getSystemPrompt(turnId)
     const request = captureRequest()
     const sender = (event as { sender?: { send(channel: string, data: unknown): void } } | null)?.sender
+    const requestId = payload.requestId
 
     function pushChunk(chunk: unknown): void {
-      if (requestIsCurrent(request)) sender?.send('chat.streamChunk', chunk)
+      if (requestIsCurrent(request)) sender?.send('chat.streamChunk', requestId
+        ? { ...(chunk as object), requestId } : chunk)
     }
 
     try {
       const messages = createLlmMessages(text, instructions.text)
+      const source = storeUser(text, turnId)
       const callbacks = {
         onChunk: (delta: string) => pushChunk({ delta }),
         onRawChunk: () => pushChunk({ diagnostic: 'llm_raw_delta' }),
         onResponseStart: () => pushChunk({ diagnostic: 'llm_response_start' })
       }
-      const result = instructions.boundary ? await provider.streamMessage(messages, callbacks, instructions.boundary)
+      const result = source && instructions.context ? await controlledReply(source, messages, instructions.context, request)
+        : instructions.boundary ? await provider.streamMessage(messages, callbacks, instructions.boundary)
         : await provider.streamMessage(messages, callbacks)
       if (!requestIsCurrent(request)) throw new Error('SESSION_CHANGED')
-      persistTurn(text, result.reply, turnId)
+      persistTurn(text, result.reply, turnId, Boolean(source))
 
       appendMemory({
         content: text,
@@ -317,8 +360,8 @@ export function registerChatHandlers(
 
       return ok(result)
     } catch (error) {
-      const normalized = normalizeChatError(error)
-      sender?.send('chat.streamChunk', { done: true, error: normalized })
+      const normalized = normalizeChatError(requestIsCurrent(request) ? error : staleError(request))
+      sender?.send('chat.streamChunk', { done: true, error: normalized, ...(payload.requestId ? { requestId: payload.requestId } : {}) })
       return fail(normalized.code, normalized.message)
     }
   })

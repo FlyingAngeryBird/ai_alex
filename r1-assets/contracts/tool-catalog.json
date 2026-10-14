@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "2.0.0",
+  "schemaVersion": "2.1.0",
   "businessTools": [
     {
       "name": "memory.recall",
@@ -5051,6 +5051,108 @@
               "maxLength": 160
             },
             "maxItems": 50
+          },
+          "delegation": {
+            "type": "object",
+            "description": "只声明当前用户目标所需的委托范围，不自行扩大目标；程序验证实现、频道、来源与临时保存确认。省略时仅开放只读资料和计划。",
+            "properties": {
+              "toolAliases": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "memory_recall",
+                    "memory_remember",
+                    "memory_update",
+                    "memory_forget",
+                    "web_search",
+                    "web_read_page",
+                    "notes_create",
+                    "notes_list",
+                    "notes_update",
+                    "notes_complete",
+                    "notes_delete",
+                    "notes_export",
+                    "reminders_create",
+                    "reminders_list",
+                    "reminders_reschedule",
+                    "reminders_cancel",
+                    "focus_start",
+                    "focus_get_state",
+                    "focus_pause",
+                    "focus_resume",
+                    "focus_stop",
+                    "music_search",
+                    "music_get_state",
+                    "music_play",
+                    "music_pause",
+                    "music_resume",
+                    "music_next",
+                    "music_seek",
+                    "music_set_volume",
+                    "music_queue",
+                    "music_favorite",
+                    "music_feedback",
+                    "read_file",
+                    "write_todos"
+                  ]
+                },
+                "maxItems": 40
+              },
+              "requiredActions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "alias": {
+                      "type": "string",
+                      "enum": [
+                        "memory_remember",
+                        "memory_update",
+                        "memory_forget",
+                        "notes_create",
+                        "notes_update",
+                        "notes_complete",
+                        "notes_delete",
+                        "notes_export",
+                        "reminders_create",
+                        "reminders_reschedule",
+                        "reminders_cancel",
+                        "focus_start",
+                        "focus_pause",
+                        "focus_resume",
+                        "focus_stop",
+                        "music_play",
+                        "music_pause",
+                        "music_resume",
+                        "music_next",
+                        "music_seek",
+                        "music_set_volume",
+                        "music_queue",
+                        "music_favorite",
+                        "music_feedback"
+                      ]
+                    },
+                    "minimumCount": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 50
+                    }
+                  },
+                  "required": [
+                    "alias",
+                    "minimumCount"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 20
+              }
+            },
+            "required": [
+              "toolAliases",
+              "requiredActions"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
@@ -5381,6 +5483,108 @@
               "maxLength": 160
             },
             "maxItems": 50
+          },
+          "delegation": {
+            "type": "object",
+            "description": "只声明当前用户目标所需的委托范围，不自行扩大目标；程序验证实现、频道、来源与临时保存确认。省略时仅开放只读资料和计划。",
+            "properties": {
+              "toolAliases": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "memory_recall",
+                    "memory_remember",
+                    "memory_update",
+                    "memory_forget",
+                    "web_search",
+                    "web_read_page",
+                    "notes_create",
+                    "notes_list",
+                    "notes_update",
+                    "notes_complete",
+                    "notes_delete",
+                    "notes_export",
+                    "reminders_create",
+                    "reminders_list",
+                    "reminders_reschedule",
+                    "reminders_cancel",
+                    "focus_start",
+                    "focus_get_state",
+                    "focus_pause",
+                    "focus_resume",
+                    "focus_stop",
+                    "music_search",
+                    "music_get_state",
+                    "music_play",
+                    "music_pause",
+                    "music_resume",
+                    "music_next",
+                    "music_seek",
+                    "music_set_volume",
+                    "music_queue",
+                    "music_favorite",
+                    "music_feedback",
+                    "read_file",
+                    "write_todos"
+                  ]
+                },
+                "maxItems": 40
+              },
+              "requiredActions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "alias": {
+                      "type": "string",
+                      "enum": [
+                        "memory_remember",
+                        "memory_update",
+                        "memory_forget",
+                        "notes_create",
+                        "notes_update",
+                        "notes_complete",
+                        "notes_delete",
+                        "notes_export",
+                        "reminders_create",
+                        "reminders_reschedule",
+                        "reminders_cancel",
+                        "focus_start",
+                        "focus_pause",
+                        "focus_resume",
+                        "focus_stop",
+                        "music_play",
+                        "music_pause",
+                        "music_resume",
+                        "music_next",
+                        "music_seek",
+                        "music_set_volume",
+                        "music_queue",
+                        "music_favorite",
+                        "music_feedback"
+                      ]
+                    },
+                    "minimumCount": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 50
+                    }
+                  },
+                  "required": [
+                    "alias",
+                    "minimumCount"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 20
+              }
+            },
+            "required": [
+              "toolAliases",
+              "requiredActions"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [

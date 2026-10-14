@@ -128,6 +128,16 @@ export class R1TaskSupervisor {
       ? record.temporary && record.checkpoint.source.sessionId === temporarySessionId : !record.temporary)
       .map(record => this.get(record.taskId))
   }
+  contextIsCurrent(taskId: string): boolean {
+    const record = this.checked(taskId)
+    return record.checkpoint.deletionEpoch === this.deletionEpoch() && !record.checkpoint.sourceRefs.some(ref =>
+      Boolean(this.db.prepare('SELECT 1 FROM source_suppression WHERE source_ref = ?').get(ref)))
+  }
+  modelView(taskId: string): R1Task {
+    const task = this.get(taskId)
+    return this.contextIsCurrent(taskId) ? task : { ...task, goal: '任务上下文已变化，需要重新提供条件。', constraints: [],
+      progressBrief: '需要核对当前条件。', result: null, resultId: null }
+  }
   onChanged(listener: (event: TaskEvent) => void): () => void {
     this.listeners.add(listener); return () => { this.listeners.delete(listener) }
   }
@@ -596,8 +606,10 @@ export class R1TaskSupervisor {
     record.checkpoint.progressBrief = '准备继续，先核对已提交的步骤。'
     this.persist(record); this.emit(record, 'accepted'); return this.get(taskId)
   }
-  steer(input: { taskId: string; expectedGoalVersion: number; goal: string; constraints: string[]; sourceMessageId: string }): R1Task {
+  steer(input: { taskId: string; expectedGoalVersion: number; goal: string; constraints: string[]; sourceMessageId: string;
+    authorizedAliases?: string[]; requiredActions?: Array<{ alias: string; minimumCount: number }> }): R1Task {
     const record = this.checked(input.taskId, input.expectedGoalVersion)
+    if (record.assetReleaseId !== this.assets.releaseId) throw new Error('TASK_ASSET_RELEASE_UNAVAILABLE')
     if (['succeeded', 'failed', 'cancelled'].includes(record.status)) throw new Error('TASK_INVALID_STATE')
     const source = this.source(input.sourceMessageId)
     if (source.temporary !== record.temporary || (record.temporary && source.sessionId !== record.checkpoint.source.sessionId)) {
@@ -606,14 +618,24 @@ export class R1TaskSupervisor {
     requireText(input.goal, 2000, 'TASK_GOAL_INVALID')
     if (!Array.isArray(input.constraints) || input.constraints.length > 50) throw new Error('TASK_CONSTRAINT_INVALID')
     input.constraints.forEach(value => requireText(value, 500, 'TASK_CONSTRAINT_INVALID'))
+    if (input.authorizedAliases) {
+      this.assets.exposeTools({ channel: 'task', loadedSkillIds: [], authorizedAliases: input.authorizedAliases, temporary: record.temporary })
+      if ((input.requiredActions ?? []).some(action => !input.authorizedAliases!.includes(action.alias) ||
+        !Number.isSafeInteger(action.minimumCount) || action.minimumCount < 1 || action.minimumCount > 50)) throw new Error('TASK_REQUIREMENTS_INVALID')
+    }
     const previousStatus = record.status
     this.endRun(record, 'superseded')
     record.goal = input.goal; record.constraints = [...input.constraints]; record.goalVersion++
+    if (input.authorizedAliases) {
+      record.checkpoint.authorizedAliases = [...input.authorizedAliases]
+      record.checkpoint.requiredActions = structuredClone(input.requiredActions ?? [])
+    }
     record.checkpoint.steerEventId = randomUUID()
     record.checkpoint.contextVersion++; record.checkpoint.deletionEpoch = this.deletionEpoch()
     source.timezone = record.checkpoint.source.timezone; record.checkpoint.source = source
     record.checkpoint.sourceRefs = [source.messageId]; record.checkpoint.observations = [{ refId: source.messageId,
-      kind: 'source', version: 1, summary: JSON.stringify({ turnId: source.turnId, createdAt: source.createdAt, timezone: source.timezone }),
+      kind: 'source', version: 1, summary: JSON.stringify({ turnId: source.turnId, createdAt: source.createdAt, timezone: source.timezone,
+        requiredActions: record.checkpoint.requiredActions ?? [] }),
       resourcePath: `/task/${record.taskId}/source-turn.json` }]
     record.checkpoint.runId = null; record.checkpoint.stopRequested = null
     delete record.checkpoint.result; delete record.checkpoint.publicationRunId

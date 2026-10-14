@@ -1,6 +1,6 @@
 {
-  "releaseId": "seamo-ai-r1-agent-assets-2.0.2",
-  "schemaVersion": "2.0.0",
+  "releaseId": "seamo-ai-r1-agent-assets-2.1.0",
+  "schemaVersion": "2.1.0",
   "providerPolicy": {
     "primary": "volcengine",
     "crossProviderFallback": false,

@@ -5,6 +5,8 @@ import MusicImmersiveView from '@/components/MusicImmersiveView.vue'
 import ParticleSphere from '@/components/ParticleSphere.vue'
 import R1SettingsPanel from '@/components/R1SettingsPanel.vue'
 import R1MemoryPanel from '@/components/R1MemoryPanel.vue'
+import R1TaskPanel from '@/components/R1TaskPanel.vue'
+import { useTasks } from '@/composables/useTasks'
 import R1HistoryPanel from '@/components/R1HistoryPanel.vue'
 import R1FocusChip from '@/components/R1FocusChip.vue'
 import R1FocusDialog from '@/components/R1FocusDialog.vue'
@@ -86,6 +88,13 @@ const panelCollapsed = ref(false)
 const spaceHeld = ref(false)
 const settingsOpen = ref(false)
 const itemsOpen = ref(false)
+const taskState = useTasks(window.seamoR1.tasks)
+const taskOpen = ref(false)
+function openTask(): void {
+  closePanels()
+  if (!taskState.selected.value) taskState.selectedId.value = taskState.tasks.value.at(-1)?.taskId ?? null
+  taskOpen.value = true
+}
 const searchOpen = ref(false)
 const searchEverOpened = ref(false)
 const memoryOpen = ref(false)
@@ -100,6 +109,7 @@ const serviceLabel = computed(() => credentialStatus.value?.VOLCENGINE_ARK_API_K
   credentialStatus.value?.VOLCENGINE_ARK_MODEL ? '对话服务已配置 · 实际连接以请求结果为准' : '对话服务未配置')
 
 function openPanel(panel: 'settings' | 'items' | 'search' | 'memory' | 'history'): void {
+  taskOpen.value = false
   settingsOpen.value = panel === 'settings'
   itemsOpen.value = panel === 'items'
   searchOpen.value = panel === 'search'
@@ -109,6 +119,7 @@ function openPanel(panel: 'settings' | 'items' | 'search' | 'memory' | 'history'
 }
 
 function closePanels(): void {
+  taskOpen.value = false
   settingsOpen.value = false
   itemsOpen.value = false
   searchOpen.value = false
@@ -388,6 +399,12 @@ function scheduleAutoListenGraceFinish(): void {
     conversation.setAutoListenState('finalizing')
     void finishActiveVoiceCapture()
   }, 1120)
+}
+
+function stopCurrentResponse(): void {
+  conversation.stopCurrentReply()
+  void window.lingli.invoke('chat.stopResponse')
+  releaseAssistantAudio(true)
 }
 
 function releaseAssistantAudio(resumeAutoListen = false): void {
@@ -789,6 +806,8 @@ async function handleToggleTemporary(): Promise<void> {
   releaseAssistantAudio()
   conversation.resetConversation()
   temporaryMode.value = result.data.temporary
+  taskState.changeScope()
+  taskOpen.value = false
   conversation.addSystemMessage(temporaryMode.value
     ? '已进入临时对话。这里的聊天不会保存，也不会读取长期记忆。'
     : '已退出临时对话。刚才的临时聊天已清除。')
@@ -805,6 +824,7 @@ async function handlePreviewVoice(voiceId: string): Promise<void> {
 }
 
 onMounted(() => {
+  taskState.start()
   void Promise.all([window.seamoR1.credentials.status(), window.seamoR1.persona.get()]).then(([credentials, currentPersona]) => {
     if (credentials.ok) credentialStatus.value = credentials.data
     if (currentPersona.ok) persona.value = currentPersona.data
@@ -812,8 +832,12 @@ onMounted(() => {
     if (!credentials.ok || !currentPersona.ok ||
       !credentials.data.VOLCENGINE_ARK_API_KEY || !credentials.data.VOLCENGINE_ARK_MODEL) return
     startupGreetingTimer = window.setTimeout(() => {
+      if (conversation.messages.value.length || conversation.isListening.value) return
       void conversation.generateOpeningGreeting().then(() => {
-        void speakAssistantReply(conversation.messages.value[0]?.text)
+        const greeting = conversation.messages.value[0]
+        if (greeting?.role === 'assistant' && conversation.messages.value.length === 1) {
+          void speakAssistantReply(greeting.text)
+        }
       })
     }, 900)
   })
@@ -835,6 +859,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  taskState.dispose()
   void pushToTalk.dispose()
   window.removeEventListener('blur', handleWindowBlur)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
@@ -855,12 +880,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="r1-shell" :data-view="viewMode" :class="{ 'r1-has-side-panel': hasSidePanel, 'r1-has-wide-panel': searchOpen }">
+  <main class="r1-shell" :data-view="viewMode" :class="{ 'r1-has-side-panel': hasSidePanel, 'r1-has-wide-panel': searchOpen || taskOpen }">
     <header class="r1-app-header">
       <button class="r1-brand" type="button" @click="music.closeImmersive(); closePanels()"
         aria-label="返回 Seamo 陪伴首页"><AudioLines :size="25" /><span>Seamo <em>AI</em></span></button>
       <time>{{ currentDate }}</time>
-      <div class="r1-header-right"><span class="r1-mic-state"><Mic v-if="conversation.isListening.value" :size="14" /><MicOff v-else :size="14" />{{ conversation.isListening.value ? '正在收音' : '麦克风未开启' }}</span></div>
+      <div class="r1-header-right"><button v-if="taskState.tasks.value.length && !taskOpen" type="button" class="r1-header-task" @click="openTask">查看委托</button><span class="r1-mic-state"><Mic v-if="conversation.isListening.value" :size="14" /><MicOff v-else :size="14" />{{ conversation.isListening.value ? '正在收音' : '麦克风未开启' }}</span></div>
     </header>
     <nav class="r1-rail" aria-label="主导航">
       <button type="button" :aria-current="viewMode === 'conversation' && !hasSidePanel && !searchOpen ? 'page' : undefined"
@@ -933,9 +958,13 @@ onBeforeUnmount(() => {
         :service-label="serviceLabel" :music-active="viewMode === 'music'"
         @send="handleSendText" @voice-press-start="beginPushToTalk()" @voice-press-end="endPushToTalk()" @voice-press-cancel="cancelPushToTalk"
         @toggle-temporary="handleToggleTemporary" @toggle-auto-listen="toggleAutoListen"
-        @stop-speech="releaseAssistantAudio(true)" />
+        @stop-speech="stopCurrentResponse" />
     </section>
 
+    <R1TaskPanel v-show="taskOpen" :tasks="taskState.tasks.value" :selected="taskState.selected.value"
+      :busy="taskState.busy.value" :loading="taskState.loading.value" :error="taskState.error.value"
+      @close="closePanels" @select="(id) => { taskState.selectedId.value = id }"
+      @control="taskState.control" @retry="taskState.refresh" />
     <R1SettingsPanel
       v-if="settingsOpen"
       :persona="persona"

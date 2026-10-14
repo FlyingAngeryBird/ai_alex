@@ -37,6 +37,21 @@ describe('UI prototype state', () => {
     ])
   })
 
+  it('drops a stopped reply arriving after the user stops generation', async () => {
+    let finish!: (result: unknown) => void
+    vi.stubGlobal('window', { lingli: {
+      invoke: vi.fn(() => new Promise(resolve => { finish = resolve })),
+      on: vi.fn(() => () => undefined)
+    } })
+    const conversation = useConversation({ delayMs: 0 })
+    const pending = conversation.stopListening('请继续')
+    conversation.stopCurrentReply()
+    finish({ ok: true, data: { intent: 'chat', music: null, reply: '迟到的回答' } })
+    expect((await pending).reply).toBe('')
+    expect(conversation.messages.value.map(message => message.text)).toEqual(['请继续'])
+    expect(conversation.particleState.value).toBe('idle')
+  })
+
   it('does not fabricate assistant replies when the desktop bridge is unavailable', async () => {
     vi.stubGlobal('window', {})
     const conversation = useConversation({ delayMs: 0 })
@@ -173,7 +188,7 @@ describe('UI prototype state', () => {
     expect(result.reply).toBe('我听见了，我们慢慢聊。')
     expect(conversation.messages.value.at(-1)?.text).toBe('我听见了，我们慢慢聊。')
     expect(globalThis.window.lingli.invoke).toHaveBeenCalledWith('chat.streamMessage', {
-      text: '我今天有点累'
+      text: '我今天有点累', requestId: expect.any(String)
     })
   })
 

@@ -8,6 +8,7 @@ export const exposedChannels = [
   'chat.greeting',
   'chat.streamMessage',
   'chat.setTemporary',
+  'chat.stopResponse',
   'config.get',
   'config.update',
   'music.addSearchHistory',

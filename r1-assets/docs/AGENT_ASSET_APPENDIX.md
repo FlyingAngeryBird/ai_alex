@@ -108,7 +108,7 @@ PR07/PR09的speakAllowed由协调器决定；false时不发起用于主动播音
 
 ### 22.4.03 PR03 实时交流和纯文字交流的决策指令
 
-实际文件：prompts/conversation.md，版本1.0.1。
+实际文件：prompts/conversation.md，版本1.0.2。
 
 ```text
 你负责持续理解用户并统一回应。当前能力目录如下，它是能力说明，不是固定关键词路由：
@@ -119,6 +119,7 @@ PR07/PR09的speakAllowed由协调器决定；false时不发起用于主动播音
 “这个”“第二个”“接着昨天聊”先依据当前选中对象、最近有效产物和上下文中的候选身份定位；有多个合理对象时问一项。不要把未播出的后半段当作用户已听过。
 SK01正文由应用常驻加载。简单暂停、继续、下一首、定位、音量及状态查询按已声明即时工具规则直接处理。其他领域动作需要相应Skill正文；若本版本尚未加载，先调用load_skill，读取返回内容后再决定工具组合。Skill加载不构成行动授权。
 明确一步动作使用即时工具。联网查证、候选比较、工作产物生成或需要多步观察的组合目标调用start_task，传递目标、条件和必要来源；受理后可继续交流，不等整个任务完成。
+后台委托使用delegation声明本轮用户目标需要的task工具别名与必要副作用数量；必要动作必须包含在所声明工具范围内。不要将“可以调用”当作“必须执行”，不授予用户没有委托的保存、提醒或媒体动作。省略委托范围时后台仅能读取资料和写内部计划；程序会拒绝未实现或不属于task频道的工具。修改目标后重新声明所需范围，已提交对象不会因此撤销。
 查询已有任务、修改条件、暂停和取消使用对应任务工具；“先别说”只停止当前回复，“别查了”才取消被指向的查询任务。指代不唯一时先澄清。
 所有动作按真实回执简短回复。awaiting_user只表示等待界面选择；accepted只表示已受理。查证来源和长结果放卡片，口头说关键结论。
 收到上下文更新后，以最新goalVersion和有效记忆为准。任务完成与提醒事件由协调器在可播时交给你，不能自行抢话。
@@ -586,8 +587,8 @@ TaskDraft只交付草稿和引用，Artifact ID由程序创建；memory-extract�
 | music.queue | music_queue | action＊, queueVersion＊, trackKeys＊, entryIds＊, orderedEntryIds＊ | state, resourceAttempts, failureReasons | write |
 | music.favorite | music_favorite | trackKey＊, favorite＊ | trackKey, favorite | write |
 | music.feedback | music_feedback | trackKey＊, feedback＊, scene | feedbackId, trackKey, feedback, scene | write |
-| tasks.startTask | start_task | goal＊, constraints＊, sourceRefs＊ | task | control |
-| tasks.steerTask | steer_task | taskId＊, expectedGoalVersion＊, patch＊, sourceRefs＊ | task | control |
+| tasks.startTask | start_task | goal＊, constraints＊, sourceRefs＊, delegation | task | control |
+| tasks.steerTask | steer_task | taskId＊, expectedGoalVersion＊, patch＊, sourceRefs＊, delegation | task | control |
 | tasks.pauseTask | pause_task | taskId＊, expectedGoalVersion＊ | task | control |
 | tasks.resumeTask | resume_task | taskId＊, expectedGoalVersion＊ | task | control |
 | tasks.cancelTask | cancel_task | taskId＊, expectedGoalVersion＊ | task | control |
@@ -1179,6 +1180,13 @@ runtime.defaults.json中的null仅用于不可杜撰的账号接入与SDK实测�
 ### 25.2 发布与迭代规则
 
 ### 资产与迭代规则
+#### DEC-R1-CONVERSATION-TASK-010：主会话的真实任务与委托范围
+- 原因：旧聊天只在回复结束后存用户消息，Task 无法在受理时取得真实来源；start_task 只有文本目标，无法分别核验工具委托和必要动作。
+- 影响：F01c、F03、F06a；主会话注册工具控制、当前原话绑定、直接事项与后台任务分离。start_task/steer_task 增加可选 delegation，程序校验支持范围、task 频道、来源及临时确认；不新增能力、关键词路由或模型角色。
+- 版本：工具 Schema 2.1.0、资产 2.1.0；PR03 1.0.2，其余 Prompt/Skill 不变。新增可选字段；旧字段省略时后台只读资料/计划，不能自动扩大写权限。
+- 验证：资产静态、主会话来源/当前性/同批 Skill 隔离、任务快速受理/控制、普通/临时访问、真实域回执及端到端请求检查；证据写入 docs/r1/2026-10-14-conversation-task-progress.md。
+- 回退：代码与资产一起退到 93a319a；不覆盖数据库和删除抑制，不自动把旧 Task 改为新 release。旧包归档/跨版本恢复和原生 M01 仍须继续实现及验收。
+
 #### DEC-R1-TASK-RUNNER-009：任务执行、真实回执与引用类型修正
 - 原因与 Bad Case：真实 M02 创建了便签后将 Item ID 当作 Artifact 基准；另一次只读 Skill 就标 completed；PR10 修复仍混用 call_id/actionId/entityId，结果被程序拒绝。
 - 影响：F03、F09、F10b；PR04/PR10 澄清已有对象类型和实际回执合同。程序受理时记录可信调用方提供的必要动作，不能由 M02 最终结果或网页自授；不新增关键词路由、额外模型或产品功能。
@@ -1240,8 +1248,8 @@ patch：表达澄清或修错且行为合同不变。minor：在已批准范围�
 
 ```json
 {
-  "releaseId": "seamo-ai-r1-agent-assets-2.0.2",
-  "schemaVersion": "2.0.0",
+  "releaseId": "seamo-ai-r1-agent-assets-2.1.0",
+  "schemaVersion": "2.1.0",
   "providerPolicy": {
     "primary": "volcengine",
     "crossProviderFallback": false,

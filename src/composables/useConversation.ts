@@ -91,7 +91,7 @@ async function requestAssistantReply(): Promise<ChatResponse> {
   }
 }
 
-type ChatStreamChunk =
+type ChatStreamChunk = { requestId?: string } & (
   | { delta: string }
   | { diagnostic: 'llm_raw_delta' | 'llm_response_start' }
   | {
@@ -100,7 +100,7 @@ type ChatStreamChunk =
       music?: ConversationResult['music']
       reply?: string
       error?: { code: string; message: string }
-    }
+    })
 
 async function streamAssistantReply(
   text: string,
@@ -122,6 +122,7 @@ async function streamAssistantReply(
   }
 
   return new Promise<ChatResponse>((resolve) => {
+    const requestId = globalThis.crypto.randomUUID()
     let resolved = false
 
     function finish(response: ChatResponse): void {
@@ -135,6 +136,7 @@ async function streamAssistantReply(
     }
 
     const unsubscribe = api.on<ChatStreamChunk>('chat.streamChunk', (chunk) => {
+      if (chunk.requestId && chunk.requestId !== requestId) return
       if ('done' in chunk) {
         if (chunk.error) {
           finish({
@@ -169,7 +171,7 @@ async function streamAssistantReply(
     })
 
     api
-      .invoke<ChatResponse>('chat.streamMessage', { text })
+      .invoke<ChatResponse>('chat.streamMessage', { text, requestId })
       .then((result) => {
         if (!result.ok) {
           finish({
@@ -206,6 +208,13 @@ export function useConversation(options: UseConversationOptions = {}) {
   const isListening = ref(false)
   const messages = ref<UiMessage[]>([])
   let conversationEpoch = 0
+
+  function stopCurrentReply(): void {
+    conversationEpoch += 1
+    messages.value = messages.value.filter(message => !(message.role === 'assistant' && !message.text))
+    particleState.value = 'idle'
+    audioLevel.value = 0.14
+  }
 
   function resetConversation(): void {
     conversationEpoch += 1
@@ -312,6 +321,7 @@ export function useConversation(options: UseConversationOptions = {}) {
     }
   ): Promise<ConversationResult> {
     if (!text.trim()) return cancelVoiceInput('没有可发送的文字，请重新输入或录音。')
+    stopCurrentReply()
     const requestEpoch = conversationEpoch
     if (!isListening.value) {
       startListening()
@@ -344,8 +354,8 @@ export function useConversation(options: UseConversationOptions = {}) {
         options?.onChunk?.(delta)
       },
       {
-        onRawChunk: options?.onRawChunk,
-        onResponseStart: options?.onResponseStart
+        onRawChunk: () => { if (requestEpoch === conversationEpoch) options?.onRawChunk?.() },
+        onResponseStart: () => { if (requestEpoch === conversationEpoch) options?.onResponseStart?.() }
       }
     )
 
@@ -375,6 +385,7 @@ export function useConversation(options: UseConversationOptions = {}) {
   }
 
   async function generateOpeningGreeting(): Promise<void> {
+    if (messages.value.length || isListening.value) return
     const requestEpoch = conversationEpoch
     const assistant = await requestAssistantReply()
 
@@ -402,6 +413,7 @@ export function useConversation(options: UseConversationOptions = {}) {
     particleState,
     generateOpeningGreeting,
     resetConversation,
+    stopCurrentReply,
     setAutoListenState,
     startListening,
     stopListening,

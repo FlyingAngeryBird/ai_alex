@@ -39,6 +39,7 @@ export type R1PromptAssets = {
   readSkillFile(filePath: string, offset?: number, limit?: number): {
     data: { path: string; content: string; offset: number; hasMore: boolean; assetReleaseId: string }; loadedSkillId: string | null
   }
+  loadSkill(skillId: string): { skillId: string; name: string; version: string; body: string; resourcePaths: string[] }
   compile(mode: string, variables: Record<string, unknown>, loadedSkillIds?: string[]): R1CompiledPrompt
   exposeTools(input: { channel: 'realtime' | 'task'; loadedSkillIds: string[];
     authorizedAliases: string[]; temporary: boolean }): R1ModelTool[]
@@ -232,6 +233,11 @@ export function loadR1PromptAssets(root: string): R1PromptAssets {
       const hasMore = offset + limit < lines.length
       return { data: { path: filePath, content, offset, hasMore, assetReleaseId: manifest.releaseId },
         loadedSkillId: filePath === `/${entry.path}` && offset === 0 && !hasMore ? entry.skillId : null }
+    },
+    loadSkill(skillId) {
+      const skill = skillById.get(skillId)
+      if (!skill) throw new Error('PROMPT_ASSET_SKILL_SCOPE_INVALID')
+      return { skillId, name: skill.name, version: skill.version, body: readVerified(skill.path), resourcePaths: skill.resourcePaths.map(path => `/${path}`) }
     },
     exposeTools({ channel, loadedSkillIds, authorizedAliases, temporary }) {
       if (!['realtime', 'task'].includes(channel)) throw new Error('MODEL_TOOL_CHANNEL_UNKNOWN')

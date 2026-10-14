@@ -35,6 +35,7 @@ import { R1TaskToolExecutor } from './r1/taskToolExecutor.js'
 import { R1TaskRunner } from './r1/taskRunner.js'
 import { R1Items } from './r1/items.js'
 import { createArkResponsesProvider } from './providers/arkResponsesProvider.js'
+import { R1ConversationDriver } from './r1/conversationDriver.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 let r1Database: R1Database | null = null
@@ -44,6 +45,7 @@ let r1Focus: R1Focus | null = null
 let r1Diagnostics: R1ServiceDiagnostics | null = null
 let r1Tasks: R1TaskSupervisor | null = null
 let r1TaskRunner: R1TaskRunner | null = null
+let r1ConversationDriver: R1ConversationDriver | null = null
 let r1Artifacts: R1Artifacts | null = null
 let r1Conversations: R1Conversations | null = null
 const r1SessionMode: R1SessionMode = { temporary: false }
@@ -118,9 +120,11 @@ void app.whenReady().then(async () => {
     })
     const vault = new CredentialVault(join(app.getPath('userData'), 'credentials.bin'))
     vault.load()
-    r1TaskRunner = new R1TaskRunner(r1Tasks, r1PromptAssets,
-      new R1TaskToolExecutor(r1Tasks, r1PromptAssets, new R1Items(r1Database)), r1Artifacts,
+    const taskTools = new R1TaskToolExecutor(r1Tasks, r1PromptAssets, new R1Items(r1Database))
+    r1TaskRunner = new R1TaskRunner(r1Tasks, r1PromptAssets, taskTools, r1Artifacts,
       createArkResponsesProvider(), () => new R1PersonaStore(r1Database!).get())
+    r1ConversationDriver = new R1ConversationDriver(r1Database, r1PromptAssets, r1Tasks, createArkResponsesProvider(),
+      () => new R1PersonaStore(r1Database!).get(), taskTools.implementedAliases)
     r1TaskRunner.start()
     importLegacyJson(r1Database, join(app.getPath('appData'), 'lingli'), 'lingli-json')
     importLegacyJson(r1Database, join(app.getPath('appData'), 'lingmo'), 'lingmo-json')
@@ -161,7 +165,7 @@ void app.whenReady().then(async () => {
       new R1PersonaStore(r1Database), r1PromptAssets ?? undefined,
       new R1MemoryStore(r1Database), r1SessionMode, (sessionId, temporary) => {
         if (temporary) { r1Tasks?.endTemporary(sessionId); r1Artifacts?.endTemporary(sessionId) }
-      })
+      }, r1ConversationDriver ?? undefined)
   }
   if (r1Database && !existsSync(configPath)) {
     const persona = r1Database.prepare('SELECT voice_id FROM persona WHERE id = 1')
