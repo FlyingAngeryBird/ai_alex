@@ -70,8 +70,9 @@ export class R1TaskRunner {
       if (response.calls.length) {
         // Validate against the original round's Skill exposure before executing any same-batch call.
         for (const call of response.calls) boundary.validateToolCall(call.name, JSON.parse(call.arguments))
-        const results = response.calls.map(call => ({ callId: call.call_id,
-          output: this.executor.execute(lease, call.name, JSON.parse(call.arguments), call.call_id) }))
+        const results = []
+        for (const call of response.calls) results.push({ callId: call.call_id,
+          output: await this.executor.executeAsync(lease, call.name, JSON.parse(call.arguments), call.call_id, signal) })
         rounds.push({ output: response.output, results })
         continue
       }

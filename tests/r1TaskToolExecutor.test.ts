@@ -112,3 +112,37 @@ describe('controlled internal task tools', () => {
     } finally { tasks.close(); db.close() }
   })
 })
+
+it('runs registered search through the task budget, records real sources, and drops results after cancellation', async () => {
+  const { createBraveSearchProvider } = await import('../electron/main/providers/braveSearchProvider')
+  const db = openR1Database(':memory:')
+  const conversations = new R1Conversations(db), sessionId = conversations.start()
+  const source = conversations.append({ sessionId, turnId: 'search-source', role: 'user', body: '查询安静的公园', status: 'final' })
+  const tasks = new R1TaskSupervisor(db, assets, () => 0)
+  let requests = 0, release: (() => void) | undefined
+  const provider = createBraveSearchProvider({ key: () => 'synthetic', fetcher: (async () => {
+    requests++
+    if (requests === 2) await new Promise<void>(resolve => { release = resolve })
+    return new Response(JSON.stringify({ web: { results: [{ title: '官方公园介绍', url: 'https://example.com/park', description: '搜索摘要，尚未读页面' }] } }), { status: 200 })
+  }) as typeof fetch })
+  const executor = new R1TaskToolExecutor(tasks, assets, undefined, provider)
+  try {
+    tasks.accept({ requestKey: 'search', sourceMessageId: source.messageId, timezone: 'Asia/Shanghai', goal: '查询公园',
+      constraints: [], authorizedAliases: ['read_file', 'web_search'], complexity: 'complex' })
+    const active = tasks.claimNext()!
+    executor.execute(active.lease, 'read_file', { file_path: '/skills/web-qa/SKILL.md' })
+    const result = await executor.executeAsync(active.lease, 'web_search', { query: '公园' }, 'call-one')
+    expect(result.status).toBe('succeeded')
+    const sources = result.data.sources as Array<{ sourceRef: string; readStatus: string }>
+    expect(sources[0].readStatus).toBe('not_read')
+    expect(tasks.beginDecision(active.lease).sourceRefs).toContain(sources[0].sourceRef)
+    expect(tasks.readReceipt(active.lease, result.actionId)).toEqual(result)
+    await executor.executeAsync(active.lease, 'web_search', { query: '公园' }, 'call-one')
+    expect(requests).toBe(1)
+    const pending = executor.executeAsync(active.lease, 'web_search', { query: '第二个地点' }, 'call-two')
+    tasks.cancel(active.lease.taskId, active.lease.goalVersion)
+    release?.()
+    await expect(pending).rejects.toThrow()
+    expect(db.prepare('SELECT COUNT(*) AS n FROM receipts WHERE task_id = ?').get(active.lease.taskId)).toMatchObject({ n: 2 })
+  } finally { tasks.close(); db.close() }
+})

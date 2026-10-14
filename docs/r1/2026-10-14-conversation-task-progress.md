@@ -59,3 +59,13 @@
 隔离 Electron 窗口使用真实 preload、IPC 与临时 SQLite：首次保存为待办，修改后更新同一 itemId，数据库只有一条待办且版本从 1 变为 2；撤销工作稿产生版本 3，不自动改动已保存待办。原生 TXT 保存对话框取消显示“已取消导出”；Markdown 保存到独立临时目录，界面显示“已导出版本 3”，读取实际文件确认标题、段落与版本 3 完全一致。测试入口为 tests/fixtures/artifact-runtime.mjs / artifact-runtime.html，不连接用户数据库。
 
 本检查点相关 13 项测试通过，涵盖迁移快照、冲突保护、同 ID 更新和文件导出。整体 334 项测试及生产构建已在本轮前通过，未因文档更新重复运行。完整原型视觉、语音局部修改、模型选区上下文以及 G0–G5 验收仍未完成。本提交仅为开发检查点，不创建阶段通过标签。
+
+## 任务联网查询接入
+
+changeId: DEC-R1-TASK-WEB-012，关联 F05a/F05c、G3。原有 Brave Search Provider 接入 TaskToolExecutor 的 web_search，TaskRunner 按已曝光工具批次先验证、再顺序等待执行。网络读操作开始前核验 lease/Skill/授权并消耗工具及查询预算；结束时再核验当前目标、删除版本和取消状态。结果回执、来源引用和候选观察一起保存；临时 Task 仍只在内存。相同协议 call_id 使用原回执，不再次请求搜索。
+
+返回来源 URL、标题、访问/查询时间和搜索摘要，readStatus 明确为 not_read；候选摘要字段标 unconfirmed，不冒充页面事实。日期范围/地点作为明确查询词传给 Provider，不声明供应商支持严格日期/地理过滤。主会话可通过已注册 delegation 授权 web_search；默认仍为读 Skill/计划，未经授权不自动增加联网权限。
+
+验证：原 TaskRunner 10 项检查通过；新增真实 Task/SQLite + Provider 合成 HTTP 响应用例验证来源与回执、同 call_id 不重复请求、取消后迟到结果不提交。首次用例 Skill 路径错误，按实际注册 web-qa 修复后相关文件 5 项通过；TypeScript 检查通过。本地合成响应不是真实搜索服务验收。
+
+仍需完成 web_read_page、完整 Evidence/候选比较、可见来源结果及失败步骤独立重试。查询读操作被取消/改目标后的旧结果已丢弃；中断动作的跨运行协调仍需统一恢复策略。本提交为开发检查点，无 G3 通过或正式发布声明。

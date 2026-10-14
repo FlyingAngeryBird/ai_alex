@@ -1,3 +1,4 @@
+import { createBraveSearchProvider } from './providers/braveSearchProvider.js'
 import { registerNativeVoiceHandlers } from './ipc/nativeVoiceHandlers.js'
 import { app, BrowserWindow, powerMonitor } from 'electron'
 import { dirname, join } from 'node:path'
@@ -122,7 +123,7 @@ void app.whenReady().then(async () => {
     })
     const vault = new CredentialVault(join(app.getPath('userData'), 'credentials.bin'))
     vault.load()
-    const taskTools = new R1TaskToolExecutor(r1Tasks, r1PromptAssets, new R1Items(r1Database))
+    const taskTools = new R1TaskToolExecutor(r1Tasks, r1PromptAssets, new R1Items(r1Database), createBraveSearchProvider())
     r1TaskRunner = new R1TaskRunner(r1Tasks, r1PromptAssets, taskTools, r1Artifacts,
       createArkResponsesProvider(), () => new R1PersonaStore(r1Database!).get())
     r1ConversationDriver = new R1ConversationDriver(r1Database, r1PromptAssets, r1Tasks, createArkResponsesProvider(),

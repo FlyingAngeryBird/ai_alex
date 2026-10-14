@@ -58,7 +58,7 @@ export function createBraveSearchProvider(options: {
   const now = options.now ?? (() => new Date())
 
   return {
-    async search(input: unknown): Promise<SearchResult> {
+    async search(input: unknown, signal?: AbortSignal): Promise<SearchResult> {
       const query = validateSearchQuery(input)
       const apiKey = key()?.trim()
       if (!apiKey) throw new SearchProviderError('SEARCH_NOT_CONFIGURED')
@@ -70,7 +70,7 @@ export function createBraveSearchProvider(options: {
       try {
         response = await fetcher(url, {
           headers: { 'Accept': 'application/json', 'x-subscription-token': apiKey },
-          signal: AbortSignal.timeout(12_000)
+          signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(12_000)]) : AbortSignal.timeout(12_000)
         })
       } catch { throw new SearchProviderError('SEARCH_NETWORK_FAILED') }
       if (response.status === 401 || response.status === 403) throw new SearchProviderError('SEARCH_AUTH_FAILED')

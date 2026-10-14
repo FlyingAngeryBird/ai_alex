@@ -1,3 +1,5 @@
+import { createBraveSearchProvider, SearchProviderError } from '../providers/braveSearchProvider.js'
+import { randomUUID } from 'node:crypto'
 import type { R1PromptAssets } from './promptAssets.js'
 import type { R1TaskSupervisor, TaskLease, TaskToolReceipt } from './taskSupervisor.js'
 import type { R1Items } from './items.js'
@@ -7,8 +9,26 @@ type PlanInput = Parameters<R1TaskSupervisor['updatePlan']>[1]
 export class R1TaskToolExecutor {
   readonly implementedAliases: readonly string[]
   constructor(private readonly tasks: R1TaskSupervisor, private readonly assets: R1PromptAssets,
-    private readonly items?: R1Items) {
-    this.implementedAliases = Object.freeze(['read_file', 'write_todos', ...(items ? ['notes_create'] : [])])
+    private readonly items?: R1Items, private readonly search?: ReturnType<typeof createBraveSearchProvider>) {
+    this.implementedAliases = Object.freeze(['read_file', 'write_todos', ...(items ? ['notes_create'] : []), ...(search ? ['web_search'] : [])])
+  }
+  async executeAsync(lease: TaskLease, alias: string, input: unknown, callId?: string, signal?: AbortSignal): Promise<TaskToolReceipt> {
+    if (alias !== 'web_search') return this.execute(lease, alias, input, callId)
+    if (!this.search) throw new Error('TASK_TOOL_IMPLEMENTATION_UNAVAILABLE')
+    return this.tasks.executeReadTool(lease, alias, input, async () => {
+      const args = input as { query: string; dateRange?: string | null; location?: string | null }
+      const query = [args.query, args.location, args.dateRange].filter(Boolean).join(' ')
+      let result: Awaited<ReturnType<typeof this.search.search>>
+      try { result = await this.search!.search(query, signal) }
+      catch (error) { throw new Error(error instanceof SearchProviderError ? error.code : 'SEARCH_REMOTE_FAILED') }
+      return { resultId: randomUUID(), query: result.query, queriedAt: result.queriedAtUtc,
+        sources: result.candidates.map(candidate => ({ sourceRef: `source:${candidate.candidateId}`, url: candidate.url,
+          title: candidate.title, publishedAt: candidate.pageDate, accessedAt: candidate.queriedAtUtc,
+          readStatus: 'not_read', snippet: candidate.snippet })),
+        candidates: result.candidates.map(candidate => ({ candidateId: candidate.candidateId,
+          label: [...candidate.title].slice(0, 200).join(''), sourceRefs: [`source:${candidate.candidateId}`],
+          fields: [{ key: 'search_summary', value: candidate.snippet, verification: 'unconfirmed', sourceRefs: [`source:${candidate.candidateId}`] }] })) }
+    }, callId)
   }
   execute(lease: TaskLease, alias: string, input: unknown, callId?: string): TaskToolReceipt {
     this.tasks.assertLease(lease)

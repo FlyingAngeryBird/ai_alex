@@ -346,6 +346,55 @@ export class R1TaskSupervisor {
     for (const event of events) for (const listener of this.listeners) { try { listener(structuredClone(event)) } catch { /* committed */ } }
     return structuredClone(output)
   }
+  /** External reads reserve authority/budget before I/O, then commit only against the same live lease. */
+  async executeReadTool(lease: TaskLease, alias: string, input: unknown,
+    run: () => Promise<Record<string, unknown>>, callId?: string): Promise<TaskToolReceipt> {
+    this.assertLease(lease)
+    this.assets.validateToolInput(alias, input)
+    if (alias !== 'web_search') throw new Error('TASK_EXTERNAL_READ_UNAVAILABLE')
+    if (callId !== undefined && (!callId || callId.length > 300)) throw new Error('TASK_TOOL_CALL_ID_INVALID')
+    const fingerprint = createHash('sha256').update(JSON.stringify(input)).digest('hex')
+    const actionId = this.consumeTool(lease, alias, callId ? { callId, fingerprint } : undefined)
+    const record = this.checked(lease.taskId)
+    if (record.checkpoint.receiptActionIds.includes(actionId)) return this.readReceipt(lease, actionId)
+    if (record.checkpoint.actions!.find(action => action.actionId === actionId)!.runId !== lease.runId) throw new Error('TASK_RECEIPT_RECONCILIATION_REQUIRED')
+    if (record.budget.searchQueriesRemaining < 1) throw new Error('TASK_SEARCH_BUDGET_EXHAUSTED')
+    record.budget.searchQueriesRemaining--; this.persist(record)
+    let receipt: TaskToolReceipt
+    try {
+      const data = await run()
+      receipt = { kind: 'receipt', actionId, tool: this.assets.toolDefinition(alias).name,
+        status: 'succeeded', entityId: null, entityVersion: null, data, errorCode: null, retryable: false, runId: lease.runId }
+      this.assets.validateToolOutput(alias, receipt)
+    } catch (error) {
+      const code = error instanceof Error && /^[A-Z][A-Z0-9_]{1,80}$/.test(error.message) ? error.message : 'SEARCH_REMOTE_FAILED'
+      receipt = { kind: 'receipt', actionId, tool: this.assets.toolDefinition(alias).name, status: 'failed',
+        entityId: null, entityVersion: null, data: {}, errorCode: code, retryable: code === 'SEARCH_NETWORK_FAILED', runId: lease.runId }
+    }
+    this.assertLease(lease)
+    const current = this.checked(lease.taskId), previous = structuredClone(current)
+    try {
+      inTransaction(this.db, () => {
+        this.storeLocalReceipt(lease, receipt)
+        if (receipt.status === 'succeeded') {
+          const sources = receipt.data.sources as Array<{ sourceRef: string; title: string }>
+          const candidates = receipt.data.candidates as Array<{ candidateId: string; label: string }>
+          const resourcePath = `/task/${lease.taskId}/receipts/${actionId}.json`
+          for (const source of sources) {
+            if (!current.checkpoint.sourceRefs.includes(source.sourceRef)) current.checkpoint.sourceRefs.push(source.sourceRef)
+            if (!current.checkpoint.observations.some(item => item.refId === source.sourceRef)) current.checkpoint.observations.push({
+              refId: source.sourceRef, kind: 'source', version: 1, summary: source.title, resourcePath })
+          }
+          for (const candidate of candidates) if (!current.checkpoint.observations.some(item => item.refId === candidate.candidateId)) {
+            current.checkpoint.observations.push({ refId: candidate.candidateId, kind: 'candidate', version: 1, summary: candidate.label, resourcePath })
+          }
+          if (current.checkpoint.sourceRefs.length > 50 || current.checkpoint.observations.length > 50) throw new Error('TASK_OBSERVATION_LIMIT')
+          this.persist(current)
+        }
+      })
+    } catch (error) { this.records.set(current.taskId, previous); throw error }
+    return structuredClone(receipt)
+  }
   private storeLocalReceipt(lease: TaskLease, receipt: TaskToolReceipt): void {
     this.assertLease(lease)
     const record = this.checked(lease.taskId)
