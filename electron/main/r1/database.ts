@@ -205,18 +205,45 @@ const SCHEMA_V2 = `
 `
 
 let savepointSequence = 0
+type TransactionEffects = { commit: Array<() => void>; rollback: Array<() => void> }
+const transactionEffects = new WeakMap<R1Database, TransactionEffects[]>()
+export function afterTransactionCommit(db: R1Database, effect: () => void): void {
+  const frame = transactionEffects.get(db)?.at(-1)
+  if (frame) frame.commit.push(effect)
+  else if (!db.isTransaction) effect()
+  else throw new Error('TRANSACTION_EFFECT_SCOPE_UNKNOWN')
+}
+export function afterTransactionRollback(db: R1Database, effect: () => void): void {
+  const frame = transactionEffects.get(db)?.at(-1)
+  if (frame) frame.rollback.push(effect)
+  else if (db.isTransaction) throw new Error('TRANSACTION_EFFECT_SCOPE_UNKNOWN')
+}
 export function inTransaction<T>(db: R1Database, action: () => T): T {
+  if (db.isTransaction && !transactionEffects.get(db)?.length) throw new Error('TRANSACTION_EFFECT_SCOPE_UNKNOWN')
   const savepoint = db.isTransaction ? `r1_transaction_${++savepointSequence}` : null
   db.exec(savepoint ? `SAVEPOINT ${savepoint}` : 'BEGIN IMMEDIATE')
+  const stack = transactionEffects.get(db) ?? []
+  transactionEffects.set(db, stack)
+  const effects: TransactionEffects = { commit: [], rollback: [] }
+  stack.push(effects)
+  let result: T
   try {
-    const result = action()
+    result = action()
     db.exec(savepoint ? `RELEASE SAVEPOINT ${savepoint}` : 'COMMIT')
-    return result
   } catch (error) {
-    if (savepoint) { db.exec(`ROLLBACK TO SAVEPOINT ${savepoint}`); db.exec(`RELEASE SAVEPOINT ${savepoint}`) }
-    else db.exec('ROLLBACK')
+    try {
+      if (savepoint) { db.exec(`ROLLBACK TO SAVEPOINT ${savepoint}`); db.exec(`RELEASE SAVEPOINT ${savepoint}`) }
+      else db.exec('ROLLBACK')
+    } finally {
+      stack.pop()
+      for (const effect of effects.rollback.reverse()) { try { effect() } catch { /* Preserve original transaction error. */ } }
+    }
     throw error
   }
+  stack.pop()
+  if (stack.length) { stack.at(-1)!.commit.push(...effects.commit); stack.at(-1)!.rollback.push(...effects.rollback) }
+  else for (const effect of effects.commit) { try { effect() } catch { /* Data is committed; notification failure cannot undo it. */ } }
+  return result
 }
 
 export function openR1Database(databasePath: string): R1Database {

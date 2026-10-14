@@ -1,3 +1,4 @@
+import { R1FocusTools, focusToolAliases, type FocusToolServices } from './focusTools.js'
 import { R1ReminderTools, reminderToolAliases } from './reminderTools.js'
 import { createPageReader } from '../providers/pageReader.js'
 import { createBraveSearchProvider, SearchProviderError } from '../providers/braveSearchProvider.js'
@@ -9,11 +10,12 @@ type PlanInput = Parameters<R1TaskSupervisor['updatePlan']>[1]
 
 /** Registered synchronous local tools; no host filesystem, shell or model-controlled authorization. */
 export class R1TaskToolExecutor {
+  private readonly focusTools = new Map<string, R1FocusTools>()
   private readonly reminders = new Map<string, R1ReminderTools>()
   readonly implementedAliases: readonly string[]
   constructor(private readonly tasks: R1TaskSupervisor, private readonly assets: R1PromptAssets,
-    private readonly items?: R1Items, private readonly search?: ReturnType<typeof createBraveSearchProvider>, private readonly pages?: ReturnType<typeof createPageReader>) {
-    this.implementedAliases = Object.freeze(['read_file', 'write_todos', ...(items ? ['notes_create', ...reminderToolAliases] : []), ...(search ? ['web_search'] : []), ...(pages ? ['web_read_page'] : [])])
+    private readonly items?: R1Items, private readonly search?: ReturnType<typeof createBraveSearchProvider>, private readonly pages?: ReturnType<typeof createPageReader>, private readonly services?: FocusToolServices) {
+    this.implementedAliases = Object.freeze(['read_file', 'write_todos', ...(items ? ['notes_create', ...reminderToolAliases] : []), ...(search ? ['web_search'] : []), ...(pages ? ['web_read_page'] : []), ...(services ? focusToolAliases : [])])
   }
   private reminderTools(lease: TaskLease): R1ReminderTools {
     let tools = this.reminders.get(lease.runId)
@@ -56,6 +58,17 @@ export class R1TaskToolExecutor {
     this.assets.validateToolInput(alias, input)
     if (!this.implementedAliases.includes(alias)) throw new Error('TASK_TOOL_IMPLEMENTATION_UNAVAILABLE')
     const receipt = this.tasks.executeLocalTool(lease, alias, input, actionId => {
+      if ((focusToolAliases as readonly string[]).includes(alias)) {
+        let focus = this.focusTools.get(lease.runId)
+        if (!focus) {
+          this.focusTools.clear()
+          const source = this.tasks.originalSource(lease)
+          focus = new R1FocusTools({ ...this.services!, currentTrackKey: () => source.selectedTrackKey ?? null }, source, () => this.tasks.assertLease(lease))
+          this.focusTools.set(lease.runId, focus)
+        }
+        if (alias !== 'focus_get_state') this.tasks.assertPersistenceAllowed(lease)
+        return focus.execute(alias, input as Record<string, unknown>, actionId)
+      }
       if ((reminderToolAliases as readonly string[]).includes(alias)) return this.reminderTools(lease).execute(alias, input as Record<string, unknown>, actionId)
       let data: Record<string, unknown>
       if (alias === 'read_file') {

@@ -1,8 +1,9 @@
+import type { R1SessionMode } from '../r1/sessionMode.js'
 import { ipcMain } from 'electron'
 import type { R1Focus } from '../r1/focus.js'
 
 type Ipc = { handle(channel: string, listener: (event: unknown, payload?: unknown) => unknown): void }
-export function registerFocusHandlers(focus: R1Focus, ipc: Ipc = ipcMain): void {
+export function registerFocusHandlers(focus: R1Focus, ipc: Ipc = ipcMain, mode?: R1SessionMode): void {
   const action = <T>(run: (payload: T) => unknown) => (_event: unknown, payload?: unknown) => {
     try {
       if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('INVALID_FOCUS_PAYLOAD')
@@ -12,6 +13,14 @@ export function registerFocusHandlers(focus: R1Focus, ipc: Ipc = ipcMain): void 
       return { ok: false, error: { code, message: code } }
     }
   }
+  ipc.handle('r1.focus.reportMusicSelection', (_event, payload) => {
+    const key = (payload as { trackKey?: unknown })?.trackKey
+    if (!mode || key !== null && (typeof key !== 'string' || !/^(netease|kuwo|joox|unknown):[^\s]{1,140}$/.test(key))) {
+      return { ok: false, error: { code: 'FOCUS_MUSIC_CONTEXT_INVALID', message: '音乐状态无法同步。' } }
+    }
+    mode.currentPlayingTrackKey = key as string | null
+    return { ok: true, data: null }
+  })
   ipc.handle('r1.focus.getState', () => ({ ok: true, data: focus.getState() }))
   ipc.handle('r1.focus.start', action<Parameters<R1Focus['start']>[0]>(input => focus.start(input)))
   ipc.handle('r1.focus.pause', action<Parameters<R1Focus['pause']>[0]>(input => focus.pause(input)))

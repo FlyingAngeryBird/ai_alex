@@ -1,3 +1,4 @@
+import { focusToolAliases, type FocusToolServices } from '../r1/focusTools.js'
 import { reminderToolAliases } from '../r1/reminderTools.js'
 import { selectedConversationEntity } from '../r1/sessionMode.js'
 import { ipcMain, type WebContents } from 'electron'
@@ -17,10 +18,10 @@ import type { R1SessionMode } from '../r1/sessionMode.js'
 export function registerNativeVoiceHandlers(deps: {
   db: R1Database; assets: R1PromptAssets; persona: R1PersonaStore; memory: R1MemoryStore;
   conversations: R1Conversations; tasks: R1TaskSupervisor; mode: R1SessionMode;
-  implementedTaskAliases: readonly string[]; configurationRevision(): number;
+  implementedTaskAliases: readonly string[]; configurationRevision(): number; focusServices?: FocusToolServices;
 }): { close(): void } {
   const sessions = new Map<number, { id: string; session: NativeRealtimeSession; playback(input: Record<string, unknown>): void }>()
-  const aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', 'notes_create', ...reminderToolAliases]
+  const aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', 'notes_create', ...reminderToolAliases, ...(deps.focusServices ? focusToolAliases : [])]
   const fail = (code: string) => ({ ok: false, error: { code, message: code } })
   const emit = (owner: WebContents, id: string, event: NativeRealtimeEvent) => {
     if (!owner.isDestroyed()) owner.send('voice.nativeEvent', { ...event, connectionId: id })
@@ -66,7 +67,7 @@ export function registerNativeVoiceHandlers(deps: {
           sourceTurns.set(event.item_id, turnId)
           const source = deps.conversations.append({ sessionId, turnId, role: 'user', body: event.transcript, status: 'final' })
           tools = new R1ConversationTools(deps.db, deps.assets, deps.tasks, { source, sourceMessages: deps.conversations.messages(sessionId).slice(-20), temporary,
-            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, persistenceConfirmed: false, assertCurrent }, deps.implementedTaskAliases)
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, persistenceConfirmed: false, assertCurrent }, deps.implementedTaskAliases, deps.focusServices)
           connection.updateBoundary(boundary())
         }
         emit(sender, id, event)

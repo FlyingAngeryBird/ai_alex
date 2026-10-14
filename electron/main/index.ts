@@ -124,15 +124,17 @@ void app.whenReady().then(async () => {
     })
     const vault = new CredentialVault(join(app.getPath('userData'), 'credentials.bin'))
     vault.load()
-    const taskTools = new R1TaskToolExecutor(r1Tasks, r1PromptAssets, new R1Items(r1Database), createBraveSearchProvider(), createPageReader())
+    r1Focus = new R1Focus(r1Database)
+    const focusServices = { focus: r1Focus, currentTrackKey: () => r1SessionMode.currentPlayingTrackKey ?? null }
+    const taskTools = new R1TaskToolExecutor(r1Tasks, r1PromptAssets, new R1Items(r1Database), createBraveSearchProvider(), createPageReader(), focusServices)
     r1TaskRunner = new R1TaskRunner(r1Tasks, r1PromptAssets, taskTools, r1Artifacts,
       createArkResponsesProvider(), () => new R1PersonaStore(r1Database!).get())
     r1ConversationDriver = new R1ConversationDriver(r1Database, r1PromptAssets, r1Tasks, createArkResponsesProvider(),
-      () => new R1PersonaStore(r1Database!).get(), taskTools.implementedAliases)
+      () => new R1PersonaStore(r1Database!).get(), taskTools.implementedAliases, focusServices)
     nativeVoice = registerNativeVoiceHandlers({ db: r1Database, assets: r1PromptAssets,
       persona: new R1PersonaStore(r1Database), memory, conversations: r1Conversations,
       tasks: r1Tasks, mode: r1SessionMode, implementedTaskAliases: taskTools.implementedAliases,
-      configurationRevision: () => vault.revision })
+      configurationRevision: () => vault.revision, focusServices })
     powerMonitor.on('suspend', () => nativeVoice?.close())
     r1TaskRunner.start()
     importLegacyJson(r1Database, join(app.getPath('appData'), 'lingli'), 'lingli-json')
@@ -147,8 +149,7 @@ void app.whenReady().then(async () => {
     registerCredentialHandlers(vault)
     r1Diagnostics = new R1ServiceDiagnostics(vault, r1PromptAssets, new R1PersonaStore(r1Database))
     registerServiceHandlers(r1Diagnostics)
-    r1Focus = new R1Focus(r1Database)
-    registerFocusHandlers(r1Focus)
+    registerFocusHandlers(r1Focus, undefined, r1SessionMode)
     r1Focus.onChanged(event => {
       for (const window of BrowserWindow.getAllWindows()) window.webContents.send('r1.focusChanged', event)
     })
@@ -220,6 +221,7 @@ app.on('before-quit', () => {
 })
 
 app.on('window-all-closed', () => {
+  r1SessionMode.currentPlayingTrackKey = null
   if (process.platform !== 'darwin') {
     app.quit()
   }

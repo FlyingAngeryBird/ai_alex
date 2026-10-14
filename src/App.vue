@@ -35,6 +35,10 @@ import { invokeWithTimeout } from './utils/invokeWithTimeout'
 const conversation = useConversation()
 const keyboardRecorder = useKeyboardRecorder()
 const music = useMusic()
+watch(() => music.playback.value.status === 'playing' && music.playback.value.track
+  ? `${music.playback.value.track.source ?? 'unknown'}:${music.playback.value.track.id}` : null, trackKey => {
+  void window.seamoR1.focus.reportMusicSelection({ trackKey }).catch(() => undefined)
+}, { immediate: true })
 const focusNotice = ref('')
 const focus = useFocus(event => {
   const track = music.playback.value.track

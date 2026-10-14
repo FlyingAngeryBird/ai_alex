@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { inTransaction, type R1Database } from './database.js'
+import { afterTransactionCommit, afterTransactionRollback, inTransaction, type R1Database } from './database.js'
 import { receipt, runOnce, type ActionReceipt } from './items.js'
 
 export type FocusState = {
@@ -35,10 +35,17 @@ export class R1Focus {
     this.listeners.add(listener)
     return () => { this.listeners.delete(listener) }
   }
+  private recordRollback(): void {
+    const anchor = this.anchor ? { ...this.anchor } : null, suspended = this.suspended
+    afterTransactionRollback(this.db, () => { this.anchor = anchor; this.suspended = suspended })
+  }
   private emit(focus: FocusState, reason: FocusEvent['reason']): void {
-    for (const listener of this.listeners) {
-      try { listener({ focus: { ...focus }, reason }) } catch { /* State is already committed. */ }
-    }
+    const event = { focus: { ...focus }, reason }
+    afterTransactionCommit(this.db, () => {
+      for (const listener of this.listeners) {
+        try { listener(event) } catch { /* State is already committed. */ }
+      }
+    })
   }
   private currentRow(): FocusRow | undefined {
     return this.db.prepare(`SELECT * FROM focus ORDER BY
@@ -54,6 +61,7 @@ export class R1Focus {
   start(input: { actionId: string; durationSec: number; endMusicRule: FocusState['endMusicRule'];
     endTargetTrackKey?: string | null }): FocusResult {
     if (this.closed) throw new Error('FOCUS_SERVICE_CLOSED')
+    this.recordRollback()
     let committed = false
     const result = runOnce(this.db, input.actionId, input, () => {
       if (!Number.isInteger(input.durationSec) || input.durationSec < 60 || input.durationSec > 10800 ||
@@ -91,6 +99,7 @@ export class R1Focus {
     return row
   }
   private change(input: FocusCommand, next: 'paused' | 'running' | 'stopped'): FocusResult {
+    this.recordRollback()
     if (this.closed) throw new Error('FOCUS_SERVICE_CLOSED')
     this.tick()
     let committed = false
@@ -120,6 +129,7 @@ export class R1Focus {
     if (this.closed) return
     const anchor = this.anchor
     if (!anchor || this.suspended) return
+    this.recordRollback()
     const remaining = Math.max(0, anchor.remainingSec - Math.max(0, this.clock() - anchor.clockMs) / 1000)
     const completed = remaining === 0
     const changed = this.db.prepare(`UPDATE focus SET remaining_sec = ?, state = ?,
@@ -132,6 +142,7 @@ export class R1Focus {
     this.emit(view(row), completed ? 'completed' : 'tick')
   }
   suspend(): void {
+    this.recordRollback()
     this.tick()
     this.suspended = true
     const row = this.currentRow()

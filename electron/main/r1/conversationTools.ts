@@ -1,3 +1,4 @@
+import { R1FocusTools, focusToolAliases, type FocusToolServices } from './focusTools.js'
 import { R1ReminderTools, reminderToolAliases } from './reminderTools.js'
 import { randomUUID, createHash } from 'node:crypto'
 import type { SessionMessage } from './conversations.js'
@@ -19,13 +20,15 @@ function taskView(task: R1Task) {
 /** Tools operate on the actual user turn. The model cannot supply source bodies, mode or confirmation. */
 export class R1ConversationTools {
   readonly aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', 'notes_create', ...reminderToolAliases]
+  private readonly focus?: R1FocusTools
   private readonly reminders: R1ReminderTools
   private readonly calls = new Map<string, { fingerprint: string; output: Record<string, unknown> }>()
   readonly loadedSkillIds = new Set<string>(['SK01'])
   constructor(private readonly db: R1Database, private readonly assets: R1PromptAssets,
     private readonly tasks: R1TaskSupervisor, private readonly scope: ConversationToolScope,
-    private readonly implementedTaskAliases: readonly string[]) {
+    private readonly implementedTaskAliases: readonly string[], services?: FocusToolServices) {
     scope.assertCurrent()
+    if (services) { this.aliases.push(...focusToolAliases); this.focus = new R1FocusTools(services, scope.source, scope.assertCurrent) }
     this.reminders = new R1ReminderTools(new R1Items(db), { source: { ...scope.source, timezone: scope.timezone },
       assertCurrent: scope.assertCurrent, checkSources: refs => this.checkReminderSources(refs), timeSource: refs => this.reminderSource(refs), requirePersistence: () => {
         scope.assertCurrent()
@@ -91,6 +94,15 @@ export class R1ConversationTools {
           errorCode: null, retryable: false, runId: null }
         this.assets.validateToolOutput(alias, output)
         this.loadedSkillIds.add(args.skillId as string)
+      } else if ((focusToolAliases as readonly string[]).includes(alias)) {
+        output = inTransaction(this.db, () => {
+          const actionId = randomUUID(), result = this.focus!.execute(alias, args, actionId)
+          const receipt = { kind: 'receipt', actionId, tool: this.assets.toolDefinition(alias).name, status: 'succeeded',
+            entityId: result.entityId ?? null, entityVersion: result.entityVersion ?? null, data: result.data,
+            errorCode: null, retryable: false, runId: null }
+          this.assets.validateToolOutput(alias, receipt); this.scope.assertCurrent()
+          return receipt
+        })
       } else if ((reminderToolAliases as readonly string[]).includes(alias)) {
         output = inTransaction(this.db, () => {
           this.scope.assertCurrent()
@@ -128,7 +140,7 @@ export class R1ConversationTools {
           task = this.tasks.accept({ requestKey: `conversation:${this.scope.source.messageId}:${callId}`,
             sourceMessageId: this.scope.source.messageId, timezone: this.scope.timezone, goal: args.goal as string,
             constraints: args.constraints as string[], authorizedAliases: aliases, requiredActions: delegation?.requiredActions,
-            complexity: 'complex', persistenceConfirmed: this.scope.persistenceConfirmed })
+            selectedTrackKey: this.focus?.selectedTrackKey ?? null, complexity: 'complex', persistenceConfirmed: this.scope.persistenceConfirmed })
           status = task.queuePosition && task.queuePosition > 0 ? 'queued' : 'accepted'
         } else {
           const current = this.permittedTask(args.taskId as string)
@@ -150,7 +162,7 @@ export class R1ConversationTools {
             if (patch.removeConstraints.some(value => !current.constraints.includes(value))) throw new Error('TASK_CONSTRAINT_NOT_FOUND')
             task = this.tasks.steer({ taskId: current.taskId, expectedGoalVersion: args.expectedGoalVersion as number,
               goal: patch.goal ?? current.goal, constraints: [...new Set([...current.constraints.filter(value => !patch.removeConstraints.includes(value)), ...patch.addConstraints])],
-              sourceMessageId: this.scope.source.messageId, authorizedAliases: aliases, requiredActions: delegation?.requiredActions })
+              sourceMessageId: this.scope.source.messageId, selectedTrackKey: this.focus?.selectedTrackKey ?? null, authorizedAliases: aliases, requiredActions: delegation?.requiredActions })
             status = 'updated'
           } else if (alias === 'pause_task') {
             task = this.tasks.pause(current.taskId, args.expectedGoalVersion as number)

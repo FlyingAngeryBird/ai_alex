@@ -9,7 +9,7 @@ import { R1Artifacts, type ArtifactDraft } from './artifacts.js'
 export type TaskStatus = 'accepted' | 'running' | 'waiting_input' | 'paused' | 'needs_resume' |
   'succeeded' | 'partially_succeeded' | 'failed' | 'cancelled'
 export type TaskSource = { messageId: string; sessionId: string; turnId: string; body: string;
-  createdAt: string; timezone: string; temporary: boolean }
+  createdAt: string; timezone: string; temporary: boolean; selectedTrackKey?: string | null }
 type PlanStep = { stepId: string; action: string; dependsOn: string[];
   status: 'pending' | 'running' | 'completed' | 'blocked' | 'cancelled'; successCondition: string }
 type TaskCheckpoint = { version: 1; requestKey: string; requestFingerprint?: string; source: TaskSource; sourceRefs: string[];
@@ -203,9 +203,10 @@ ${source.snippet}
     for (const listener of this.listeners) { try { listener(structuredClone(event)) } catch { /* committed */ } }
   }
   accept(input: { requestKey: string; sourceMessageId: string; timezone: string; goal: string;
-    constraints: string[]; authorizedAliases: string[]; complexity: 'light' | 'complex'; persistenceConfirmed?: boolean;
+    constraints: string[]; authorizedAliases: string[]; complexity: 'light' | 'complex'; persistenceConfirmed?: boolean; selectedTrackKey?: string | null;
     requiredActions?: Array<{ alias: string; minimumCount: number }> }): R1Task {
     if (this.closed) throw new Error('TASK_SERVICE_CLOSED')
+    if (input.selectedTrackKey !== undefined && input.selectedTrackKey !== null) requireText(input.selectedTrackKey, 160, 'TASK_TRACK_INVALID')
     requireText(input.requestKey, 160, 'TASK_REQUEST_KEY_INVALID')
     requireText(input.sourceMessageId, 160, 'TASK_SOURCE_INVALID')
     requireText(input.goal, 2000, 'TASK_GOAL_INVALID')
@@ -222,6 +223,7 @@ ${source.snippet}
     // The original request remains immutable even when the current goal/source changes.
     const fingerprint = createHash('sha256').update(JSON.stringify({ sourceMessageId: input.sourceMessageId,
       timezone: input.timezone, goal: input.goal, constraints: input.constraints,
+      ...(input.selectedTrackKey !== undefined ? { selectedTrackKey: input.selectedTrackKey } : {}),
       authorizedAliases: [...new Set(input.authorizedAliases)].sort(), complexity: input.complexity,
       ...(requirements.length ? { requiredActions: [...requirements].sort((left, right) => left.alias.localeCompare(right.alias)) } : {}),
       ...(input.persistenceConfirmed === true ? { persistenceConfirmed: true } : {}) })).digest('hex')
@@ -233,6 +235,7 @@ ${source.snippet}
     }
     const source = this.source(input.sourceMessageId)
     source.timezone = input.timezone
+    source.selectedTrackKey = input.selectedTrackKey ?? null
     this.assets.exposeTools({ channel: 'task', loadedSkillIds: [], authorizedAliases: input.authorizedAliases, temporary: source.temporary })
     if ([...this.records.values()].filter(record => ['accepted', 'running'].includes(record.status)).length >= 4) throw new Error('TASK_QUEUE_FULL')
     const taskId = randomUUID()
@@ -717,7 +720,8 @@ ${source.snippet}
     this.persist(record); this.emit(record, 'accepted'); return this.get(taskId)
   }
   steer(input: { taskId: string; expectedGoalVersion: number; goal: string; constraints: string[]; sourceMessageId: string;
-    authorizedAliases?: string[]; requiredActions?: Array<{ alias: string; minimumCount: number }> }): R1Task {
+    authorizedAliases?: string[]; selectedTrackKey?: string | null; requiredActions?: Array<{ alias: string; minimumCount: number }> }): R1Task {
+    if (input.selectedTrackKey !== undefined && input.selectedTrackKey !== null) requireText(input.selectedTrackKey, 160, 'TASK_TRACK_INVALID')
     const record = this.checked(input.taskId, input.expectedGoalVersion)
     if (record.assetReleaseId !== this.assets.releaseId) throw new Error('TASK_ASSET_RELEASE_UNAVAILABLE')
     if (['succeeded', 'failed', 'cancelled'].includes(record.status)) throw new Error('TASK_INVALID_STATE')
@@ -742,6 +746,7 @@ ${source.snippet}
     }
     record.checkpoint.steerEventId = randomUUID()
     record.checkpoint.contextVersion++; record.checkpoint.deletionEpoch = this.deletionEpoch()
+    source.selectedTrackKey = input.selectedTrackKey ?? null
     source.timezone = record.checkpoint.source.timezone; record.checkpoint.source = source
     record.checkpoint.sourceRefs = [source.messageId]; record.checkpoint.observations = [{ refId: source.messageId,
       kind: 'source', version: 1, summary: JSON.stringify({ turnId: source.turnId, createdAt: source.createdAt, timezone: source.timezone,

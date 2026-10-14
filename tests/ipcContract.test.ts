@@ -34,6 +34,7 @@ describe('IPC contract', () => {
       'r1.memory.forget',
       'r1.history.list',
       'r1.history.messages',
+      'r1.focus.reportMusicSelection',
       'r1.focus.getState',
       'r1.focus.start',
       'r1.focus.pause',

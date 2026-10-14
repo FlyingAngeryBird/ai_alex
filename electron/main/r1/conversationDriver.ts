@@ -1,3 +1,4 @@
+import type { FocusToolServices } from './focusTools.js'
 import { selectedConversationEntity } from './sessionMode.js'
 import type { ChatMessage, AssistantOutput } from '../providers/llmProvider.js'
 import type { createArkResponsesProvider, ArkResponseRound } from '../providers/arkResponsesProvider.js'
@@ -11,12 +12,12 @@ import { R1ModelRequestBoundary } from './modelBoundary.js'
 export class R1ConversationDriver {
   constructor(private readonly db: R1Database, private readonly assets: R1PromptAssets,
     private readonly tasks: R1TaskSupervisor, private readonly provider: ReturnType<typeof createArkResponsesProvider>,
-    private readonly persona: () => R1Persona, private readonly implementedTaskAliases: readonly string[]) {}
+    private readonly persona: () => R1Persona, private readonly implementedTaskAliases: readonly string[], private readonly services?: FocusToolServices) {}
   selectedEntity(mode: import('./sessionMode.js').R1SessionMode | undefined) {
     return selectedConversationEntity(mode, this.tasks)
   }
   async reply(input: { scope: ConversationToolScope; messages: ChatMessage[]; context: Record<string, unknown> }): Promise<AssistantOutput> {
-    const tools = new R1ConversationTools(this.db, this.assets, this.tasks, input.scope, this.implementedTaskAliases)
+    const tools = new R1ConversationTools(this.db, this.assets, this.tasks, input.scope, this.implementedTaskAliases, this.services)
     const rounds: ArkResponseRound[] = []
     // The conversation only dispatches immediate actions/control; long work has its own frozen Task budget.
     let remainingTools = 6

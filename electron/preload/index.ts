@@ -31,6 +31,7 @@ export const exposedChannels = [
   'r1.memory.forget',
   'r1.history.list',
   'r1.history.messages',
+  'r1.focus.reportMusicSelection',
   'r1.focus.getState',
   'r1.focus.start',
   'r1.focus.pause',
@@ -192,6 +193,7 @@ function exposeLingliApi(
       messages: (sessionId) => invokeR1('r1.history.messages', { sessionId })
     },
     focus: {
+      reportMusicSelection: input => invokeR1('r1.focus.reportMusicSelection', input),
       getState: () => invokeR1('r1.focus.getState'),
       start: input => invokeR1('r1.focus.start', input),
       pause: input => invokeR1('r1.focus.pause', input),

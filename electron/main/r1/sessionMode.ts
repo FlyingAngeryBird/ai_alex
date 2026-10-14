@@ -1,5 +1,5 @@
 import type { R1TaskSupervisor } from './taskSupervisor.js'
-export type R1SessionMode = { temporary: boolean; sessionId?: string | null;
+export type R1SessionMode = { temporary: boolean; sessionId?: string | null; currentPlayingTrackKey?: string | null;
   selectedCandidate?: { taskId: string; goalVersion: number; candidateId: string; candidateVersion: number } | null }
 export function selectedConversationEntity(mode: R1SessionMode | undefined, tasks?: R1TaskSupervisor) {
   const selected = mode?.selectedCandidate

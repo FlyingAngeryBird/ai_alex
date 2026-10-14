@@ -53,6 +53,7 @@ export type R1Api = {
     messages(sessionId: string): Promise<R1Result<SessionMessage[]>>
   }
   focus: {
+    reportMusicSelection(input: { trackKey: string | null }): Promise<R1Result<null>>
     getState(): Promise<R1Result<FocusState | null>>
     start(input: Parameters<R1Focus['start']>[0]): Promise<R1Result<ReturnType<R1Focus['start']>>>
     pause(input: FocusCommand): Promise<R1Result<ReturnType<R1Focus['pause']>>>
