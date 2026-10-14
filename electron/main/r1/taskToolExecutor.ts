@@ -1,3 +1,4 @@
+import { R1ReminderTools, reminderToolAliases } from './reminderTools.js'
 import { createPageReader } from '../providers/pageReader.js'
 import { createBraveSearchProvider, SearchProviderError } from '../providers/braveSearchProvider.js'
 import { randomUUID } from 'node:crypto'
@@ -8,10 +9,22 @@ type PlanInput = Parameters<R1TaskSupervisor['updatePlan']>[1]
 
 /** Registered synchronous local tools; no host filesystem, shell or model-controlled authorization. */
 export class R1TaskToolExecutor {
+  private readonly reminders = new Map<string, R1ReminderTools>()
   readonly implementedAliases: readonly string[]
   constructor(private readonly tasks: R1TaskSupervisor, private readonly assets: R1PromptAssets,
     private readonly items?: R1Items, private readonly search?: ReturnType<typeof createBraveSearchProvider>, private readonly pages?: ReturnType<typeof createPageReader>) {
-    this.implementedAliases = Object.freeze(['read_file', 'write_todos', ...(items ? ['notes_create'] : []), ...(search ? ['web_search'] : []), ...(pages ? ['web_read_page'] : [])])
+    this.implementedAliases = Object.freeze(['read_file', 'write_todos', ...(items ? ['notes_create', ...reminderToolAliases] : []), ...(search ? ['web_search'] : []), ...(pages ? ['web_read_page'] : [])])
+  }
+  private reminderTools(lease: TaskLease): R1ReminderTools {
+    let tools = this.reminders.get(lease.runId)
+    if (!tools) {
+      this.reminders.clear()
+      const source = this.tasks.originalSource(lease)
+      tools = new R1ReminderTools(this.items!, { source, assertCurrent: () => this.tasks.assertLease(lease),
+        requirePersistence: () => this.tasks.assertPersistenceAllowed(lease), checkSources: refs => this.tasks.assertToolSources(lease, refs) })
+      this.reminders.set(lease.runId, tools)
+    }
+    return tools
   }
   async executeAsync(lease: TaskLease, alias: string, input: unknown, callId?: string, signal?: AbortSignal): Promise<TaskToolReceipt> {
     if (alias === 'web_read_page') {
@@ -42,7 +55,8 @@ export class R1TaskToolExecutor {
     this.tasks.assertLease(lease)
     this.assets.validateToolInput(alias, input)
     if (!this.implementedAliases.includes(alias)) throw new Error('TASK_TOOL_IMPLEMENTATION_UNAVAILABLE')
-    return this.tasks.executeLocalTool(lease, alias, input, actionId => {
+    const receipt = this.tasks.executeLocalTool(lease, alias, input, actionId => {
+      if ((reminderToolAliases as readonly string[]).includes(alias)) return this.reminderTools(lease).execute(alias, input as Record<string, unknown>, actionId)
       let data: Record<string, unknown>
       if (alias === 'read_file') {
         const args = input as { file_path: string; offset?: number; limit?: number }
@@ -73,5 +87,7 @@ export class R1TaskToolExecutor {
       }
       return { data }
     }, callId)
+    if (this.items) this.reminderTools(lease).observe(receipt)
+    return receipt
   }
 }

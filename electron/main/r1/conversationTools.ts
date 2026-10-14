@@ -1,3 +1,4 @@
+import { R1ReminderTools, reminderToolAliases } from './reminderTools.js'
 import { randomUUID, createHash } from 'node:crypto'
 import type { SessionMessage } from './conversations.js'
 import type { R1PromptAssets } from './promptAssets.js'
@@ -6,7 +7,7 @@ import { R1Items } from './items.js'
 import { inTransaction, type R1Database } from './database.js'
 
 export type ConversationToolScope = { source: SessionMessage; temporary: boolean; timezone: string;
-  assertCurrent(): void; persistenceConfirmed: boolean; signal?: AbortSignal }
+  assertCurrent(): void; persistenceConfirmed: boolean; signal?: AbortSignal; sourceMessages?: SessionMessage[] }
 type Delegation = { toolAliases: string[]; requiredActions: Array<{ alias: string; minimumCount: number }> }
 const code = (error: unknown): string => error instanceof Error && /^[A-Z][A-Z0-9_]{1,80}$/.test(error.message)
   ? error.message : 'CONVERSATION_TOOL_FAILED'
@@ -17,13 +18,19 @@ function taskView(task: R1Task) {
 
 /** Tools operate on the actual user turn. The model cannot supply source bodies, mode or confirmation. */
 export class R1ConversationTools {
-  readonly aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', 'notes_create']
+  readonly aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', 'notes_create', ...reminderToolAliases]
+  private readonly reminders: R1ReminderTools
   private readonly calls = new Map<string, { fingerprint: string; output: Record<string, unknown> }>()
   readonly loadedSkillIds = new Set<string>(['SK01'])
   constructor(private readonly db: R1Database, private readonly assets: R1PromptAssets,
     private readonly tasks: R1TaskSupervisor, private readonly scope: ConversationToolScope,
     private readonly implementedTaskAliases: readonly string[]) {
     scope.assertCurrent()
+    this.reminders = new R1ReminderTools(new R1Items(db), { source: { ...scope.source, timezone: scope.timezone },
+      assertCurrent: scope.assertCurrent, checkSources: refs => this.checkReminderSources(refs), timeSource: refs => this.reminderSource(refs), requirePersistence: () => {
+        scope.assertCurrent()
+        if (scope.temporary && !scope.persistenceConfirmed) throw new Error('TEMPORARY_SAVE_CONFIRMATION_REQUIRED')
+      } })
     if (scope.source.role !== 'user') throw new Error('CONVERSATION_SOURCE_INVALID')
     const source = db.prepare(`SELECT m.body, m.session_id FROM messages m JOIN sessions s ON s.session_id = m.session_id
       WHERE m.message_id = ? AND m.role = 'user' AND s.temporary = 0 AND s.status <> 'memory_source'`).get(scope.source.messageId) as {
@@ -41,6 +48,26 @@ export class R1ConversationTools {
   private checkSources(refs: string[]): void {
     // Both IDs are actual current-turn identifiers; normalize the source to the real message ID on commit.
     if (refs.some(ref => ![this.scope.source.messageId, this.scope.source.turnId].includes(ref))) throw new Error('CONVERSATION_SOURCE_NOT_AVAILABLE')
+  }
+  private reminderSources(): SessionMessage[] {
+    const known = [...(this.scope.sourceMessages ?? []), this.scope.source]
+    return known.filter(message => message.role === 'user' && message.sessionId === this.scope.source.sessionId &&
+      Date.parse(message.createdAt) <= Date.parse(this.scope.source.createdAt) &&
+      !this.db.prepare('SELECT 1 FROM source_suppression WHERE source_ref IN (?, ?)').get(message.messageId, message.turnId))
+  }
+  private checkReminderSources(refs: string[]): void {
+    const known = this.reminderSources()
+    if (refs.some(ref => !known.some(message => [message.messageId, message.turnId].includes(ref)))) throw new Error('CONVERSATION_SOURCE_NOT_AVAILABLE')
+  }
+  private reminderSource(refs: string[] = []) {
+    this.checkReminderSources(refs)
+    const current = this.scope.source
+    if (/今天|今晚|明天|明晚|后天|后晚|(?:秒|分|小时|钟头).*后/.test(current.body)) return { ...current, timezone: this.scope.timezone }
+    const previous = this.reminderSources().filter(message => refs.some(ref => [message.messageId, message.turnId].includes(ref)))
+      .filter(message => /今天|今晚|明天|明晚|后天|后晚/.test(message.body)).at(-1)
+    const day = previous?.body.match(/今天|今晚|明天|明晚|后天|后晚/)?.[0]
+    return { ...current, body: day ? `${day} ${current.body}` : current.body,
+      createdAt: previous?.createdAt ?? current.createdAt, timezone: this.scope.timezone }
   }
   execute(alias: string, input: unknown, callId: string): Record<string, unknown> {
     this.scope.assertCurrent(); this.assets.validateToolInput(alias, input)
@@ -64,6 +91,16 @@ export class R1ConversationTools {
           errorCode: null, retryable: false, runId: null }
         this.assets.validateToolOutput(alias, output)
         this.loadedSkillIds.add(args.skillId as string)
+      } else if ((reminderToolAliases as readonly string[]).includes(alias)) {
+        output = inTransaction(this.db, () => {
+          this.scope.assertCurrent()
+          const actionId = randomUUID(), result = this.reminders.execute(alias, args, actionId)
+          const receipt = { kind: 'receipt', actionId, tool: this.assets.toolDefinition(alias).name, status: 'succeeded',
+            entityId: result.entityId ?? null, entityVersion: result.entityVersion ?? null, data: result.data,
+            errorCode: null, retryable: false, runId: null }
+          this.assets.validateToolOutput(alias, receipt); this.scope.assertCurrent()
+          return receipt
+        })
       } else if (alias === 'notes_create') {
         if (this.scope.temporary && !this.scope.persistenceConfirmed) throw new Error('TEMPORARY_SAVE_CONFIRMATION_REQUIRED')
         this.checkSources(args.sourceRefs as string[])
@@ -87,7 +124,7 @@ export class R1ConversationTools {
           const delegation = args.delegation as Delegation | undefined
           const aliases = delegation?.toolAliases ?? ['read_file', 'write_todos']
           if (aliases.some(alias => !this.implementedTaskAliases.includes(alias))) throw new Error('TASK_TOOL_IMPLEMENTATION_UNAVAILABLE')
-          if (this.scope.temporary && aliases.includes('notes_create') && !this.scope.persistenceConfirmed) throw new Error('TEMPORARY_SAVE_CONFIRMATION_REQUIRED')
+          if (this.scope.temporary && aliases.some(alias => this.assets.toolDefinition(alias).effect === 'write') && !this.scope.persistenceConfirmed) throw new Error('TEMPORARY_SAVE_CONFIRMATION_REQUIRED')
           task = this.tasks.accept({ requestKey: `conversation:${this.scope.source.messageId}:${callId}`,
             sourceMessageId: this.scope.source.messageId, timezone: this.scope.timezone, goal: args.goal as string,
             constraints: args.constraints as string[], authorizedAliases: aliases, requiredActions: delegation?.requiredActions,
@@ -109,7 +146,7 @@ export class R1ConversationTools {
             const delegation = args.delegation as Delegation | undefined
             const aliases = delegation?.toolAliases ?? ['read_file', 'write_todos']
             if (aliases.some(alias => !this.implementedTaskAliases.includes(alias))) throw new Error('TASK_TOOL_IMPLEMENTATION_UNAVAILABLE')
-            if (this.scope.temporary && aliases.includes('notes_create') && !this.scope.persistenceConfirmed) throw new Error('TEMPORARY_SAVE_CONFIRMATION_REQUIRED')
+            if (this.scope.temporary && aliases.some(alias => this.assets.toolDefinition(alias).effect === 'write') && !this.scope.persistenceConfirmed) throw new Error('TEMPORARY_SAVE_CONFIRMATION_REQUIRED')
             if (patch.removeConstraints.some(value => !current.constraints.includes(value))) throw new Error('TASK_CONSTRAINT_NOT_FOUND')
             task = this.tasks.steer({ taskId: current.taskId, expectedGoalVersion: args.expectedGoalVersion as number,
               goal: patch.goal ?? current.goal, constraints: [...new Set([...current.constraints.filter(value => !patch.removeConstraints.includes(value)), ...patch.addConstraints])],
@@ -136,6 +173,7 @@ export class R1ConversationTools {
           entityId: null, entityVersion: null, data: {}, errorCode: code(error), retryable: false, runId: null }
     }
     this.assets.validateToolOutput(alias, output)
+    this.reminders.observe(output)
     this.calls.set(callId, { fingerprint, output: structuredClone(output) })
     return structuredClone(output)
   }

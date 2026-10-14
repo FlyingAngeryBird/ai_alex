@@ -230,7 +230,7 @@ export function registerChatHandlers(
       .filter(message => message.text.trim())
       .map(message => ({ role: message.role as 'user' | 'assistant', content: message.text }))
     return conversationDriver!.reply({ messages: sharedMessages.length ? sharedMessages : messages, context: { ...context,
-      recentTurns: conversations!.modelTurns(source.sessionId) }, scope: { source, temporary, timezone: context.timezone as string, persistenceConfirmed: false,
+      recentTurns: conversations!.modelTurns(source.sessionId) }, scope: { source, sourceMessages: conversations!.messages(source.sessionId).slice(-20), temporary, timezone: context.timezone as string, persistenceConfirmed: false,
       signal: request.signal, assertCurrent() { if (!requestIsCurrent(request)) throw staleError(request) } } })
   }
 

@@ -201,6 +201,41 @@ export class R1Items {
       .all() as ReminderRow[]).map(reminderView)
   }
 
+  reminderToolView(reminderId: string, detailed = false): Record<string, unknown> {
+    const row = reminderById(this.db, reminderId)
+    const metadata = this.db.prepare('SELECT kind, previous_schedule_version FROM reminders WHERE reminder_id = ?').get(reminderId) as {
+      kind: string; previous_schedule_version: number | null }
+    const result = { reminderId: row.reminder_id, itemId: row.item_id, content: row.body,
+      dueAt: row.due_at_utc, timezone: row.timezone, kind: metadata.kind === 'followup' ? 'follow_up' : 'reminder',
+      scheduleVersion: row.schedule_version, status: row.status === 'due' ? 'delivered' : row.status,
+      deliveryScope: 'app_running_and_awake' }
+    return detailed ? { ...result, linkPurpose: row.link_purpose, cancelReason: row.cancel_reason,
+      previousScheduleVersion: metadata.previous_schedule_version } : result
+  }
+  listToolItems(input: { type?: string | null; query?: string | null; completed?: boolean | null; cursor?: string | null; itemIds?: string[] }) {
+    const conditions = ['deleted_at IS NULL'], parameters: Array<string | number> = []
+    if (input.type) { conditions.push('kind = ?'); parameters.push(input.type) }
+    if (input.query) { conditions.push('(instr(title, ?) > 0 OR instr(body, ?) > 0)'); parameters.push(input.query, input.query) }
+    if (input.completed !== null && input.completed !== undefined) conditions.push(input.completed ? 'completed_at IS NOT NULL' : 'completed_at IS NULL')
+    if (input.itemIds?.length) { conditions.push(`item_id IN (${input.itemIds.map(() => '?').join(',')})`); parameters.push(...input.itemIds) }
+    if (input.cursor) { conditions.push('item_id > ?'); parameters.push(input.cursor) }
+    const rows = this.db.prepare(`SELECT item_id FROM items WHERE ${conditions.join(' AND ')} ORDER BY item_id LIMIT 21`).all(...parameters) as { item_id: string }[]
+    return { items: rows.slice(0, 20).map(row => this.toolView(row.item_id)), nextCursor: rows.length > 20 ? rows[19].item_id : null }
+  }
+  listToolReminders(input: { status?: string | null; kind?: string | null; from?: string | null; to?: string | null; cursor?: string | null; reminderIds?: string[] }) {
+    const conditions: string[] = ['1=1'], parameters: Array<string | number> = []
+    if (input.status) { conditions.push('status = ?'); parameters.push(input.status === 'delivered' ? 'due' : input.status) }
+    if (input.kind) { conditions.push('kind = ?'); parameters.push(input.kind === 'follow_up' ? 'followup' : 'standard') }
+    for (const key of ['from', 'to'] as const) if (input[key]) {
+      const time = new Date(input[key]!)
+      if (!Number.isFinite(time.getTime())) throw new Error('INVALID_DUE_TIME')
+      conditions.push(`due_at_utc ${key === 'from' ? '>=' : '<='} ?`); parameters.push(time.toISOString())
+    }
+    if (input.reminderIds?.length) { conditions.push(`reminder_id IN (${input.reminderIds.map(() => '?').join(',')})`); parameters.push(...input.reminderIds) }
+    if (input.cursor) { conditions.push('reminder_id > ?'); parameters.push(input.cursor) }
+    const rows = this.db.prepare(`SELECT reminder_id FROM reminders WHERE ${conditions.join(' AND ')} ORDER BY reminder_id LIMIT 21`).all(...parameters) as { reminder_id: string }[]
+    return { items: rows.slice(0, 20).map(row => this.reminderToolView(row.reminder_id)), nextCursor: rows.length > 20 ? rows[19].reminder_id : null }
+  }
   reschedule(input: { actionId: string; reminderId: string; expectedScheduleVersion: number;
     dueAtUtc: string; timezone: string }): { reminder: Reminder; receipt: ActionReceipt } {
     return runOnce(this.db, input.actionId, input, () => {
