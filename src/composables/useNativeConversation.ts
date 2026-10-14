@@ -5,6 +5,15 @@ import runtimeDefaults from '../../r1-assets/config/runtime.defaults.json'
 const needsContextRefresh = (code: string) => code === 'MEMORY_CONTEXT_REFRESH_REQUIRED'
 const retryableConnectionFailure = (code: string) => ['REALTIME_NETWORK_FAILED', 'REALTIME_CONNECTION_CLOSED',
   'REALTIME_START_TIMEOUT', 'REALTIME_UPGRADE_FAILED'].includes(code)
+function connectionMessage(code: string): string {
+  if (/[\u3400-\u9fff]/.test(code)) return code
+  if (code === 'REALTIME_AUTH_FAILED') return '实时对话鉴权失败，请检查设置中的服务凭据。'
+  if (code === 'REALTIME_QUOTA_LIMIT') return '实时对话服务额度不足，请检查服务额度后重新开启。'
+  if (needsContextRefresh(code)) return '对话上下文刷新未完成，请重新开启连续语音。'
+  if (retryableConnectionFailure(code)) return '语音连接中断，自动重连未成功。请检查网络后重新开启。'
+  if (code === 'REALTIME_STOPPED') return '连续语音已结束。'
+  return '连续语音未能连接，请检查麦克风和设置中的实时对话配置。'
+}
 
 /** One capture stream and one PCM playback queue for a native duplex connection. */
 export function useNativeConversation(options: {
@@ -88,7 +97,7 @@ export function useNativeConversation(options: {
           return active.value && wanted && intent === request
         }
         wanted = false
-        options.onError(`原生语音未连接（${code}），请检查设置中的实时对话配置。`)
+        options.onError(connectionMessage(code))
       }
       return false
     }
@@ -119,7 +128,7 @@ export function useNativeConversation(options: {
       if (!stillWanted()) return
       wanted = false
       await stopResources()
-      options.onError(`连续语音已结束（${reason}）。请检查连接或设置后重新开启。`)
+      options.onError(connectionMessage(reason))
     })().finally(() => {
       recovery = null
       const queued = queuedRecovery; queuedRecovery = null
@@ -173,7 +182,7 @@ export function useNativeConversation(options: {
             const code = String(event.code)
             if (starting.value) { closedWhileStarting = code; return }
             if (needsContextRefresh(code) || retryableConnectionFailure(code)) void recover(code)
-            else { void stop(); options.onError(`连续语音已结束（${code}）。`) }
+            else { void stop(); options.onError(connectionMessage(code)) }
             return
           }
           if (event.type === 'conversation.item.input_audio_transcription.started') userSpeaking.value = true

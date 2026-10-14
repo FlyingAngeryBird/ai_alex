@@ -28,6 +28,7 @@ export function registerNativeVoiceHandlers(deps: {
   memoryConfirmations?: R1MemoryConfirmations;
   topicSummaries?: R1TopicSummaries
   automaticMemory?: R1AutomaticMemory;
+  connect?: ConstructorParameters<typeof NativeRealtimeSession>[0]['connect'];
 }): { close(code?: string): void } {
   const sessions = new Map<number, { id: string; session: NativeRealtimeSession; playback(input: Record<string, unknown>): void }>()
   const aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', ...memoryToolAliases, 'notes_create', ...reminderToolAliases, ...(deps.focusServices ? focusToolAliases : [])]
@@ -87,6 +88,7 @@ export function registerNativeVoiceHandlers(deps: {
     const destroyed = () => connection.close()
     const connection = new NativeRealtimeSession({ apiKey: process.env.VOLCENGINE_REALTIME_API_KEY ?? '',
       voice: persona.voiceId || process.env.VOLCENGINE_REALTIME_VOICE || '', boundary: boundary(),
+      connect: deps.connect,
       onEvent(event) {
         assertCurrent()
         const actualSourceTurn = typeof event.question_id === 'string' ? sourceTurns.get(event.question_id) : undefined
