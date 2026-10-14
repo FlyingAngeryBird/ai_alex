@@ -9,6 +9,8 @@ import type { FocusCommand, FocusEvent, FocusState, R1Focus } from '../main/r1/f
 import type { R1ServiceDiagnostics, ServiceCheckReport } from '../main/r1/serviceDiagnostics.js'
 import type { R1Task, TaskEvent } from '../main/r1/taskSupervisor.js'
 import type { Artifact, R1Artifacts } from '../main/r1/artifacts.js'
+import type { R1Topics, R1Topic, TopicSource } from '../main/r1/topics.js'
+import type { TopicSummaryState } from '../main/r1/topicSummaries.js'
 import type { AutomaticMemoryState } from '../main/r1/automaticMemory.js'
 import type { MemoryPolicy } from '../main/r1/memoryPolicy.js'
 import type { ConfirmedMemory, MemoryConfirmation } from '../main/r1/memoryConfirmations.js'
@@ -21,6 +23,13 @@ type MethodInput<K extends keyof R1Items> = R1Items[K] extends (input: infer I) 
 type MethodOutput<K extends keyof R1Items> = R1Items[K] extends (...args: never[]) => infer O ? O : never
 
 export type R1Api = {
+  topics: {
+    list(input?: { query?: string; page?: number }): Promise<R1Result<ReturnType<R1Topics['list']> & { preparation: TopicSummaryState }>>
+    details(topicId: string): Promise<R1Result<{ topic: R1Topic; versions: Array<R1Topic & { origin: string }>; sources: TopicSource[]; related: ReturnType<R1Topics['related']> }>>
+    update(input: Parameters<R1Topics['update']>[0]): Promise<R1Result<R1Topic>>
+    forget(input: { topicId: string; expectedVersion: number }): Promise<R1Result<{ topicId: string; deletionEpoch: number }>>
+    select(input: { topicId: string; expectedVersion: number }): Promise<R1Result<R1Topic>>
+  }
   tasks: {
     selectCandidate(input: { taskId: string; expectedGoalVersion: number; candidateId: string }): Promise<R1Result<{ type: 'candidate'; id: string; version: number }>>
     saveCandidate(input: { taskId: string; expectedGoalVersion: number; candidateId: string; title: string; temporarySaveConfirmed?: boolean }): Promise<R1Result<{ itemId: string; title: string; version: number }>>

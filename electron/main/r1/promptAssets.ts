@@ -21,12 +21,13 @@ type PromptRegistry = { releaseId: string; composition: Record<string, string[]>
 type ToolCatalog = { schemaVersion: string; businessTools: R1ToolDefinition[]; internalTools: R1ToolDefinition[] }
 type Runtime = { releaseId: string; schemaVersion: string; activation: {
   preloadedSkills: string[]; alwaysAllowedRealtimeTools: string[]; alwaysAllowedTaskTools: string[]
-}; limits: Record<string, number> }
+}; limits: Record<string, number>; context: { recentTurnLimit: number; summaryTriggerFraction: number } }
 export type R1CompiledPrompt = { text: string; sha256: string; releaseId: string;
   promptIds: string[]; skillIds: string[] }
 export type R1PromptAssets = {
   releaseId: string
   schemaVersion: string
+  summaryWindow(): { recentTurnLimit: number; triggerFraction: number; requestTimeoutMs: number }
   toolAliases: readonly string[]
   compose(persona: R1Persona, context: Record<string, unknown>, mode?: 'textOnly' | 'realtime'): string
   composeTask(persona: R1Persona, taskInput: Record<string, unknown>): R1CompiledPrompt
@@ -163,7 +164,7 @@ export function loadR1PromptAssets(root: string): R1PromptAssets {
         expected.add('app_context')
         validate('app-context', variables.app_context)
         const context = variables.app_context as { temporary: boolean; memories: unknown[] }
-        if (context.temporary && context.memories.length) throw new Error('TEMPORARY_CONTEXT_CONTAINS_MEMORY')
+        if (context.temporary && (context.memories.length || (variables.app_context as { topics?: unknown[] }).topics?.length)) throw new Error('TEMPORARY_CONTEXT_CONTAINS_MEMORY')
         return `APP_CONTEXT_DATA\n${JSON.stringify(context)}`
       }
       throw new Error('PROMPT_ASSET_COMPOSITION_INVALID')
@@ -202,6 +203,7 @@ export function loadR1PromptAssets(root: string): R1PromptAssets {
       if (!tool) throw new Error('MODEL_TOOL_ALIAS_UNKNOWN')
       return structuredClone(tool)
     },
+    summaryWindow: () => ({ recentTurnLimit: runtime.context.recentTurnLimit, triggerFraction: runtime.context.summaryTriggerFraction, requestTimeoutMs: runtime.limits.summaryRequestTimeoutMs }),
     taskBudget(complexity) {
       if (!['light', 'complex'].includes(complexity)) throw new Error('TASK_COMPLEXITY_INVALID')
       const limits = runtime.limits

@@ -74,6 +74,68 @@
         "additionalProperties": false
       },
       "maxItems": 50
+    },
+    "topic": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "topicId": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 160
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "expectedVersion": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "unresolved": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 500
+              },
+              "maxItems": 50
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "active",
+                "resolved"
+              ]
+            }
+          },
+          "required": [
+            "topicId",
+            "expectedVersion",
+            "title",
+            "unresolved",
+            "status"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "required": [

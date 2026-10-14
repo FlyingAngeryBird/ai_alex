@@ -2,6 +2,8 @@ import { focusToolAliases, type FocusToolServices } from '../r1/focusTools.js'
 import { reminderToolAliases } from '../r1/reminderTools.js'
 import { memoryToolAliases, memoryMutationReply } from '../r1/memoryTools.js'
 import type { R1MemoryConfirmations } from '../r1/memoryConfirmations.js'
+import { topicConversationContext } from '../r1/topicContext.js'
+import type { R1TopicSummaries } from '../r1/topicSummaries.js'
 import type { R1AutomaticMemory } from '../r1/automaticMemory.js'
 import { selectedConversationEntity } from '../r1/sessionMode.js'
 import { ipcMain, type WebContents } from 'electron'
@@ -24,6 +26,7 @@ export function registerNativeVoiceHandlers(deps: {
   implementedTaskAliases: readonly string[]; configurationRevision(): number; focusServices?: FocusToolServices;
   onMemoryInvalidated?(deletionEpoch: number): void;
   memoryConfirmations?: R1MemoryConfirmations;
+  topicSummaries?: R1TopicSummaries
   automaticMemory?: R1AutomaticMemory;
 }): { close(): void } {
   const sessions = new Map<number, { id: string; session: NativeRealtimeSession; playback(input: Record<string, unknown>): void }>()
@@ -61,6 +64,7 @@ export function registerNativeVoiceHandlers(deps: {
       const reply = messages.find(message => message.responseId === responseId && message.role === 'assistant' && message.turnId === boundTurnId)
       const source = reply && messages.find(message => message.turnId === reply.turnId && message.role === 'user')
       if (!source || deps.memoryConfirmations.hasPendingForSource(source.messageId)) return
+      deps.topicSummaries?.enqueue({ source, temporary: false, requireHeardAssistant: true, assertSession() { if (deps.mode.sessionId !== sessionId || deps.mode.temporary) throw new Error('SUMMARY_CONTEXT_REVOKED') } })
       deps.automaticMemory.enqueue({ source, temporary: false, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         assertSession() { if (deps.mode.sessionId !== sessionId || deps.mode.temporary) throw new Error('AUTO_MEMORY_SESSION_REVOKED') },
         assertLatest() { assertCurrent(); if (turnId !== source.turnId) throw new Error('AUTO_MEMORY_SOURCE_REVOKED') },
@@ -72,10 +76,10 @@ export function registerNativeVoiceHandlers(deps: {
     }
     const context = () => ({ sessionId, sessionGeneration: 1, turnId, currentTime: new Date().toISOString(),
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, temporary, contextVersion: 1,
-      personaVersion: persona.version, deletionEpoch, selectedEntity: selectedConversationEntity(deps.mode, deps.tasks), availableToolAliases: [],
+      personaVersion: persona.version, deletionEpoch, selectedEntity: topicConversationContext(deps.db, deps.mode).selected ?? selectedConversationEntity(deps.mode, deps.tasks), availableToolAliases: [],
       loadedSkillIds: tools ? [...tools.loadedSkillIds] : ['SK01'],
       recentTurns: deps.conversations.modelTurns(sessionId),
-      memories: [], activeTasks: deps.tasks.list(temporary ? sessionId : null).slice(-20).map(task => {
+      memories: [], topics: topicConversationContext(deps.db, deps.mode).topics, activeTasks: deps.tasks.list(temporary ? sessionId : null).slice(-20).map(task => {
         const { taskId, goalVersion, status, goal } = deps.tasks.modelView(task.taskId)
         return { taskId, goalVersion, status, goal }
       }) })

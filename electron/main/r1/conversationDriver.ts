@@ -1,5 +1,6 @@
 import type { FocusToolServices } from './focusTools.js'
 import { memoryMutationReply } from './memoryTools.js'
+import { topicConversationContext } from './topicContext.js'
 import { selectedConversationEntity } from './sessionMode.js'
 import type { ChatMessage, AssistantOutput } from '../providers/llmProvider.js'
 import type { createArkResponsesProvider, ArkResponseRound } from '../providers/arkResponsesProvider.js'
@@ -14,6 +15,7 @@ export class R1ConversationDriver {
   constructor(private readonly db: R1Database, private readonly assets: R1PromptAssets,
     private readonly tasks: R1TaskSupervisor, private readonly provider: ReturnType<typeof createArkResponsesProvider>,
     private readonly persona: () => R1Persona, private readonly implementedTaskAliases: readonly string[], private readonly services?: FocusToolServices) {}
+  topicContext(mode: import('./sessionMode.js').R1SessionMode | undefined) { return topicConversationContext(this.db, mode) }
   selectedEntity(mode: import('./sessionMode.js').R1SessionMode | undefined) {
     return selectedConversationEntity(mode, this.tasks)
   }

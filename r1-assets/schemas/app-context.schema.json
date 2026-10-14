@@ -63,7 +63,8 @@
                 "artifact",
                 "track",
                 "candidate",
-                "task"
+                "task",
+                "topic"
               ]
             },
             "id": {
@@ -257,6 +258,64 @@
         "additionalProperties": false
       },
       "maxItems": 50
+    },
+    "topics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "topicId": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 1600
+          },
+          "unresolved": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "maxItems": 50
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "resolved"
+            ]
+          },
+          "sourceRefs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 160
+            },
+            "maxItems": 500
+          }
+        },
+        "required": [
+          "topicId",
+          "version",
+          "title",
+          "summary",
+          "unresolved",
+          "status",
+          "sourceRefs"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 5
     }
   },
   "required": [

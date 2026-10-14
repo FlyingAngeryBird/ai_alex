@@ -1,6 +1,6 @@
 {
-  "releaseId": "seamo-ai-r1-agent-assets-2.2.1",
-  "schemaVersion": "2.2.0",
+  "releaseId": "seamo-ai-r1-agent-assets-2.3.1",
+  "schemaVersion": "2.3.0",
   "providerPolicy": {
     "primary": "volcengine",
     "crossProviderFallback": false,
@@ -50,7 +50,8 @@
     "pageReadTimeoutMs": 8000,
     "pageReadMaxBytes": 2097152,
     "technicalToolRetries": 1,
-    "schemaRepairAttempts": 1
+    "schemaRepairAttempts": 1,
+    "summaryRequestTimeoutMs": 30000
   },
   "context": {
     "recentTurnLimit": 12,

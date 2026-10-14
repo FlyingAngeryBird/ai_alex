@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createR1Backup, restoreR1BackupOffline } from '../electron/main/r1/backup'
 import { openR1Database, R1_SCHEMA_VERSION } from '../electron/main/r1/database'
+import { R1Topics } from '../electron/main/r1/topics'
 import { R1MemoryPolicy } from '../electron/main/r1/memoryPolicy'
 import { R1MemoryStore } from '../electron/main/r1/memory'
 import { R1Conversations } from '../electron/main/r1/conversations'
@@ -18,6 +19,26 @@ function directory(): string {
 afterEach(() => { for (const path of directories.splice(0)) rmSync(path, { recursive: true, force: true }) })
 
 describe('R1 offline backup and restore', () => {
+  it.each(['correct', 'forget'] as const)('does not revive a Topic after %s when restoring its older backup', async action => {
+    const root = directory(), currentPath = join(root, 'r1.sqlite'), backupPath = join(root, 'old-topic.sqlite')
+    const db = openR1Database(currentPath), conversations = new R1Conversations(db), topics = new R1Topics(db), policy = new R1MemoryPolicy(db)
+    const sessionId = conversations.start(); policy.update({ enabled: true, expectedVersion: 1 })
+    const source = conversations.append({ sessionId, turnId: 'source', role: 'user', body: '已决定先做桌面版。', status: 'final' })
+    const topic = topics.commitSummary({ result: { summary: '先做桌面版。', sourceTurnIds: [source.turnId], memoryIds: [], taskFacts: [], topic: {
+      topicId: null, expectedVersion: null, title: '桌面版', unresolved: [], status: 'active' } }, sources: [source], existingTopics: [], authorizationVersion: 2, deletionEpoch: 0, assertCurrent() {} })!
+    await createR1Backup(db, backupPath)
+    if (action === 'correct') topics.update({ topicId: topic.topicId, expectedVersion: 1, title: '网页版本', summary: '更正为先做网页版。', unresolved: [], status: 'active' })
+    else topics.forget({ topicId: topic.topicId, expectedVersion: 1 })
+    db.close(); restoreR1BackupOffline(currentPath, backupPath)
+    const restored = openR1Database(currentPath)
+    try {
+      expect(new R1Topics(restored).list().entries).toEqual([])
+      expect(() => new R1Topics(restored).versions(topic.topicId)).toThrow('TOPIC_NOT_FOUND')
+      expect(new R1Conversations(restored).modelTurns(sessionId)).toEqual([])
+      const cutoff = restored.prepare('SELECT authorized_after_rowid AS sequence FROM memory_policy').get() as { sequence: number }
+      expect(cutoff.sequence).toBeGreaterThanOrEqual(1)
+    } finally { restored.close() }
+  })
   it('keeps the current opt-out when restoring a backup taken while automatic memory was enabled', async () => {
     const root = directory(), currentPath = join(root, 'r1.sqlite'), backupPath = join(root, 'enabled.sqlite')
     const db = openR1Database(currentPath), policy = new R1MemoryPolicy(db)

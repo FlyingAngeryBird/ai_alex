@@ -1,3 +1,4 @@
+import { topicContext, type R1Topics } from './topics.js'
 import type { SessionMessage } from './conversations.js'
 import { R1MemoryStore, type R1Memory } from './memory.js'
 
@@ -12,7 +13,7 @@ export const isSensitiveMemory = (source: string, content: string): boolean =>
  * Ambiguous/quoted instructions and sensitive writes require a separate confirmation flow. */
 export class R1MemoryTools {
   private readonly known = new Map<string, R1Memory>()
-  constructor(private readonly store: R1MemoryStore, private readonly source: SessionMessage) {}
+  constructor(private readonly store: R1MemoryStore, private readonly source: SessionMessage, private readonly topics?: R1Topics) {}
   private authorize(action: 'remember' | 'update' | 'forget'): void {
     const text = this.source.body.trim()
     const prefix = /^(?:请(?:你)?(?:帮我)?|麻烦(?:你)?(?:帮我)?|帮我)?\s*/
@@ -48,7 +49,8 @@ export class R1MemoryTools {
     if (alias === 'memory_recall') {
       const memories = this.store.recall(args.query as string, false, args.category as R1Memory['category'] | null ?? null)
       for (const memory of memories) this.known.set(memory.memoryId, memory)
-      return { data: { matchStatus: memories.length ? 'matched' : 'no_match', memories: memories.map(memoryView) } }
+      const topics = this.topics?.list({ query: args.query as string }).entries.slice(0, 5).map(topicContext) ?? []
+      return { data: { matchStatus: memories.length || topics.length ? 'matched' : 'no_match', memories: memories.map(memoryView), ...(this.topics ? { topics } : {}) } }
     }
     if (alias === 'memory_remember') {
       this.authorize('remember'); this.sensitive(args.content as string); this.expiry(args.validUntil as string | null)

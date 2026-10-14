@@ -13,6 +13,7 @@ import type { R1PersonaStore } from '../r1/persona.js'
 import type { R1PromptAssets } from '../r1/promptAssets.js'
 import type { R1MemoryStore } from '../r1/memory.js'
 import type { R1MemoryConfirmations } from '../r1/memoryConfirmations.js'
+import type { R1TopicSummaries } from '../r1/topicSummaries.js'
 import type { R1AutomaticMemory } from '../r1/automaticMemory.js'
 import type { R1SessionMode } from '../r1/sessionMode.js'
 import { R1ModelRequestBoundary } from '../r1/modelBoundary.js'
@@ -137,7 +138,8 @@ export function registerChatHandlers(
   conversationDriver?: R1ConversationDriver,
   onMemoryInvalidated: (deletionEpoch: number) => void = () => undefined,
   memoryConfirmations?: R1MemoryConfirmations,
-  automaticMemory?: R1AutomaticMemory
+  automaticMemory?: R1AutomaticMemory,
+  topicSummaries?: R1TopicSummaries
 ): void {
   clearMemory()
   let activeSystemPrompt: string | null = null
@@ -154,7 +156,7 @@ export function registerChatHandlers(
     const previousSessionId = sessionId, previousTemporary = temporary
     clearMemory(); responseController?.abort(); sessionEpoch++
     temporary = false; sessionId = nextSessionId
-    if (sessionMode) { sessionMode.temporary = false; sessionMode.sessionId = sessionId; sessionMode.selectedCandidate = null }
+    if (sessionMode) { sessionMode.temporary = false; sessionMode.sessionId = sessionId; sessionMode.selectedCandidate = null; sessionMode.selectedTopic = null }
     if (previousSessionId && conversations) {
       try { onSessionEnded(previousSessionId, previousTemporary) } finally { conversations.end(previousSessionId) }
     }
@@ -169,12 +171,13 @@ export function registerChatHandlers(
     }
   }
 
+  const topicSelectionKey = () => sessionMode?.selectedTopic ? `${sessionMode.selectedTopic.topicId}:${sessionMode.selectedTopic.version}` : null
   function captureRequest() {
-    return { epoch: sessionEpoch, responseGeneration, signal: responseController?.signal, personaVersion: personaStore?.get().version,
+    return { topicSelection: topicSelectionKey(), epoch: sessionEpoch, responseGeneration, signal: responseController?.signal, personaVersion: personaStore?.get().version,
       deletionEpoch: memoryStore?.currentDeletionEpoch() }
   }
   function requestIsCurrent(request: ReturnType<typeof captureRequest>): boolean {
-    return request.epoch === sessionEpoch && request.responseGeneration === responseGeneration &&
+    return request.topicSelection === topicSelectionKey() && request.epoch === sessionEpoch && request.responseGeneration === responseGeneration &&
       request.personaVersion === personaStore?.get().version &&
       request.deletionEpoch === memoryStore?.currentDeletionEpoch()
   }
@@ -228,8 +231,9 @@ export function registerChatHandlers(
         temporary, contextVersion: sessionEpoch + 1,
         personaVersion: persona.version,
         deletionEpoch,
-        selectedEntity: conversationDriver?.selectedEntity?.(sessionMode) ?? null, availableToolAliases: [], loadedSkillIds: ['SK01'],
-        recentTurns: [], memories: [], activeTasks: []
+        selectedEntity: conversationDriver?.topicContext(sessionMode).selected ?? conversationDriver?.selectedEntity?.(sessionMode) ?? null, availableToolAliases: [], loadedSkillIds: ['SK01'],
+        recentTurns: [], memories: [], activeTasks: [],
+        topics: conversationDriver?.topicContext(sessionMode).topics ?? []
       }
       const boundary = new R1ModelRequestBoundary(promptAssets, persona, context)
       return { text: boundary.systemText, boundary, context }
@@ -285,7 +289,7 @@ export function registerChatHandlers(
     sessionEpoch += 1
     endCurrentSession()
     temporary = enabled
-    if (sessionMode) sessionMode.selectedCandidate = null
+    if (sessionMode) { sessionMode.selectedCandidate = null; sessionMode.selectedTopic = null }
     if (sessionMode) sessionMode.temporary = enabled
     sessionId = conversations.start(temporary)
     if (sessionMode) sessionMode.sessionId = sessionId
@@ -335,6 +339,7 @@ export function registerChatHandlers(
       if (!requestIsCurrent(request)) throw new Error('SESSION_CHANGED')
       persistTurn(text, result.reply, turnId, Boolean(source))
       extractMemory(source, _event, request)
+      if (source) topicSummaries?.enqueue({ source, temporary, assertSession() { if (request.epoch !== sessionEpoch || sessionId !== source.sessionId || temporary) throw new Error('SUMMARY_CONTEXT_REVOKED') } })
 
       appendMemory({
         content: text,
@@ -384,6 +389,7 @@ export function registerChatHandlers(
       if (!requestIsCurrent(request)) throw new Error('SESSION_CHANGED')
       persistTurn(text, result.reply, turnId, Boolean(source))
       extractMemory(source, event, request)
+      if (source) topicSummaries?.enqueue({ source, temporary, assertSession() { if (request.epoch !== sessionEpoch || sessionId !== source.sessionId || temporary) throw new Error('SUMMARY_CONTEXT_REVOKED') } })
 
       appendMemory({
         content: text,

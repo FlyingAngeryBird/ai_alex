@@ -374,7 +374,7 @@ it('passes shared native conversation history to the text driver and omits inter
     const reply = vi.fn(async (_input: unknown) => ({ intent: 'chat' as const, music: null, reply: '接着聊' }))
     registerChatHandlers({ handle: (name, handler) => { handlers.set(name, handler) } }, undefined, undefined,
       conversations, new R1PersonaStore(db), loadR1PromptAssets(resolve('r1-assets')), new R1MemoryStore(db), mode,
-      undefined, { reply } as unknown as import('../electron/main/r1/conversationDriver').R1ConversationDriver)
+      undefined, { reply, topicContext: () => ({ topics: [], selected: null }) } as unknown as import('../electron/main/r1/conversationDriver').R1ConversationDriver)
     const sessionId = mode.sessionId!
     conversations.append({ sessionId, turnId: 'voice-1', role: 'user', body: '这是刚才语音说的材料', status: 'final' })
     conversations.append({ sessionId, turnId: 'voice-1', responseId: 'heard', role: 'assistant', body: '完整播出的回复', status: 'generated' })

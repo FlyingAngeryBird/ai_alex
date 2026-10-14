@@ -54,6 +54,12 @@ function preserveSuppression(current: R1Database, restored: R1Database): void {
     const old = restored.prepare('SELECT version, content, expires_at FROM memory WHERE memory_id = ?').get(row.memory_id) as typeof row | undefined
     if (old && (old.version < row.version || old.content !== row.content || old.expires_at !== row.expires_at)) all.push({ source_ref: row.memory_id, deletion_epoch: row.deletion_epoch })
   }
+  const correctedTopics = current.prepare('SELECT topic_id, version, summary, deletion_epoch FROM topics WHERE deletion_epoch > 0 AND deleted_at IS NULL')
+    .all() as { topic_id: string; version: number; summary: string; deletion_epoch: number }[]
+  for (const row of correctedTopics) {
+    const old = restored.prepare('SELECT version, summary FROM topics WHERE topic_id=?').get(row.topic_id) as { version: number; summary: string } | undefined
+    if (old && (old.version < row.version || old.summary !== row.summary)) all.push({ source_ref: row.topic_id, deletion_epoch: row.deletion_epoch })
+  }
   const epoch = new R1MemoryStore(current).currentDeletionEpoch()
   if (!all.length && !epoch) return
 
@@ -103,7 +109,7 @@ export function restoreR1BackupOffline(currentPath: string, backupPath: string):
     staged = openR1Database(stagedPath)
     // Restoring data cannot silently restore an earlier grant or revoke the user's latest choice.
     const currentPolicy = current.prepare('SELECT enabled, version FROM memory_policy WHERE id = 1').get() as { enabled: number; version: number }
-    staged.prepare('UPDATE memory_policy SET enabled = ?, version = MAX(version, ?) + 1, updated_at = ? WHERE id = 1')
+    staged.prepare('UPDATE memory_policy SET enabled = ?, version = MAX(version, ?) + 1, authorized_after_rowid=(SELECT COALESCE(MAX(rowid),0) FROM messages), updated_at = ? WHERE id = 1')
       .run(currentPolicy.enabled, currentPolicy.version, new Date().toISOString())
     preserveSuppression(current, staged)
     staged.exec('PRAGMA wal_checkpoint(TRUNCATE)')

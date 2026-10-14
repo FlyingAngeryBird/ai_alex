@@ -20,6 +20,19 @@ afterEach(() => {
 })
 
 describe('R1 database and legacy import', () => {
+  it('migrates a v6 Topic as its actual baseline version and blocks pre-upgrade summary backfill', () => {
+    const path = join(makeDirectory(), 'v6.sqlite'), db = openR1Database(path), now = new Date().toISOString()
+    db.prepare(`INSERT INTO topics (topic_id,title,summary,unresolved_json,source_refs_json,status,version,updated_at)
+      VALUES ('old-topic','旧话题','已确认的阶段结论','[]','[]','active',3,?)`).run(now)
+    db.prepare("INSERT INTO sessions VALUES ('session',0,'active',?,NULL)").run(now)
+    db.prepare("INSERT INTO messages (message_id,session_id,turn_id,role,body,status,created_at) VALUES ('source','session','turn','user','旧来源','final',?)").run(now)
+    db.exec('DROP TABLE topic_versions; ALTER TABLE memory_policy DROP COLUMN authorized_after_rowid; PRAGMA user_version=6'); db.close()
+    const migrated = openR1Database(path)
+    try {
+      expect(migrated.prepare('SELECT version,origin FROM topic_versions').get()).toMatchObject({ version: 3, origin: 'legacy' })
+      expect(migrated.prepare('SELECT authorized_after_rowid FROM memory_policy').get()).toMatchObject({ authorized_after_rowid: 1 })
+    } finally { migrated.close() }
+  })
   it('migrates a v5 database with automatic memory off and preserves explicit memory and sources', () => {
     const path = join(makeDirectory(), 'v5.sqlite'), db = openR1Database(path)
     const now = new Date().toISOString()

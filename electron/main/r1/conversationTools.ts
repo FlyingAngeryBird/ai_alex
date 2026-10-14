@@ -1,4 +1,5 @@
 import { R1MemoryStore } from './memory.js'
+import { R1Topics } from './topics.js'
 import { R1MemoryTools, memoryToolAliases, isSensitiveMemory, type MemorySaveCandidate } from './memoryTools.js'
 import type { MemoryConfirmation } from './memoryConfirmations.js'
 import { memoryContextCutoff } from './memoryContext.js'
@@ -37,7 +38,8 @@ export class R1ConversationTools {
     private readonly tasks: R1TaskSupervisor, private readonly scope: ConversationToolScope,
     private readonly implementedTaskAliases: readonly string[], services?: FocusToolServices) {
     scope.assertCurrent()
-    this.memories = new R1MemoryTools(new R1MemoryStore(db), scope.source)
+    const recallProperties = assets.toolDefinition('memory_recall').output_data_schema.properties as Record<string, unknown> | undefined
+    this.memories = new R1MemoryTools(new R1MemoryStore(db), scope.source, recallProperties && Object.hasOwn(recallProperties, 'topics') ? new R1Topics(db) : undefined)
     if (services) { this.aliases.push(...focusToolAliases); this.focus = new R1FocusTools(services, scope.source, scope.assertCurrent) }
     this.reminders = new R1ReminderTools(new R1Items(db), { source: { ...scope.source, timezone: scope.timezone },
       assertCurrent: scope.assertCurrent, checkSources: refs => this.checkReminderSources(refs), timeSource: refs => this.reminderSource(refs), requirePersistence: () => {

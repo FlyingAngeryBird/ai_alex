@@ -822,6 +822,12 @@ function cancelPushToTalk(): void { void pushToTalk.cancel() }
 function handleWindowBlur(): void { cancelPushToTalk() }
 function handleVisibilityChange(): void { if (document.hidden) cancelPushToTalk() }
 
+async function handleContinueTopic(topic: import('../electron/main/r1/topics').R1Topic): Promise<void> {
+  nativeAutoRequested.value = false; nativeResumeGeneration = null; ++autoListenModeGeneration
+  await nativeConversation.stop(); conversation.disableAutoListen(); releaseAssistantAudio()
+  closePanels(); music.closeImmersive()
+  await handleSendText(`接着「${topic.title}」聊`)
+}
 async function handleSendText(text: string, complete?: (accepted: boolean) => void): Promise<void> {
   if (textBusy.value || conversation.isListening.value ||
     conversation.particleState.value === 'thinking' && !nativeConversation.active.value) {
@@ -1124,7 +1130,7 @@ onBeforeUnmount(() => {
     />
     <R1ItemsPanel v-if="itemsOpen" :temporary-mode="temporaryMode" @close="closePanels" @start-focus="openFocusEditor" />
     <SearchPanel v-if="searchEverOpened" v-show="searchOpen" :temporary-mode="temporaryMode" @close="closePanels" />
-    <R1MemoryPanel v-if="memoryOpen" :temporary="temporaryMode" :revision="memoryRevision" @close="closePanels" />
+    <R1MemoryPanel v-if="memoryOpen" :temporary="temporaryMode" :revision="memoryRevision" :interaction-busy="textBusy || conversation.isListening.value || conversation.particleState.value === 'thinking'" @close="closePanels" @continue-topic="handleContinueTopic" @settings="openPanel('settings')" />
     <R1MemoryConfirmationDialog v-if="memoryConfirmation" :key="memoryConfirmation.confirmationId" :confirmation="memoryConfirmation"
       :busy="memoryConfirmationBusy" :error="memoryConfirmationError" @selection="prepareMemorySelection" @confirm="resolveMemoryConfirmation(true)" @cancel="resolveMemoryConfirmation(false)" />
     <R1HistoryPanel v-if="historyOpen" :temporary="temporaryMode" :allow-text-interrupt="nativeConversation.active.value && !textBusy"

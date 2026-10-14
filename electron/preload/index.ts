@@ -24,6 +24,11 @@ export const exposedChannels = [
   'r1.items.list',
   'r1.persona.get',
   'r1.persona.update',
+  'r1.topics.list',
+  'r1.topics.details',
+  'r1.topics.update',
+  'r1.topics.forget',
+  'r1.topics.select',
   'r1.memory.policy',
   'r1.memory.setPolicy',
   'r1.memory.prepareSelection',
@@ -158,6 +163,13 @@ function exposeLingliApi(
     return renderer.invoke(channel, payload) as Promise<R1Result<T>>
   }
   const r1Api: R1Api = {
+    topics: {
+      list: input => invokeR1('r1.topics.list', input),
+      details: topicId => invokeR1('r1.topics.details', { topicId }),
+      update: input => invokeR1('r1.topics.update', input),
+      forget: input => invokeR1('r1.topics.forget', input),
+      select: input => invokeR1('r1.topics.select', input)
+    },
     tasks: {
       selectCandidate: input => invokeR1('r1.tasks.selectCandidate', input),
       saveCandidate: input => invokeR1('r1.tasks.saveCandidate', input),

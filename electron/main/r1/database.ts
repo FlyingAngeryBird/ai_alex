@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-export const R1_SCHEMA_VERSION = 6
+export const R1_SCHEMA_VERSION = 7
 
 export type R1Database = DatabaseSync
 
@@ -332,10 +332,26 @@ export function openR1Database(databasePath: string): R1Database {
       db.exec(`CREATE TABLE IF NOT EXISTS memory_policy (
         id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
         version INTEGER NOT NULL, updated_at TEXT NOT NULL)`)
-      db.prepare('INSERT OR IGNORE INTO memory_policy VALUES (1, 0, 1, ?)').run(new Date().toISOString())
+      db.prepare('INSERT OR IGNORE INTO memory_policy (id, enabled, version, updated_at) VALUES (1, 0, 1, ?)').run(new Date().toISOString())
       const columns = new Set((db.prepare('PRAGMA table_info(memory)').all() as { name: string }[]).map(row => row.name))
       if (!columns.has('authorization_version')) db.exec('ALTER TABLE memory ADD COLUMN authorization_version INTEGER')
       db.exec('PRAGMA user_version = 6')
+    })
+  }
+  if (migratedVersion < 7) {
+    inTransaction(db, () => {
+      const policyColumns = new Set((db.prepare('PRAGMA table_info(memory_policy)').all() as { name: string }[]).map(row => row.name))
+      if (!policyColumns.has('authorized_after_rowid')) {
+        db.exec('ALTER TABLE memory_policy ADD COLUMN authorized_after_rowid INTEGER NOT NULL DEFAULT 0')
+        db.exec('UPDATE memory_policy SET authorized_after_rowid=(SELECT COALESCE(MAX(rowid),0) FROM messages)')
+      }
+      db.exec(`CREATE TABLE IF NOT EXISTS topic_versions (topic_id TEXT NOT NULL REFERENCES topics(topic_id), version INTEGER NOT NULL,
+        snapshot_json TEXT NOT NULL, origin TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(topic_id, version))`)
+      db.exec(`INSERT OR IGNORE INTO topic_versions SELECT topic_id, version,
+        json_object('topicId', topic_id, 'title', title, 'summary', summary, 'unresolved', json(unresolved_json),
+          'sourceRefs', json(source_refs_json), 'status', status, 'version', version, 'deletionEpoch', deletion_epoch, 'updatedAt', updated_at),
+        'legacy', updated_at FROM topics WHERE deleted_at IS NULL`)
+      db.exec('PRAGMA user_version = 7')
     })
   }
   return db

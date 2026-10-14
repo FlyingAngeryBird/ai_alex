@@ -180,7 +180,8 @@ export class R1MemoryStore {
       .get() as { epoch: number | null }).epoch ?? 0
     const suppression = (this.db.prepare('SELECT MAX(deletion_epoch) AS epoch FROM source_suppression')
       .get() as { epoch: number | null }).epoch ?? 0
-    return Math.max(memory, suppression, memoryContextEpoch(this.db))
+    const topic = (this.db.prepare('SELECT MAX(deletion_epoch) AS epoch FROM topics').get() as { epoch: number | null }).epoch ?? 0
+    return Math.max(memory, topic, suppression, memoryContextEpoch(this.db))
   }
 
   remember(input: { content: string; category: R1Memory['category']; sourceMessageIds: string[];
@@ -264,11 +265,13 @@ export class R1MemoryStore {
   }
 
   private invalidateTopics(memoryId: string, epoch: number): void {
+    const memory = this.db.prepare('SELECT source_refs_json FROM memory WHERE memory_id=?').get(memoryId) as { source_refs_json: string } | undefined
+    const affected = new Set([memoryId, ...JSON.parse(memory?.source_refs_json ?? '[]') as string[]])
     const topics = this.db.prepare('SELECT topic_id, source_refs_json FROM topics WHERE deleted_at IS NULL')
       .all() as { topic_id: string; source_refs_json: string }[]
     const now = new Date().toISOString()
     for (const topic of topics) {
-      if ((JSON.parse(topic.source_refs_json) as string[]).includes(memoryId)) this.db.prepare(`UPDATE topics SET deleted_at = ?, deletion_epoch = ?,
+      if ((JSON.parse(topic.source_refs_json) as string[]).some(ref => affected.has(ref))) this.db.prepare(`UPDATE topics SET deleted_at = ?, deletion_epoch = ?,
         version = version + 1, updated_at = ? WHERE topic_id = ?`).run(now, epoch, now, topic.topic_id)
     }
   }

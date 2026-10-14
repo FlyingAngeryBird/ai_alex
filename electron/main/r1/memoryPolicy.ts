@@ -16,7 +16,7 @@ export class R1MemoryPolicy {
       const current = this.get()
       if (current.version !== input.expectedVersion) throw new Error('VERSION_CONFLICT')
       if (current.enabled === input.enabled) return current
-      this.db.prepare('UPDATE memory_policy SET enabled = ?, version = version + 1, updated_at = ? WHERE id = 1')
+      this.db.prepare('UPDATE memory_policy SET enabled = ?, version = version + 1, authorized_after_rowid=(SELECT COALESCE(MAX(rowid),0) FROM messages), updated_at = ? WHERE id = 1')
         .run(Number(input.enabled), new Date().toISOString())
       return this.get()
     })

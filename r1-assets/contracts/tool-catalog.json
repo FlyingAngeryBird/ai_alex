@@ -1,10 +1,10 @@
 {
-  "schemaVersion": "2.2.0",
+  "schemaVersion": "2.3.0",
   "businessTools": [
     {
       "name": "memory.recall",
       "alias": "memory_recall",
-      "description": "检索已授权有效的长期记忆；临时会话不可用。无匹配与检索失败分别返回。",
+      "description": "检索已授权有效的长期记忆；临时会话不可用。无匹配与检索失败分别返回。 同时返回匹配的有效持续话题 topics（真实 topicId/version/title/summary/unresolved/status/sourceRefs），与 memories 分层；Topic 不是 Memory ID，不能交给 memory_update/forget。",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -100,6 +100,64 @@
                 "category",
                 "content",
                 "version",
+                "sourceRefs"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 5
+          },
+          "topics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "topicId": {
+                  "type": "string",
+                  "maxLength": 160
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "title": {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                "summary": {
+                  "type": "string",
+                  "maxLength": 1600
+                },
+                "unresolved": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "maxItems": 50
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "active",
+                    "resolved"
+                  ]
+                },
+                "sourceRefs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 160
+                  },
+                  "maxItems": 500
+                }
+              },
+              "required": [
+                "topicId",
+                "version",
+                "title",
+                "summary",
+                "unresolved",
+                "status",
                 "sourceRefs"
               ],
               "additionalProperties": false

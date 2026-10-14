@@ -24,7 +24,7 @@ describe('R1 artifact metadata and saved baseline migration', () => {
         expectedItemVersion: 1, actionId: 'blind' })).toThrow('VERSION_CONFLICT')
       expect(migrated.save({ artifactId: artifact.artifactId, expectedVersion: 1,
         expectedItemVersion: 1, actionId: 'reviewed', replacementConfirmed: true }).item.itemId).toBe(saved.item.itemId)
-      const snapshots = readdirSync(directory).filter(name => name.includes('.pre-schema-4-to-5-'))
+      const snapshots = readdirSync(directory).filter(name => name.includes(`.pre-schema-4-to-${R1_SCHEMA_VERSION}-`))
       expect(snapshots).toHaveLength(1)
       const previous = new DatabaseSync(join(directory, snapshots[0]), { readOnly: true })
       try {
