@@ -48,7 +48,7 @@ import { R1AutomaticMemory } from './r1/automaticMemory.js'
 import { registerAutomaticMemoryHandlers } from './ipc/automaticMemoryHandlers.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-let nativeVoice: { close(): void } | null = null
+let nativeVoice: { close(code?: string): void } | null = null
 let r1Database: R1Database | null = null
 let reminderScheduler: ReminderScheduler | null = null
 let r1PromptAssets: R1PromptAssets | null = null
@@ -71,7 +71,7 @@ function invalidateMemoryContexts(deletionEpoch: number): void {
   }
   automaticMemory?.invalidate()
   memoryConfirmations?.revokeAll()
-  nativeVoice?.close()
+  nativeVoice?.close('MEMORY_CONTEXT_REFRESH_REQUIRED')
   r1Tasks?.invalidateContext()
   for (const window of BrowserWindow.getAllWindows()) window.webContents.send('r1.memoryInvalidated', { deletionEpoch })
 }

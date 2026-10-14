@@ -1,10 +1,16 @@
 import { ref } from 'vue'
 import type { NativeRealtimeEvent } from '../../electron/main/providers/nativeRealtimeSession'
+import runtimeDefaults from '../../r1-assets/config/runtime.defaults.json'
+
+const needsContextRefresh = (code: string) => code === 'MEMORY_CONTEXT_REFRESH_REQUIRED'
+const retryableConnectionFailure = (code: string) => ['REALTIME_NETWORK_FAILED', 'REALTIME_CONNECTION_CLOSED',
+  'REALTIME_START_TIMEOUT', 'REALTIME_UPGRADE_FAILED'].includes(code)
 
 /** One capture stream and one PCM playback queue for a native duplex connection. */
 export function useNativeConversation(options: {
   onText(event: NativeRealtimeEvent): void; onError(message: string): void;
   onSpeaking(speaking: boolean): void;
+  onConnectionState?(state: 'rebuilding' | 'ready'): void;
 }) {
   const userSpeaking = ref(false)
   const active = ref(false), starting = ref(false), speaking = ref(false)
@@ -17,6 +23,9 @@ export function useNativeConversation(options: {
   const clearWaiters = new Map<string, () => void>()
   let stopping: Promise<void> | null = null
   let closing = false
+  let wanted = false, intent = 0, networkRetries = 0
+  let recovery: Promise<void> | null = null
+  let queuedRecovery: string | null = null
   const setSpeaking = (value: boolean) => { speaking.value = value; options.onSpeaking(value) }
   function clearPlayback(): Promise<void> {
     setSpeaking(false)
@@ -37,6 +46,10 @@ export function useNativeConversation(options: {
     processor.port.postMessage({ type: 'audio', responseId, pcm }, [pcm.buffer])
   }
   function stop(): Promise<void> {
+    wanted = false; intent++; queuedRecovery = null
+    return stopResources()
+  }
+  function stopResources(): Promise<void> {
     if (stopping) return stopping
     stopping = stopNow().finally(() => { stopping = null })
     return stopping
@@ -63,12 +76,65 @@ export function useNativeConversation(options: {
     if (connectionId) await window.lingli.invoke('voice.nativeCancel', { connectionId })
   }
   async function start(): Promise<boolean> {
-    if (active.value || starting.value || stopping) return false
+    if (active.value || starting.value || stopping || recovery) return false
+    wanted = true; networkRetries = 0
+    const request = ++intent
+    try { return await openConnection(request) }
+    catch (error) {
+      if (wanted && intent === request) {
+        const code = error instanceof Error ? error.message : 'REALTIME_START_FAILED'
+        if (needsContextRefresh(code) || retryableConnectionFailure(code)) {
+          await recover(code)
+          return active.value && wanted && intent === request
+        }
+        wanted = false
+        options.onError(`原生语音未连接（${code}），请检查设置中的实时对话配置。`)
+      }
+      return false
+    }
+  }
+  async function recover(code: string): Promise<void> {
+    if (!wanted) return
+    if (recovery) { queuedRecovery = code; return }
+    const request = intent
+    const stillWanted = () => wanted && intent === request
+    // Invalidation closes the old cloud session before this event. Stop capture and
+    // clear the device queue before a new connection may accept any microphone data.
+    active.value = false
+    processor?.port.postMessage({ type: 'capture', enabled: false })
+    options.onConnectionState?.('rebuilding')
+    recovery = (async () => {
+      let reason = code, refreshes = 0
+      while (stillWanted()) {
+        if (needsContextRefresh(reason)) {
+          if (++refreshes > 2) break
+        } else if (!retryableConnectionFailure(reason) || networkRetries++ >= runtimeDefaults.limits.autoReconnectAttempts) break
+        await stopResources()
+        if (!stillWanted()) return
+        if (!needsContextRefresh(reason)) await new Promise(resolve => setTimeout(resolve, 250 * networkRetries))
+        if (!stillWanted()) return
+        try { if (await openConnection(request)) return; else return }
+        catch (error) { reason = error instanceof Error ? error.message : 'REALTIME_START_FAILED' }
+      }
+      if (!stillWanted()) return
+      wanted = false
+      await stopResources()
+      options.onError(`连续语音已结束（${reason}）。请检查连接或设置后重新开启。`)
+    })().finally(() => {
+      recovery = null
+      const queued = queuedRecovery; queuedRecovery = null
+      if (wanted && queued) void recover(queued)
+    })
+    await recovery
+  }
+  async function openConnection(request: number): Promise<boolean> {
+    if (!wanted || intent !== request) return false
     starting.value = true
     const epoch = ++generation, id = crypto.randomUUID()
+    let closedWhileStarting: string | null = null
     connectionId = id
     const matches = () => generation === epoch && connectionId === id
-    const current = () => matches() && !closing
+    const current = () => matches() && !closing && wanted && intent === request
     try {
       const permission = await window.lingli.invoke<{ granted: boolean }>('app.requestMicrophoneAccess')
       if (!current()) return false
@@ -105,9 +171,13 @@ export function useNativeConversation(options: {
         try {
           if (event.type === 'closed') {
             const code = String(event.code)
-            void stop(); options.onError(`连续语音已结束（${code}）。`); return
+            if (starting.value) { closedWhileStarting = code; return }
+            if (needsContextRefresh(code) || retryableConnectionFailure(code)) void recover(code)
+            else { void stop(); options.onError(`连续语音已结束（${code}）。`) }
+            return
           }
           if (event.type === 'conversation.item.input_audio_transcription.started') userSpeaking.value = true
+          if (event.type === 'conversation.item.input_audio_transcription.completed') networkRetries = 0
           if (event.type === 'conversation.item.input_audio_transcription.completed' || event.type === 'conversation.item.input_audio_transcription.failed') userSpeaking.value = false
           if (event.type === 'conversation.item.input_audio_transcription.started' || event.type === 'response.canceled' && (!event.response_id || event.response_id === responseId)) {
             if (responseId) cancelled.add(responseId)
@@ -120,20 +190,23 @@ export function useNativeConversation(options: {
       })
       const result = await window.lingli.invoke('voice.nativeStart', { connectionId: id })
       if (!current()) return false
-      if (!result.ok) throw new Error(`原生语音未连接（${result.error.code}），请检查设置中的实时对话配置。`)
+      if (closedWhileStarting) throw new Error(closedWhileStarting)
+      if (!result.ok) throw new Error(result.error.code)
       source = context.createMediaStreamSource(stream)
       source.connect(processor)
       const unmuted = await window.lingli.invoke('voice.nativeMute', { connectionId: id, muted: false })
       if (!current()) return false
+      if (closedWhileStarting) throw new Error(closedWhileStarting)
       if (!unmuted.ok) throw new Error('语音收音未能启动。')
       active.value = true; starting.value = false
+      options.onConnectionState?.('ready')
       processor.port.postMessage({ type: 'capture', enabled: true })
       stream.getTracks().forEach(track => track.addEventListener('ended', () => {
         if (current()) { void stop(); options.onError('麦克风已断开。') }
       }))
       return true
     } catch (error) {
-      if (current()) { await stop(); options.onError(error instanceof Error ? error.message : '连续语音未能启动。') }
+      if (current()) { await stopResources(); throw error }
       return false
     }
   }

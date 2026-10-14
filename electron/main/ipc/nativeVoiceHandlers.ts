@@ -28,7 +28,7 @@ export function registerNativeVoiceHandlers(deps: {
   memoryConfirmations?: R1MemoryConfirmations;
   topicSummaries?: R1TopicSummaries
   automaticMemory?: R1AutomaticMemory;
-}): { close(): void } {
+}): { close(code?: string): void } {
   const sessions = new Map<number, { id: string; session: NativeRealtimeSession; playback(input: Record<string, unknown>): void }>()
   const aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', ...memoryToolAliases, 'notes_create', ...reminderToolAliases, ...(deps.focusServices ? focusToolAliases : [])]
   const fail = (code: string) => ({ ok: false, error: { code, message: code } })
@@ -167,5 +167,5 @@ export function registerNativeVoiceHandlers(deps: {
       } catch { active.session.close('REALTIME_COMMAND_FAILED'); return fail('REALTIME_COMMAND_FAILED') }
     })
   }
-  return { close() { for (const active of [...sessions.values()]) active.session.close() } }
+  return { close(code = 'REALTIME_STOPPED') { for (const active of [...sessions.values()]) active.session.close(code) } }
 }

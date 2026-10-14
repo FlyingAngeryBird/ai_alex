@@ -58,7 +58,8 @@ export class NativeRealtimeSession {
         })
         socket.on('unexpected-response', (_request, response) => {
           response.resume()
-          this.close(response.statusCode === 401 || response.statusCode === 403 ? 'REALTIME_AUTH_FAILED' : 'REALTIME_UPGRADE_FAILED')
+          this.close(response.statusCode === 401 || response.statusCode === 403 ? 'REALTIME_AUTH_FAILED'
+            : response.statusCode === 429 ? 'REALTIME_QUOTA_LIMIT' : 'REALTIME_UPGRADE_FAILED')
         })
         socket.on('error', () => this.close('REALTIME_NETWORK_FAILED'))
         socket.on('close', () => this.close('REALTIME_CONNECTION_CLOSED'))

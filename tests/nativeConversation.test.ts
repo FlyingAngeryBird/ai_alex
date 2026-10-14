@@ -1,6 +1,126 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { useNativeConversation } from '../src/composables/useNativeConversation'
 afterEach(() => vi.unstubAllGlobals())
+
+function recoveryFixture() {
+  const subscriptions: Array<(event: Record<string, unknown>) => void> = [], trackStops: ReturnType<typeof vi.fn>[] = [], order: string[] = []
+  class Context {
+    destination = {}; audioWorklet = { addModule: async () => undefined }
+    resume = async () => undefined; close = async () => undefined
+    createMediaStreamSource = () => ({ connect() {}, disconnect() {} })
+  }
+  const worklets: Worklet[] = []
+  class Worklet {
+    connect() {} disconnect() {}
+    constructor() { worklets.push(this) }
+    port = { close() {}, onmessage: null as null | ((event: { data: Record<string, unknown> }) => void),
+      postMessage: (data: Record<string, unknown>) => {
+        order.push(String(data.type) + (data.enabled === undefined ? '' : `:${data.enabled}`))
+        if (data.type === 'clear') this.port.onmessage?.({ data: { type: 'cleared', requestId: data.requestId } })
+      } }
+  }
+  const startReplies: Array<{ ok: false; error: { code: string } }> = []
+  const invoke = vi.fn(async (channel: string, _input?: unknown) => {
+    order.push(channel)
+    if (channel === 'voice.nativeStart' && startReplies.length) return startReplies.shift()!
+    return { ok: true as const, data: channel === 'app.requestMicrophoneAccess' ? { granted: true } : null }
+  })
+  const media = vi.fn(async () => {
+    const stop = vi.fn(); trackStops.push(stop)
+    return { getTracks: () => [{ stop, addEventListener() {} }] }
+  })
+  vi.stubGlobal('document', { baseURI: 'file:///test/index.html' }); vi.stubGlobal('AudioContext', Context); vi.stubGlobal('AudioWorkletNode', Worklet)
+  vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: media } })
+  vi.stubGlobal('window', { lingli: { invoke, on: (_channel: string, listener: typeof subscriptions[number]) => { subscriptions.push(listener); return vi.fn() } } })
+  const onError = vi.fn(), onConnectionState = vi.fn(), onText = vi.fn()
+  const voice = useNativeConversation({ onError, onConnectionState, onText, onSpeaking() {} })
+  const starts = () => invoke.mock.calls.filter(([name]) => name === 'voice.nativeStart')
+  const emit = (index: number, event: Record<string, unknown>) => subscriptions[index]({ connectionId: (starts()[index][1] as { connectionId: string }).connectionId, ...event })
+  return { voice, starts, invoke, emit, onError, onText, onConnectionState, worklets, trackStops, order, startReplies, media }
+}
+
+it('rebuilds after context invalidation, clears old audio first, and rejects old connection events', async () => {
+  const s = recoveryFixture()
+  try {
+    expect(await s.voice.start()).toBe(true)
+    s.order.length = 0
+    s.emit(0, { type: 'closed', code: 'MEMORY_CONTEXT_REFRESH_REQUIRED' })
+    expect(s.voice.active.value).toBe(false)
+    expect(s.order.slice(0, 3)).toEqual(['capture:false', 'capture:false', 'clear'])
+    await vi.waitFor(() => expect(s.starts()).toHaveLength(2))
+    await vi.waitFor(() => expect(s.voice.active.value).toBe(true))
+    expect(s.trackStops[0]).toHaveBeenCalledOnce()
+    expect(s.order.indexOf('clear')).toBeLessThan(s.order.indexOf('voice.nativeStart'))
+    expect(s.starts()[0][1]).not.toEqual(s.starts()[1][1])
+    s.emit(0, { type: 'response.output_text.done', response_id: 'late', text: '旧结论' })
+    expect(s.onText).not.toHaveBeenCalled()
+    s.emit(1, { type: 'response.output_text.done', response_id: 'new', text: '新结论' })
+    expect(s.onText).toHaveBeenCalledOnce()
+    expect(s.onConnectionState.mock.calls.map(([state]) => state)).toEqual(['ready', 'rebuilding', 'ready'])
+    expect(s.onError).not.toHaveBeenCalled()
+  } finally { await s.voice.stop() }
+})
+
+it('cancels recovery when the user closes voice while replacement microphone access is pending', async () => {
+  const s = recoveryFixture()
+  let release: (stream: Awaited<ReturnType<typeof s.media>>) => void = () => undefined
+  try {
+    await s.voice.start()
+    s.media.mockImplementationOnce(() => new Promise(resolve => { release = resolve }))
+    s.emit(0, { type: 'closed', code: 'MEMORY_CONTEXT_REFRESH_REQUIRED' })
+    await vi.waitFor(() => expect(s.media).toHaveBeenCalledTimes(2))
+    await s.voice.stop()
+    const lateStop = vi.fn(); release({ getTracks: () => [{ stop: lateStop, addEventListener() {} }] })
+    await vi.waitFor(() => expect(lateStop).toHaveBeenCalledOnce())
+    expect(s.starts()).toHaveLength(1); expect(s.voice.active.value).toBe(false)
+    expect(s.onError).not.toHaveBeenCalled()
+  } finally { await s.voice.stop() }
+})
+
+it.each(['REALTIME_AUTH_FAILED', 'REALTIME_QUOTA_LIMIT', 'REALTIME_SERVER_REJECTED'])('does not reconnect after %s', async code => {
+  const s = recoveryFixture()
+  try {
+    await s.voice.start(); s.emit(0, { type: 'closed', code })
+    await vi.waitFor(() => expect(s.trackStops[0]).toHaveBeenCalledOnce())
+    expect(s.starts()).toHaveLength(1); expect(s.onError).toHaveBeenCalledOnce()
+  } finally { await s.voice.stop() }
+})
+
+it('limits repeated connection failures to two automatic attempts', async () => {
+  const s = recoveryFixture()
+  try {
+    await s.voice.start()
+    s.startReplies.push({ ok: false, error: { code: 'REALTIME_NETWORK_FAILED' } }, { ok: false, error: { code: 'REALTIME_NETWORK_FAILED' } })
+    s.emit(0, { type: 'closed', code: 'REALTIME_NETWORK_FAILED' })
+    await vi.waitFor(() => expect(s.onError).toHaveBeenCalledOnce(), { timeout: 2000 })
+    expect(s.starts()).toHaveLength(3); expect(s.voice.active.value).toBe(false)
+    expect(s.trackStops).toHaveLength(3); expect(s.trackStops.every(stop => stop.mock.calls.length === 1)).toBe(true)
+  } finally { await s.voice.stop() }
+})
+
+it('recovers an initial network failure without reporting a false terminal error', async () => {
+  const s = recoveryFixture()
+  try {
+    s.startReplies.push({ ok: false, error: { code: 'REALTIME_NETWORK_FAILED' } })
+    expect(await s.voice.start()).toBe(true)
+    expect(s.starts()).toHaveLength(2); expect(s.onError).not.toHaveBeenCalled()
+  } finally { await s.voice.stop() }
+})
+
+it('keeps the retry budget across short-lived successful connections until real user input arrives', async () => {
+  const s = recoveryFixture()
+  try {
+    await s.voice.start()
+    for (let index = 0; index < 2; index++) {
+      s.emit(index, { type: 'closed', code: 'REALTIME_CONNECTION_CLOSED' })
+      await vi.waitFor(() => expect(s.starts()).toHaveLength(index + 2), { timeout: 1500 })
+      await vi.waitFor(() => expect(s.voice.active.value).toBe(true))
+    }
+    s.emit(2, { type: 'closed', code: 'REALTIME_CONNECTION_CLOSED' })
+    await vi.waitFor(() => expect(s.onError).toHaveBeenCalledOnce())
+    expect(s.starts()).toHaveLength(3)
+  } finally { await s.voice.stop() }
+})
 it('opens the microphone only for the active connection and clears queued audio and capture on stop', async () => {
   let listener: (event: Record<string, unknown>) => void = () => undefined
   const trackStop = vi.fn(), audioStop = vi.fn(), closed = vi.fn(), unsubscribe = vi.fn()

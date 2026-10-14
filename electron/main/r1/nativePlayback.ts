@@ -32,7 +32,7 @@ export class NativePlaybackLedger {
   private persist(id: string, response: Response): void {
     if (!response.saved && response.text.trim()) {
       this.conversations.append({ sessionId: this.sessionId, turnId: response.turnId, responseId: id,
-        role: 'assistant', body: response.text, status: 'generated' })
+        role: 'assistant', body: response.text, status: 'generated', playedUntilMs: 0 })
       response.saved = true
     }
     if (response.saved && (response.playedMs > 0 || response.status !== 'playing')) {

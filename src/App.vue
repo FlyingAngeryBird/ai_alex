@@ -84,6 +84,12 @@ let stopMemoryConfirmation: (() => void) | null = null
 let nativeResumeGeneration: number | null = null
 const nativeConversation = useNativeConversation({
   onSpeaking(value) { assistantAudioPlaying.value = value },
+  onConnectionState(state) {
+    if (!nativeAutoRequested.value) return
+    conversation.setAutoListenState(state === 'ready' ? 'armed' : 'arming')
+    conversation.particleState.value = 'idle'
+    conversationPartialText.value = ''
+  },
   onError(message) { nativeAutoRequested.value = false; nativeResumeGeneration = null; conversation.disableAutoListen(); conversation.particleState.value = 'idle'; conversationPartialText.value = ''; conversation.addSystemMessage(message) },
   onText(event) {
     if (event.type === 'conversation.item.input_audio_transcription.delta') {

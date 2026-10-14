@@ -70,3 +70,14 @@ it('records complete playback even when final text arrives after the playback re
     expect(db.prepare('SELECT COUNT(*) AS n FROM messages').get()).toMatchObject({ n: 0 })
   } finally { db.close() }
 })
+
+it('never restores generated native text as heard context before its first playback receipt', async () => {
+  const { NativePlaybackLedger } = await import('../electron/main/r1/nativePlayback')
+  const db = openR1Database(':memory:')
+  try {
+    const conversations = new R1Conversations(db), sessionId = conversations.start(), ledger = new NativePlaybackLedger(conversations, sessionId)
+    ledger.receive({ type: 'response.output_text.done', response_id: 'unplayed', text: '尚未播放的结论' }, 'turn')
+    expect(conversations.messages(sessionId)[0]).toMatchObject({ body: '尚未播放的结论', status: 'generated', playedUntilMs: 0 })
+    expect(conversations.modelTurns(sessionId)[0]).toMatchObject({ text: '', heardText: null, status: 'interrupted' })
+  } finally { db.close() }
+})
