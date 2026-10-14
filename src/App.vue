@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import MiniPlayer from '@/components/MiniPlayer.vue'
 import MusicImmersiveView from '@/components/MusicImmersiveView.vue'
 import ParticleSphere from '@/components/ParticleSphere.vue'
@@ -92,6 +92,9 @@ const nativeConversation = useNativeConversation({
       conversation.particleState.value = 'idle'
     }
   }
+})
+watch([assistantAudioPlaying, nativeConversation.userSpeaking], ([assistant, user]) => {
+  music.setSpeechActive(assistant || user)
 })
 let currentVoiceTrace: VoiceLatencyTrace | null = null
 
@@ -948,6 +951,7 @@ onBeforeUnmount(() => {
       <MusicImmersiveView
         v-if="viewMode === 'music'"
         :active-tab="music.activeTab.value"
+        :volume="music.volume.value" :assistant-speaking="assistantAudioPlaying" @volume-change="music.setVolume"
         :favorites="music.favorites.value"
         :playback="music.playback.value"
         :search-history="music.searchHistory.value"

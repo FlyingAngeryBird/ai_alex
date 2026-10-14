@@ -6,6 +6,7 @@ export function useNativeConversation(options: {
   onText(event: NativeRealtimeEvent): void; onError(message: string): void;
   onSpeaking(speaking: boolean): void;
 }) {
+  const userSpeaking = ref(false)
   const active = ref(false), starting = ref(false), speaking = ref(false)
   let generation = 0, connectionId: string | null = null
   let context: AudioContext | null = null, stream: MediaStream | null = null
@@ -37,7 +38,7 @@ export function useNativeConversation(options: {
     node.start(at); setSpeaking(true)
   }
   async function stop(): Promise<void> {
-    generation++; active.value = false; starting.value = false
+    generation++; userSpeaking.value = false; active.value = false; starting.value = false
     const id = connectionId; connectionId = null
     unsubscribe?.(); unsubscribe = null
     if (processor) { processor.onaudioprocess = null; processor.disconnect(); processor = null }
@@ -76,6 +77,8 @@ export function useNativeConversation(options: {
             const code = String(event.code)
             void stop(); options.onError(`连续语音已结束（${code}）。`); return
           }
+          if (event.type === 'conversation.item.input_audio_transcription.started') userSpeaking.value = true
+          if (event.type === 'conversation.item.input_audio_transcription.completed' || event.type === 'conversation.item.input_audio_transcription.failed') userSpeaking.value = false
           if (event.type === 'conversation.item.input_audio_transcription.started' || event.type === 'response.canceled') {
             if (responseId) cancelled.add(responseId)
             clearPlayback()
@@ -127,5 +130,5 @@ export function useNativeConversation(options: {
       return false
     }
   }
-  return { active, starting, speaking, start, stop, interrupt }
+  return { active, starting, speaking, userSpeaking, start, stop, interrupt }
 }

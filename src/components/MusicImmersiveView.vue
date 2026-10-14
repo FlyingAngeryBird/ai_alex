@@ -2,9 +2,11 @@
 import { computed, ref, watch } from 'vue'
 import type { MusicSourcePreference, MusicTrack, PlaybackState } from '@/types/app'
 import { getCurrentLyricIndex } from '@/utils/musicLyrics'
-import { ArrowLeft, Heart, Search, X } from 'lucide-vue-next'
+import { ArrowLeft, Heart, Search, X, Volume2 } from 'lucide-vue-next'
 
 const props = defineProps<{
+  volume?: number
+  assistantSpeaking?: boolean
   activeTab: 'search' | 'favorite'
   favorites: MusicTrack[]
   playback: PlaybackState
@@ -16,6 +18,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  volumeChange: [value: number]
   back: []
   changeTab: [tab: 'search' | 'favorite']
   clearHistory: []
@@ -474,10 +477,13 @@ function lyricStyle(distance: number): Record<string, string> {
           <span class="source-note">
             {{ playback.status === 'loading' ? '正在寻找可播放版本' : '旋律流动中' }}
           </span>
+          <label class="r1-music-volume"><Volume2 :size="16" /><input type="range" min="0" max="100"
+            aria-label="音乐音量" :value="volume ?? 100"
+            @input="emit('volumeChange', Number(($event.target as HTMLInputElement).value))" /></label>
         </div>
       </section>
 
-      <aside class="lyrics" aria-label="同步歌词">
+      <aside class="lyrics" :class="{ 'lyrics--speaking': assistantSpeaking }" aria-label="同步歌词">
         <TransitionGroup
           v-if="displayedLyrics.length"
           name="lyric-drift"
@@ -526,3 +532,9 @@ function lyricStyle(distance: number): Record<string, string> {
     </section>
   </section>
 </template>
+
+<style scoped>
+.r1-music-volume{display:flex;align-items:center;gap:8px;margin-left:auto;color:var(--r1-muted)}
+.r1-music-volume input{width:76px;height:3px;accent-color:var(--r1-aqua)}
+.lyrics--speaking{opacity:.2;transition:opacity .2s ease}
+</style>

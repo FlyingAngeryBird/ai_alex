@@ -1,3 +1,4 @@
+import { MusicDucking } from '../services/musicDucking'
 import { computed, getCurrentInstance, onBeforeUnmount, ref } from 'vue'
 import type { AppResult } from '@/types/electron-api'
 import type { MusicAudioBands, MusicSourcePreference, MusicTrack, PlaybackState, ViewMode } from '@/types/app'
@@ -101,6 +102,13 @@ function toFiniteMilliseconds(seconds: number): number | null {
 }
 
 export function useMusic(options: UseMusicOptions = {}) {
+  const volume = ref(100)
+  const ducking = new MusicDucking()
+  function setVolume(value: number): void {
+    if (!Number.isFinite(value)) return
+    volume.value = Math.max(0, Math.min(100, value))
+    ducking.setVolume(volume.value / 100)
+  }
   const viewMode = ref<ViewMode>('conversation')
   const playback = ref<PlaybackState>(createInitialPlayback())
   const audioLevel = ref(0.14)
@@ -441,6 +449,7 @@ export function useMusic(options: UseMusicOptions = {}) {
   }
 
   function releaseAudioResources(): void {
+    ducking.attach(null)
     removeAudioListeners?.()
     stopAudioAnalysis()
     closeAudioContext()
@@ -478,6 +487,7 @@ export function useMusic(options: UseMusicOptions = {}) {
     audio.preload = 'auto'
     audio.src = track.audioUrl
     audioElement = audio
+    ducking.attach(audio)
     const cleanupAudioListeners = attachAudioListeners(audio)
 
     try {
@@ -839,10 +849,11 @@ export function useMusic(options: UseMusicOptions = {}) {
   }
 
   if (getCurrentInstance()) {
-    onBeforeUnmount(releaseAudioResources)
+    onBeforeUnmount(() => { ducking.dispose(); releaseAudioResources() })
   }
 
   return {
+    volume, setVolume, setSpeechActive: (active: boolean) => ducking.setSpeechActive(active),
     activeTab,
     addSearchHistory,
     audioBands,
