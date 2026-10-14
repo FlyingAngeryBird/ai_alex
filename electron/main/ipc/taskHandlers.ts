@@ -1,4 +1,5 @@
-import { ipcMain } from 'electron'
+import { exportArtifact, type ArtifactExportInput } from '../r1/artifactExport.js'
+import { ipcMain, dialog } from 'electron'
 import type { R1TaskSupervisor } from '../r1/taskSupervisor.js'
 import type { R1Artifacts } from '../r1/artifacts.js'
 import type { R1SessionMode } from '../r1/sessionMode.js'
@@ -19,6 +20,16 @@ export function registerTaskHandlers(tasks: R1TaskSupervisor, artifacts: R1Artif
     if (typeof id !== 'string' || !tasks.list(owner()).some(task => task.taskId === id)) throw new Error('TASK_NOT_FOUND')
     return id
   }
+  ipc.handle('r1.artifacts.export', async (_event, input) => {
+    try {
+      const data = await exportArtifact(artifacts, input as ArtifactExportInput, owner, async (name, extension) => {
+        const result = await dialog.showSaveDialog({ defaultPath: name,
+          filters: [{ name: extension === 'md' ? 'Markdown' : '纯文本', extensions: [extension] }] })
+        return result.canceled ? null : result.filePath ?? null
+      })
+      return { ok: true, data }
+    } catch { return { ok: false, error: { code: 'ARTIFACT_EXPORT_FAILED', message: '导出未完成，请检查版本和保存位置后重试。' } } }
+  })
   ipc.handle('r1.tasks.list', () => ({ ok: true, data: tasks.list(owner()) }))
   ipc.handle('r1.tasks.get', action(input => tasks.get(permitted(input.taskId))))
   for (const method of ['pause', 'resume', 'cancel'] as const) {

@@ -48,6 +48,7 @@ describe('IPC contract', () => {
       'r1.artifacts.revise',
       'r1.artifacts.undo',
       'r1.artifacts.save',
+  'r1.artifacts.export',
       'r1.items.create',
       'r1.items.update',
       'r1.items.complete',

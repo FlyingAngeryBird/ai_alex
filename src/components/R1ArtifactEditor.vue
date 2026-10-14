@@ -6,6 +6,8 @@ const artifact = ref<Artifact | null>(null)
 const title = ref('')
 const body = ref('')
 const busy = ref(false)
+const activeAction = ref('')
+const editingLocked = computed(() => busy.value && activeAction.value !== 'apply')
 const error = ref('')
 const notice = ref('')
 const confirmSave = ref(false)
@@ -41,10 +43,11 @@ async function apply(): Promise<boolean> {
   if (title.value === submittedTitle && body.value === submittedBody) accept(result.data)
   return true
 }
-async function run(action: 'apply' | 'undo' | 'save' | 'copy'): Promise<void> {
+async function run(action: 'apply' | 'undo' | 'save' | 'copy' | 'txt' | 'md'): Promise<void> {
   if (busy.value || !artifact.value) return
   if (action === 'save' && artifact.value.temporary && !confirmSave.value) { confirmSave.value = true; return }
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
+  activeAction.value = action
   busy.value = true; error.value = ''; notice.value = ''
   try {
     if (action === 'copy') { await navigator.clipboard.writeText(body.value); notice.value = '已复制'; return }
@@ -55,6 +58,13 @@ async function run(action: 'apply' | 'undo' | 'save' | 'copy'): Promise<void> {
       accept(result.data); undoVersion.value = null; notice.value = '已撤销'; return
     }
     if (!await apply()) return
+    if (action === 'txt' || action === 'md') {
+      const result = await window.seamoR1.artifacts.export({ artifactId: props.artifactId,
+        expectedVersion: artifact.value.version, format: action })
+      if (!result.ok) throw new Error(result.error.code)
+      notice.value = result.data.cancelled ? '已取消导出' : `已导出版本 ${result.data.version}`
+      return
+    }
     if (action === 'save') {
       let expectedItemVersion: number | undefined
       if (artifact.value.savedItemId) {
@@ -82,11 +92,11 @@ onMounted(load)
     <p v-if="error" role="alert">{{ error }}</p>
     <template v-if="artifact">
       <div class="editor-heading"><span>讨论稿</span><small>{{ dirty ? (busy ? '正在保留…' : '修改待保留') : '草稿 · 已保留' }} · 版本 {{ artifact.version }}</small></div>
-      <input v-model="title" class="editor-title" aria-label="工作稿标题" maxlength="80" />
-      <textarea v-model="body" class="editor-body" aria-label="工作稿正文" rows="12" />
+      <input v-model="title" class="editor-title" aria-label="工作稿标题" :disabled="editingLocked" maxlength="80" />
+      <textarea v-model="body" class="editor-body" aria-label="工作稿正文" :disabled="editingLocked" rows="12" />
       <div class="editor-actions"><button :disabled="busy" @click="run('apply')">保留修改</button>
         <button :disabled="busy || undoVersion === null" @click="run('undo')">撤销修改</button>
-        <button :disabled="busy" @click="run('copy')">复制</button><button :disabled="busy" @click="run('save')">保存为记录</button></div>
+        <button :disabled="busy" @click="run('copy')">复制</button><button :disabled="busy" @click="run('save')">保存为记录</button><button :disabled="busy" @click="run('txt')">导出 TXT</button><button :disabled="busy" @click="run('md')">导出 Markdown</button></div>
       <div v-if="confirmSave" class="editor-confirm"><p>将这份临时工作稿保存到普通记录，结束临时对话后仍会保留。</p>
         <button :disabled="busy" @click="run('save')">确认保存</button><button :disabled="busy" @click="confirmSave = false">取消</button></div>
       <p v-if="notice" role="status">{{ notice }}</p>

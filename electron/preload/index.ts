@@ -45,6 +45,7 @@ export const exposedChannels = [
   'r1.artifacts.revise',
   'r1.artifacts.undo',
   'r1.artifacts.save',
+  'r1.artifacts.export',
   'r1.items.create',
   'r1.items.update',
   'r1.items.complete',
@@ -151,6 +152,7 @@ function exposeLingliApi(
       }
     },
     artifacts: {
+      export: input => invokeR1('r1.artifacts.export', input),
       get: input => invokeR1('r1.artifacts.get', input),
       revise: input => invokeR1('r1.artifacts.revise', input),
       undo: input => invokeR1('r1.artifacts.undo', input),
