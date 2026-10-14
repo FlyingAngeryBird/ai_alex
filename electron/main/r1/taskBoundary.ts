@@ -5,6 +5,7 @@ import type { R1Persona } from './persona.js'
 import type { R1ModelTool, R1PromptAssets } from './promptAssets.js'
 
 export type R1TaskInput = {
+  currentArtifact?: import('./artifactContext.js').ArtifactEditBinding | null
   taskId: string; runId: string; goalVersion: number; contextVersion: number; deletionEpoch: number
   status: 'running' | 'paused' | 'cancelled' | 'needs_resume'; goal: string; constraints: string[]
   sourceRefs: string[]; currentTime: string; timezone: string; temporary: boolean

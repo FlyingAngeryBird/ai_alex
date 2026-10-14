@@ -53,5 +53,5 @@ for f in manifest["files"]:
 actual = {str(p.relative_to(ROOT)) for p in ROOT.rglob("*") if p.is_file() and ".git" not in p.parts and "__pycache__" not in p.parts and p.name != "asset-manifest.json"}
 assert actual == {f["path"] for f in manifest["files"]}, "Manifest file set differs"
 cases = [json.loads(l) for l in (ROOT / "evals/behavior-cases.jsonl").read_text().splitlines()]
-assert {c["id"] for c in cases} == {f"E{i:02}" for i in range(1,20)}
+assert {c["id"] for c in cases} == {f"E{i:02}" for i in range(1,22)}
 print(f"PASS: 10 prompts, 6 skills, 38 business tools, 3 internal tools, {len(list((ROOT/'schemas').glob('*.json')))} schemas, {len(cases)} behavior fixtures, {len(manifest['files'])} hashed files")

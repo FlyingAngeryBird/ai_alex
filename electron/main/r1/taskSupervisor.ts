@@ -6,6 +6,7 @@ import type { R1PromptAssets } from './promptAssets.js'
 import { R1Items } from './items.js'
 import { R1Artifacts, type ArtifactDraft } from './artifacts.js'
 import { memoryContextCutoff } from './memoryContext.js'
+import { assertArtifactRange, type ArtifactEditBinding } from './artifactContext.js'
 
 export type TaskStatus = 'accepted' | 'running' | 'waiting_input' | 'paused' | 'needs_resume' |
   'succeeded' | 'partially_succeeded' | 'failed' | 'cancelled'
@@ -21,6 +22,7 @@ type TaskCheckpoint = { version: 1; requestKey: string; requestFingerprint?: str
   toolReceipts?: TaskToolReceipt[];
   initialBudget?: R1TaskInput['budget']; budgetStopped?: boolean; persistenceConfirmed?: boolean;
   steerEventId?: string;
+  artifactEdit?: ArtifactEditBinding | null;
   requiredActions?: Array<{ alias: string; minimumCount: number }>;
   result?: TaskResult; publicationRunId?: string }
 export type TaskResult = { resultId: string; goalVersion: number; completionStatus: 'completed' | 'partial' | 'needs_input';
@@ -59,7 +61,7 @@ export class R1TaskSupervisor {
   private pendingEvents: TaskEvent[] | null = null
   constructor(private readonly db: R1Database, private readonly assets: R1PromptAssets,
     private readonly deletionEpoch: () => number, private readonly options: {
-      clock?: () => number; temporarySource?: (messageId: string) => TaskSource | undefined
+      clock?: () => number; temporarySource?: (messageId: string) => TaskSource | undefined; artifacts?: R1Artifacts
     } = {}) {
     const rows = db.prepare('SELECT * FROM agent_tasks ORDER BY created_at, rowid').all() as {
       task_id: string; goal: string; constraints_json: string; goal_version: number; status: TaskStatus;
@@ -205,7 +207,7 @@ ${source.snippet}
   }
   accept(input: { requestKey: string; sourceMessageId: string; timezone: string; goal: string;
     constraints: string[]; authorizedAliases: string[]; complexity: 'light' | 'complex'; persistenceConfirmed?: boolean; selectedTrackKey?: string | null;
-    requiredActions?: Array<{ alias: string; minimumCount: number }> }): R1Task {
+    requiredActions?: Array<{ alias: string; minimumCount: number }>; artifactEdit?: ArtifactEditBinding | null }): R1Task {
     if (this.closed) throw new Error('TASK_SERVICE_CLOSED')
     if (input.selectedTrackKey !== undefined && input.selectedTrackKey !== null) requireText(input.selectedTrackKey, 160, 'TASK_TRACK_INVALID')
     requireText(input.requestKey, 160, 'TASK_REQUEST_KEY_INVALID')
@@ -225,6 +227,7 @@ ${source.snippet}
     const fingerprint = createHash('sha256').update(JSON.stringify({ sourceMessageId: input.sourceMessageId,
       timezone: input.timezone, goal: input.goal, constraints: input.constraints,
       ...(input.selectedTrackKey !== undefined ? { selectedTrackKey: input.selectedTrackKey } : {}),
+      ...(input.artifactEdit ? { artifactEdit: input.artifactEdit } : {}),
       authorizedAliases: [...new Set(input.authorizedAliases)].sort(), complexity: input.complexity,
       ...(requirements.length ? { requiredActions: [...requirements].sort((left, right) => left.alias.localeCompare(right.alias)) } : {}),
       ...(input.persistenceConfirmed === true ? { persistenceConfirmed: true } : {}) })).digest('hex')
@@ -237,6 +240,7 @@ ${source.snippet}
     const source = this.source(input.sourceMessageId)
     source.timezone = input.timezone
     source.selectedTrackKey = input.selectedTrackKey ?? null
+    this.assertArtifactBinding(input.artifactEdit, source)
     this.assets.exposeTools({ channel: 'task', loadedSkillIds: [], authorizedAliases: input.authorizedAliases, temporary: source.temporary })
     if ([...this.records.values()].filter(record => ['accepted', 'running'].includes(record.status)).length >= 4) throw new Error('TASK_QUEUE_FULL')
     const taskId = randomUUID()
@@ -246,11 +250,12 @@ ${source.snippet}
       checkpoint: { version: 1, requestKey: input.requestKey, requestFingerprint: fingerprint, source, sourceRefs: [source.messageId],
         contextVersion: 1, deletionEpoch: this.deletionEpoch(), authorizedAliases: [...input.authorizedAliases], loadedSkillIds: [],
         initialBudget: this.assets.taskBudget(input.complexity), persistenceConfirmed: input.persistenceConfirmed === true,
-        requiredActions: structuredClone(requirements),
+        requiredActions: structuredClone(requirements), artifactEdit: structuredClone(input.artifactEdit ?? null),
         runId: null, stopRequested: null, planVersion: 0, plan: [], observations: [{ refId: source.messageId,
           kind: 'source', version: 1, summary: JSON.stringify({ turnId: source.turnId, createdAt: source.createdAt, timezone: source.timezone,
             requiredActions: requirements }),
           resourcePath: `/task/${taskId}/source-turn.json` }], receiptActionIds: [], progressBrief: '已受理。' } }
+    this.attachArtifactObservation(record)
     this.persist(record); this.records.set(record.taskId, record); this.emit(record, 'accepted')
     return this.get(record.taskId)
   }
@@ -287,6 +292,29 @@ ${source.snippet}
       record.checkpoint.contextVersion !== lease.contextVersion || record.checkpoint.deletionEpoch !== lease.deletionEpoch ||
       this.deletionEpoch() !== lease.deletionEpoch) throw new Error('TASK_CONTEXT_STALE')
     if (record.budget.activeMsRemaining <= 0) throw new Error('TASK_BUDGET_EXHAUSTED')
+    this.assertArtifactBinding(record.checkpoint.artifactEdit, record.checkpoint.source)
+  }
+  private assertArtifactBinding(binding: ArtifactEditBinding | null | undefined, source: TaskSource): void {
+    if (!binding) return
+    const current = (this.options.artifacts ?? new R1Artifacts(this.db)).get(binding.artifact.artifactId, source.temporary ? source.sessionId : null)
+    if (current.version !== binding.artifact.version || current.content !== binding.artifact.content || current.title !== binding.artifact.title ||
+      JSON.stringify(current.sourceRefs) !== JSON.stringify(binding.artifact.sourceRefs)) throw new Error('VERSION_CONFLICT')
+    if (new Set([source.messageId, current.artifactId, ...current.sourceRefs]).size > 50) throw new Error('TASK_OBSERVATION_LIMIT')
+    if (binding.target) assertArtifactRange(current.content, binding.target)
+  }
+  private attachArtifactObservation(record: RecordTask): void {
+    const edit = record.checkpoint.artifactEdit
+    if (!edit) return
+    record.checkpoint.sourceRefs = [...new Set([...record.checkpoint.sourceRefs, edit.artifact.artifactId, ...edit.artifact.sourceRefs])]
+    if (record.checkpoint.sourceRefs.length > 50) throw new Error('TASK_OBSERVATION_LIMIT')
+    record.checkpoint.observations.push({ refId: edit.artifact.artifactId, kind: 'artifact', version: edit.artifact.version,
+      summary: JSON.stringify({ title: edit.artifact.title, target: edit.target }), resourcePath: `/task/${record.taskId}/current-artifact.json` })
+  }
+  artifactInput(lease: TaskLease): ArtifactEditBinding {
+    this.assertLease(lease)
+    const edit = this.checked(lease.taskId).checkpoint.artifactEdit
+    if (!edit) throw new Error('TASK_ARTIFACT_NOT_AVAILABLE')
+    return structuredClone(edit)
   }
   authority(taskId: string): R1TaskAuthority {
     const record = this.checked(taskId); this.account(record)
@@ -300,6 +328,7 @@ ${source.snippet}
     const record = this.checked(lease.taskId)
     if (record.budget.decisionsRemaining < 1) throw new Error('TASK_BUDGET_EXHAUSTED')
     const input: R1TaskInput = { ...lease, status: 'running', goal: record.goal, constraints: [...record.constraints],
+      ...(record.checkpoint.artifactEdit ? { currentArtifact: structuredClone(record.checkpoint.artifactEdit) } : {}),
       sourceRefs: [...record.checkpoint.sourceRefs], currentTime: new Date().toISOString(), timezone: record.checkpoint.source.timezone,
       temporary: record.temporary, budget: structuredClone(record.budget), validReceiptActionIds: [...record.checkpoint.receiptActionIds],
       observations: structuredClone(record.checkpoint.observations), loadedSkillIds: [...record.checkpoint.loadedSkillIds] }
@@ -523,7 +552,9 @@ ${source.snippet}
         entityId: row?.entity_id ?? receipt.entityId, summary: '以实际执行回执为准。' }
     })
     const brief = record.checkpoint.budgetStopped ? '已达到本次处理预算；可以查看已执行结果并选择继续。'
-      : code === 'TASK_RECEIPT_RECONCILIATION_REQUIRED' ? '已有步骤的回执需要核对，已停止继续执行。' : '本次处理未完成，已保存可核验的执行记录。'
+      : code === 'VERSION_CONFLICT' ? '工作稿已有新版本，已保留你的修改。请查看新稿后重新提出续改要求。'
+        : code === 'ARTIFACT_OUTSIDE_TARGET_CHANGED' ? '生成的修改超出了目标范围，原稿未改动。请重新提出修改要求。'
+          : code === 'TASK_RECEIPT_RECONCILIATION_REQUIRED' ? '已有步骤的回执需要核对，已停止继续执行。' : '本次处理未完成，已保存可核验的执行记录。'
     record.checkpoint.result = { resultId: randomUUID(), goalVersion: record.goalVersion, completionStatus: 'partial',
       replyBrief: brief, sourceRefs: [...record.checkpoint.sourceRefs], artifacts: [], unresolved: [code], candidateRefs: [], entityReceipts: receipts }
     record.checkpoint.progressBrief = brief
@@ -625,6 +656,9 @@ ${source.snippet}
       throw new Error('TASK_RESULT_RECEIPT_OMITTED')
     }
     const baseIds = draft.artifacts.map(artifact => artifact.baseArtifactId).filter(id => id !== null)
+    const edit = record.checkpoint.artifactEdit
+    if (edit && (draft.artifacts.some(artifact => artifact.baseArtifactId !== edit.artifact.artifactId || artifact.baseArtifactVersion !== edit.artifact.version) ||
+      draft.status === 'completed' && draft.artifacts.length !== 1)) throw new Error('TASK_RESULT_ARTIFACT_INVALID')
     if (new Set(baseIds).size !== baseIds.length) throw new Error('TASK_ARTIFACT_BASE_REUSED')
     for (const artifact of draft.artifacts) if (artifact.baseArtifactId !== null) {
       const permitted = record.checkpoint.observations.find(observation => observation.kind === 'artifact' &&
@@ -633,13 +667,15 @@ ${source.snippet}
       if (artifacts.get(artifact.baseArtifactId, record.temporary ? record.checkpoint.source.sessionId : null).version !== artifact.baseArtifactVersion) {
         throw new Error('VERSION_CONFLICT')
       }
+      if (edit?.target && artifact.title !== edit.artifact.title) throw new Error('ARTIFACT_OUTSIDE_TARGET_CHANGED')
     } else if (artifact.baseArtifactVersion !== null) throw new Error('TASK_ARTIFACT_BASE_INVALID')
     const publish = (): TaskResult => {
       this.assertLease(lease)
       const published = draft.artifacts.map(draft => {
         const owner = record.temporary ? record.checkpoint.source.sessionId : null
         const artifact = draft.baseArtifactId ? artifacts.revise({ artifactId: draft.baseArtifactId,
-          expectedVersion: draft.baseArtifactVersion!, content: draft.content, title: draft.title, temporaryOwner: owner })
+          expectedVersion: draft.baseArtifactVersion!, content: draft.content, title: draft.title, temporaryOwner: owner,
+          sourceRefs: [...new Set([...artifacts.get(draft.baseArtifactId, owner).sourceRefs, ...draft.sourceRefs])], target: edit?.target })
           : artifacts.create({ sourceTurnId: record.checkpoint.source.turnId, draft, temporaryOwner: owner })
         const actionId = randomUUID()
         if (!record.temporary) this.db.prepare(`INSERT INTO receipts
@@ -721,7 +757,7 @@ ${source.snippet}
     this.persist(record); this.emit(record, 'accepted'); return this.get(taskId)
   }
   steer(input: { taskId: string; expectedGoalVersion: number; goal: string; constraints: string[]; sourceMessageId: string;
-    authorizedAliases?: string[]; selectedTrackKey?: string | null; requiredActions?: Array<{ alias: string; minimumCount: number }> }): R1Task {
+    authorizedAliases?: string[]; selectedTrackKey?: string | null; requiredActions?: Array<{ alias: string; minimumCount: number }>; artifactEdit?: ArtifactEditBinding | null }): R1Task {
     if (input.selectedTrackKey !== undefined && input.selectedTrackKey !== null) requireText(input.selectedTrackKey, 160, 'TASK_TRACK_INVALID')
     const record = this.checked(input.taskId, input.expectedGoalVersion)
     if (record.assetReleaseId !== this.assets.releaseId) throw new Error('TASK_ASSET_RELEASE_UNAVAILABLE')
@@ -733,6 +769,7 @@ ${source.snippet}
     requireText(input.goal, 2000, 'TASK_GOAL_INVALID')
     if (!Array.isArray(input.constraints) || input.constraints.length > 50) throw new Error('TASK_CONSTRAINT_INVALID')
     input.constraints.forEach(value => requireText(value, 500, 'TASK_CONSTRAINT_INVALID'))
+    this.assertArtifactBinding(input.artifactEdit, source)
     if (input.authorizedAliases) {
       this.assets.exposeTools({ channel: 'task', loadedSkillIds: [], authorizedAliases: input.authorizedAliases, temporary: record.temporary })
       if ((input.requiredActions ?? []).some(action => !input.authorizedAliases!.includes(action.alias) ||
@@ -749,10 +786,12 @@ ${source.snippet}
     record.checkpoint.contextVersion++; record.checkpoint.deletionEpoch = this.deletionEpoch()
     source.selectedTrackKey = input.selectedTrackKey ?? null
     source.timezone = record.checkpoint.source.timezone; record.checkpoint.source = source
+    record.checkpoint.artifactEdit = structuredClone(input.artifactEdit ?? null)
     record.checkpoint.sourceRefs = [source.messageId]; record.checkpoint.observations = [{ refId: source.messageId,
       kind: 'source', version: 1, summary: JSON.stringify({ turnId: source.turnId, createdAt: source.createdAt, timezone: source.timezone,
         requiredActions: record.checkpoint.requiredActions ?? [] }),
       resourcePath: `/task/${record.taskId}/source-turn.json` }]
+    this.attachArtifactObservation(record)
     record.checkpoint.runId = null; record.checkpoint.stopRequested = null
     delete record.checkpoint.result; delete record.checkpoint.publicationRunId
     record.status = previousStatus === 'paused' ? 'paused' : [...this.records.values()].filter(value =>

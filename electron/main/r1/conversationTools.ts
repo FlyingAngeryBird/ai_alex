@@ -10,10 +10,13 @@ import type { SessionMessage } from './conversations.js'
 import type { R1PromptAssets } from './promptAssets.js'
 import type { R1Task, R1TaskSupervisor } from './taskSupervisor.js'
 import { R1Items } from './items.js'
+import { R1Artifacts } from './artifacts.js'
+import { bindArtifactEdit, type ArtifactEditingContext, type ArtifactEditProposal } from './artifactContext.js'
 import { afterTransactionCommit, inTransaction, type R1Database } from './database.js'
 
 export type ConversationToolScope = { source: SessionMessage; temporary: boolean; timezone: string;
   assertCurrent(): void; persistenceConfirmed: boolean; signal?: AbortSignal; sourceMessages?: SessionMessage[];
+  selectedArtifact?: ArtifactEditingContext | null;
   onMemoryInvalidated?(deletionEpoch: number): void;
   requestMemoryConfirmation?(candidate: MemorySaveCandidate, sensitive: boolean): MemoryConfirmation }
 type Delegation = { toolAliases: string[]; requiredActions: Array<{ alias: string; minimumCount: number }> }
@@ -36,7 +39,7 @@ export class R1ConversationTools {
   readonly loadedSkillIds = new Set<string>(['SK01'])
   constructor(private readonly db: R1Database, private readonly assets: R1PromptAssets,
     private readonly tasks: R1TaskSupervisor, private readonly scope: ConversationToolScope,
-    private readonly implementedTaskAliases: readonly string[], services?: FocusToolServices) {
+    private readonly implementedTaskAliases: readonly string[], services?: FocusToolServices, private readonly artifacts: R1Artifacts = new R1Artifacts(db)) {
     scope.assertCurrent()
     const recallProperties = assets.toolDefinition('memory_recall').output_data_schema.properties as Record<string, unknown> | undefined
     this.memories = new R1MemoryTools(new R1MemoryStore(db), scope.source, recallProperties && Object.hasOwn(recallProperties, 'topics') ? new R1Topics(db) : undefined)
@@ -59,6 +62,10 @@ export class R1ConversationTools {
     const task = this.tasks.list(this.scope.temporary ? this.scope.source.sessionId : null).find(task => task.taskId === id)
     if (!task) throw new Error('TASK_NOT_FOUND')
     return this.tasks.modelView(task.taskId)
+  }
+  private artifactEdit(value: unknown) {
+    return value == null ? null : bindArtifactEdit(this.scope.selectedArtifact, value as ArtifactEditProposal, this.artifacts,
+      this.scope.temporary ? this.scope.source.sessionId : null)
   }
   private checkSources(refs: string[]): void {
     // Both IDs are actual current-turn identifiers; normalize the source to the real message ID on commit.
@@ -187,6 +194,7 @@ export class R1ConversationTools {
           task = this.tasks.accept({ requestKey: `conversation:${this.scope.source.messageId}:${callId}`,
             sourceMessageId: this.scope.source.messageId, timezone: this.scope.timezone, goal: args.goal as string,
             constraints: args.constraints as string[], authorizedAliases: aliases, requiredActions: delegation?.requiredActions,
+            artifactEdit: this.artifactEdit(args.artifactTarget),
             selectedTrackKey: this.focus?.selectedTrackKey ?? null, complexity: 'complex', persistenceConfirmed: this.scope.persistenceConfirmed })
           status = task.queuePosition && task.queuePosition > 0 ? 'queued' : 'accepted'
         } else {
@@ -209,7 +217,8 @@ export class R1ConversationTools {
             if (patch.removeConstraints.some(value => !current.constraints.includes(value))) throw new Error('TASK_CONSTRAINT_NOT_FOUND')
             task = this.tasks.steer({ taskId: current.taskId, expectedGoalVersion: args.expectedGoalVersion as number,
               goal: patch.goal ?? current.goal, constraints: [...new Set([...current.constraints.filter(value => !patch.removeConstraints.includes(value)), ...patch.addConstraints])],
-              sourceMessageId: this.scope.source.messageId, selectedTrackKey: this.focus?.selectedTrackKey ?? null, authorizedAliases: aliases, requiredActions: delegation?.requiredActions })
+              sourceMessageId: this.scope.source.messageId, selectedTrackKey: this.focus?.selectedTrackKey ?? null, authorizedAliases: aliases, requiredActions: delegation?.requiredActions,
+              artifactEdit: this.artifactEdit(args.artifactTarget) })
             status = 'updated'
           } else if (alias === 'pause_task') {
             task = this.tasks.pause(current.taskId, args.expectedGoalVersion as number)

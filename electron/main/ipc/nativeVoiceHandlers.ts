@@ -3,6 +3,8 @@ import { reminderToolAliases } from '../r1/reminderTools.js'
 import { memoryToolAliases, memoryMutationReply } from '../r1/memoryTools.js'
 import type { R1MemoryConfirmations } from '../r1/memoryConfirmations.js'
 import { topicConversationContext } from '../r1/topicContext.js'
+import { currentArtifactContext } from '../r1/artifactContext.js'
+import { R1Artifacts } from '../r1/artifacts.js'
 import type { R1TopicSummaries } from '../r1/topicSummaries.js'
 import type { R1AutomaticMemory } from '../r1/automaticMemory.js'
 import { selectedConversationEntity } from '../r1/sessionMode.js'
@@ -29,6 +31,7 @@ export function registerNativeVoiceHandlers(deps: {
   topicSummaries?: R1TopicSummaries
   automaticMemory?: R1AutomaticMemory;
   connect?: ConstructorParameters<typeof NativeRealtimeSession>[0]['connect'];
+  artifacts?: R1Artifacts;
 }): { close(code?: string): void } {
   const sessions = new Map<number, { id: string; session: NativeRealtimeSession; playback(input: Record<string, unknown>): void }>()
   const aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', ...memoryToolAliases, 'notes_create', ...reminderToolAliases, ...(deps.focusServices ? focusToolAliases : [])]
@@ -45,10 +48,13 @@ export function registerNativeVoiceHandlers(deps: {
     const sessionId: string = activeSessionId
     const persona = deps.persona.get(), deletionEpoch = deps.memory.currentDeletionEpoch()
     const revision = deps.configurationRevision(), temporary = deps.mode.temporary
+    const artifacts = deps.artifacts ?? new R1Artifacts(deps.db)
+    const selectedArtifact = currentArtifactContext(deps.mode, artifacts), selectionKey = JSON.stringify(deps.mode.selectedArtifact ?? null)
     const assertCurrent = () => {
       if (deps.mode.sessionId !== sessionId || deps.mode.temporary !== temporary ||
         deps.persona.get().version !== persona.version || deps.memory.currentDeletionEpoch() !== deletionEpoch ||
-        deps.configurationRevision() !== revision) throw new Error('REALTIME_CONTEXT_INVALIDATED')
+        deps.configurationRevision() !== revision || JSON.stringify(deps.mode.selectedArtifact ?? null) !== selectionKey ||
+        JSON.stringify(currentArtifactContext(deps.mode, artifacts)) !== JSON.stringify(selectedArtifact)) throw new Error('REALTIME_CONTEXT_INVALIDATED')
     }
     let tools: R1ConversationTools | null = null
     let invalidatedEpoch: number | null = null
@@ -77,14 +83,14 @@ export function registerNativeVoiceHandlers(deps: {
     }
     const context = () => ({ sessionId, sessionGeneration: 1, turnId, currentTime: new Date().toISOString(),
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, temporary, contextVersion: 1,
-      personaVersion: persona.version, deletionEpoch, selectedEntity: topicConversationContext(deps.db, deps.mode).selected ?? selectedConversationEntity(deps.mode, deps.tasks), availableToolAliases: [],
+      personaVersion: persona.version, deletionEpoch, selectedEntity: selectedArtifact ? { type: 'artifact', id: selectedArtifact.artifactId, version: selectedArtifact.version } : topicConversationContext(deps.db, deps.mode).selected ?? selectedConversationEntity(deps.mode, deps.tasks), currentArtifact: selectedArtifact, availableToolAliases: [],
       loadedSkillIds: tools ? [...tools.loadedSkillIds] : ['SK01'],
       recentTurns: deps.conversations.modelTurns(sessionId),
       memories: [], topics: topicConversationContext(deps.db, deps.mode).topics, activeTasks: deps.tasks.list(temporary ? sessionId : null).slice(-20).map(task => {
         const { taskId, goalVersion, status, goal } = deps.tasks.modelView(task.taskId)
         return { taskId, goalVersion, status, goal }
       }) })
-    const boundary = () => new R1ModelRequestBoundary(deps.assets, persona, context(), aliases, 'realtime', assertCurrent, toolCount >= 6)
+    const boundary = () => new R1ModelRequestBoundary(deps.assets, persona, context(), aliases, 'realtime', assertCurrent, toolCount >= 6, deps.implementedTaskAliases)
     const destroyed = () => connection.close()
     const connection = new NativeRealtimeSession({ apiKey: process.env.VOLCENGINE_REALTIME_API_KEY ?? '',
       voice: persona.voiceId || process.env.VOLCENGINE_REALTIME_VOICE || '', boundary: boundary(),
@@ -102,14 +108,14 @@ export function registerNativeVoiceHandlers(deps: {
           sourceTurns.set(event.item_id, turnId)
           const source = deps.conversations.append({ sessionId, turnId, role: 'user', body: event.transcript, status: 'final' })
           const sourceTurnId = turnId
-          tools = new R1ConversationTools(deps.db, deps.assets, deps.tasks, { source, sourceMessages: deps.conversations.messages(sessionId).slice(-20), temporary,
+          tools = new R1ConversationTools(deps.db, deps.assets, deps.tasks, { source, selectedArtifact, sourceMessages: deps.conversations.messages(sessionId).slice(-20), temporary,
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, persistenceConfirmed: false, assertCurrent,
             onMemoryInvalidated: deps.onMemoryInvalidated ? epoch => { invalidatedEpoch = epoch } : undefined,
             requestMemoryConfirmation: deps.memoryConfirmations ? (candidate, sensitive) => deps.memoryConfirmations!.offer(candidate, {
               ownerId: sender.id, source, temporary, sensitive, assertCurrent() {
                 assertCurrent(); if (turnId !== sourceTurnId) throw new Error('MEMORY_CONFIRMATION_STALE')
               }
-            }) : undefined }, deps.implementedTaskAliases, deps.focusServices)
+            }) : undefined }, deps.implementedTaskAliases, deps.focusServices, artifacts)
           connection.updateBoundary(boundary())
         }
         emit(sender, id, event)

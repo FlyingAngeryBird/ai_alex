@@ -10,7 +10,7 @@ import { R1TaskRepairBoundary } from './taskRepairBoundary.js'
 const stableCode = (error: unknown): string => error instanceof Error && /^[A-Z][A-Z0-9_]{1,80}$/.test(error.message)
   ? error.message : 'TASK_EXECUTION_FAILED'
 const canRepair = (error: unknown): boolean => error instanceof SyntaxError || error instanceof Error &&
-  (error.message === 'PROMPT_ASSET_VARIABLE_INVALID:task-draft' || /^(TASK_RESULT_|TASK_COMPLETION_)/.test(error.message))
+  (error.message === 'PROMPT_ASSET_VARIABLE_INVALID:task-draft' || error.message === 'ARTIFACT_OUTSIDE_TARGET_CHANGED' || /^(TASK_RESULT_|TASK_COMPLETION_)/.test(error.message))
 
 /** Serial background execution; only Supervisor acceptance/explicit resume can enqueue work. */
 export class R1TaskRunner {

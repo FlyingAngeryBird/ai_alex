@@ -79,6 +79,11 @@ export class R1TaskToolExecutor {
           const offset = args.offset ?? 0; const limit = args.limit ?? 2000
           data = { path: args.file_path, content: lines.slice(offset, offset + limit).join('\n'),
             offset, hasMore: offset + limit < lines.length, assetReleaseId: this.assets.releaseId }
+        } else if (args.file_path === `/task/${lease.taskId}/current-artifact.json`) {
+          const lines = JSON.stringify(this.tasks.artifactInput(lease), null, 2).split('\n')
+          const offset = args.offset ?? 0; const limit = args.limit ?? 2000
+          data = { path: args.file_path, content: lines.slice(offset, offset + limit).join('\n'), offset,
+            hasMore: offset + limit < lines.length, assetReleaseId: this.assets.releaseId }
         } else if (args.file_path.startsWith(`/task/${lease.taskId}/receipts/`) && args.file_path.endsWith('.json')) {
           const actionId = args.file_path.slice(`/task/${lease.taskId}/receipts/`.length, -'.json'.length)
           const lines = JSON.stringify(this.tasks.readReceipt(lease, actionId), null, 2).split('\n')

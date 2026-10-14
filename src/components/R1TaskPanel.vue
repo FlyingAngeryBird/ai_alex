@@ -3,7 +3,22 @@ import R1WebResult from './R1WebResult.vue'
 import R1ArtifactEditor from './R1ArtifactEditor.vue'
 import { Pause, Play, X } from 'lucide-vue-next'
 import type { R1Task, TaskStatus } from '../../electron/main/r1/taskSupervisor'
-defineProps<{ tasks: R1Task[]; selected: R1Task | null; busy: boolean; error: string; loading: boolean }>()
+const props = defineProps<{ tasks: R1Task[]; selected: R1Task | null; busy: boolean; error: string; loading: boolean; active?: boolean }>()
+const editors = new Map<string, { flush(): Promise<boolean> }>()
+function editorRef(key: string, value: unknown): void {
+  if (value) editors.set(key, value as { flush(): Promise<boolean> })
+  else editors.delete(key)
+}
+async function flushEditing(): Promise<boolean> {
+  const selected = props.selected
+  if (!selected) return true
+  for (const artifact of selected.result?.artifacts ?? []) {
+    const editor = editors.get(`${selected.taskId}:${artifact.artifactId}`)
+    if (editor && !await editor.flush()) return false
+  }
+  return true
+}
+defineExpose({ flushEditing })
 const emit = defineEmits<{ close: []; select: [id: string]; control: [action: 'pause' | 'resume' | 'cancel']; retry: [] }>()
 const labels: Record<TaskStatus, string> = { accepted: '等待处理', running: '正在处理', waiting_input: '等待补充',
   paused: '已暂停', needs_resume: '等待继续', succeeded: '已完成', partially_succeeded: '部分完成', failed: '未完成', cancelled: '已取消' }
@@ -39,7 +54,7 @@ const labels: Record<TaskStatus, string> = { accepted: '等待处理', running: 
       </template>
       <p v-else-if="!loading && !tasks.length">当前没有委托。</p>
       <div v-for="task in tasks" v-show="selected?.taskId === task.taskId" :key="task.taskId">
-        <R1ArtifactEditor v-for="artifact in task.result?.artifacts || []" :key="artifact.artifactId" :artifact-id="artifact.artifactId" />
+        <R1ArtifactEditor v-for="artifact in task.result?.artifacts || []" :key="artifact.artifactId" :ref="value => editorRef(`${task.taskId}:${artifact.artifactId}`, value)" :artifact-id="artifact.artifactId" :active="!!active && selected?.taskId === task.taskId && task.result?.artifacts.length === 1" />
       </div>
     </div>
   </aside>

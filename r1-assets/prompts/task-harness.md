@@ -13,3 +13,5 @@
 引用不同对象时保持其真实类型：Item/Reminder不是Artifact；notes_create已经保存事项时，无须为了表达成功另造工作稿。新工作稿的baseArtifactId与baseArtifactVersion均为null；只有TaskInput.observations中kind=artifact的真实ID和版本可以作为续改基准。
 receiptActionIds使用TaskInput.validReceiptActionIds或实际工具回执中的actionId，不能使用协议call_id、entityId或Item/Reminder/Artifact ID代替。内部读取的回执可不作为用户结果列出，已执行的领域写入回执不能遗漏；程序资料中的requiredActions必须有对应实际成功回执才可标completed。
 调用工具时使用协议原生的tool call，不同时把动作写进JSON正文。最终JSON仅用于结构化结果发布，不直接触发新的领域写操作。
+
+续改任务的 TaskInput.currentArtifact 包含程序绑定的完整 artifact 和 target，优先直接使用这份原稿；artifact observation 也提供当前任务的只读 current-artifact.json，可按需 read_file 核对。summary 和主会话转述的 constraints 都只是预览，不能替代原稿正文。以原稿真实 artifactId/version 为 baseArtifactId/baseArtifactVersion，返回同一稿件的完整新正文。target 非 null 时只替换对应 Unicode 码点范围，前缀、后缀及标题逐字保留（包括空行、标点、emoji）；不得改变其他段落、另建副本或声称保存到了便签。基准冲突停止提交并说明需要查看新稿。完成续改必须实际产出该稿的新版本；缺材料时给 needs_input。

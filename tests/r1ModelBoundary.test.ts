@@ -10,6 +10,23 @@ const persona = { assistantName: 'Alex', userAddress: '海', style: '温和', vo
 const config = { VOLCENGINE_ARK_API_KEY: 'test-key', VOLCENGINE_ARK_MODEL: 'test-model' }
 
 describe('final R1 model request boundary', () => {
+  it('narrows Task delegation to actual implemented tools in the final request and validation', () => {
+    const assets = loadR1PromptAssets(resolve('r1-assets'))
+    const boundary = new R1ModelRequestBoundary(assets, persona, modelContext(), ['start_task', 'steer_task'], 'textOnly', () => {}, false, ['read_file', 'write_todos'])
+    const tools = boundary.finalize([]).tools
+    for (const tool of tools) {
+      const parameters = tool.function.parameters as { properties: { delegation: { properties: { toolAliases: { items: { enum: string[] } }; requiredActions: { maxItems: number } } } } }
+      expect(parameters.properties.delegation.properties.toolAliases.items.enum).toEqual(['read_file', 'write_todos'])
+      expect(parameters.properties.delegation.properties.requiredActions.maxItems).toBe(0)
+    }
+    const args = { goal: '续改讨论稿', constraints: [], sourceRefs: [], delegation: { toolAliases: ['notes_update'], requiredActions: [] } }
+    expect(() => boundary.validateToolCall('start_task', args)).toThrow('MODEL_TOOL_NOT_EXPOSED')
+    expect(() => boundary.validateHistoricalToolCall('start_task', args)).toThrow('MODEL_TOOL_NOT_EXPOSED')
+    expect(() => boundary.validateToolCall('start_task', { ...args, delegation: { toolAliases: ['read_file'], requiredActions: [] } })).not.toThrow()
+    expect(new R1ModelRequestBoundary(assets, persona, modelContext(), ['start_task'], 'textOnly', () => {}, false, []).finalize([]).tools).toEqual([])
+    // Narrowing must never mutate the registered package for another runtime.
+    expect(JSON.stringify(assets.toolDefinition('start_task').input_schema)).toContain('notes_update')
+  })
   it('rebuilds the final network system from assets and keeps user data in its original role', async () => {
     const assets = loadR1PromptAssets(resolve('r1-assets'))
     const sourceContext = modelContext({ availableToolAliases: ['execute'] })

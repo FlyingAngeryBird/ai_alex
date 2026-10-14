@@ -316,6 +316,76 @@
         "additionalProperties": false
       },
       "maxItems": 5
+    },
+    "currentArtifact": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "artifactId": {
+              "type": "string",
+              "maxLength": 160
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "text",
+                "plan",
+                "comparison"
+              ]
+            },
+            "title": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "content": {
+              "type": "string",
+              "maxLength": 8000
+            },
+            "selection": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "end": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "artifactId",
+            "version",
+            "kind",
+            "title",
+            "content",
+            "selection"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "required": [

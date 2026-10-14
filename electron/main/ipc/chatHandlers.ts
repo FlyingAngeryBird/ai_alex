@@ -156,7 +156,7 @@ export function registerChatHandlers(
     const previousSessionId = sessionId, previousTemporary = temporary
     clearMemory(); responseController?.abort(); sessionEpoch++
     temporary = false; sessionId = nextSessionId
-    if (sessionMode) { sessionMode.temporary = false; sessionMode.sessionId = sessionId; sessionMode.selectedCandidate = null; sessionMode.selectedTopic = null }
+    if (sessionMode) { sessionMode.temporary = false; sessionMode.sessionId = sessionId; sessionMode.selectedCandidate = null; sessionMode.selectedTopic = null; sessionMode.selectedArtifact = null }
     if (previousSessionId && conversations) {
       try { onSessionEnded(previousSessionId, previousTemporary) } finally { conversations.end(previousSessionId) }
     }
@@ -172,12 +172,13 @@ export function registerChatHandlers(
   }
 
   const topicSelectionKey = () => sessionMode?.selectedTopic ? `${sessionMode.selectedTopic.topicId}:${sessionMode.selectedTopic.version}` : null
+  const artifactSelectionKey = () => JSON.stringify(sessionMode?.selectedArtifact ?? null)
   function captureRequest() {
-    return { topicSelection: topicSelectionKey(), epoch: sessionEpoch, responseGeneration, signal: responseController?.signal, personaVersion: personaStore?.get().version,
+    return { artifactSelection: artifactSelectionKey(), topicSelection: topicSelectionKey(), epoch: sessionEpoch, responseGeneration, signal: responseController?.signal, personaVersion: personaStore?.get().version,
       deletionEpoch: memoryStore?.currentDeletionEpoch() }
   }
   function requestIsCurrent(request: ReturnType<typeof captureRequest>): boolean {
-    return request.topicSelection === topicSelectionKey() && request.epoch === sessionEpoch && request.responseGeneration === responseGeneration &&
+    return request.artifactSelection === artifactSelectionKey() && request.topicSelection === topicSelectionKey() && request.epoch === sessionEpoch && request.responseGeneration === responseGeneration &&
       request.personaVersion === personaStore?.get().version &&
       request.deletionEpoch === memoryStore?.currentDeletionEpoch()
   }
@@ -224,6 +225,7 @@ export function registerChatHandlers(
       }
       activePersonaVersion = persona.version
       activeDeletionEpoch = deletionEpoch
+      const currentArtifact = conversationDriver?.artifactContext?.(sessionMode) ?? null
       const context = {
         sessionId, sessionGeneration: sessionEpoch + 1, turnId,
         currentTime: new Date().toISOString(),
@@ -231,9 +233,9 @@ export function registerChatHandlers(
         temporary, contextVersion: sessionEpoch + 1,
         personaVersion: persona.version,
         deletionEpoch,
-        selectedEntity: conversationDriver?.topicContext(sessionMode).selected ?? conversationDriver?.selectedEntity?.(sessionMode) ?? null, availableToolAliases: [], loadedSkillIds: ['SK01'],
+        selectedEntity: currentArtifact ? { type: 'artifact', id: currentArtifact.artifactId, version: currentArtifact.version } : conversationDriver?.topicContext(sessionMode).selected ?? conversationDriver?.selectedEntity?.(sessionMode) ?? null, availableToolAliases: [], loadedSkillIds: ['SK01'],
         recentTurns: [], memories: [], activeTasks: [],
-        topics: conversationDriver?.topicContext(sessionMode).topics ?? []
+        topics: conversationDriver?.topicContext(sessionMode).topics ?? [], currentArtifact
       }
       const boundary = new R1ModelRequestBoundary(promptAssets, persona, context)
       return { text: boundary.systemText, boundary, context }
@@ -275,6 +277,10 @@ export function registerChatHandlers(
         activeDeletionEpoch = deletionEpoch
         clearMemory()
         onMemoryInvalidated(deletionEpoch)
+        // Only the local acknowledgement of our committed mutation adopts the
+        // selection reset; the revoked model request is never used again.
+        request.artifactSelection = artifactSelectionKey()
+        request.topicSelection = topicSelectionKey()
       } } })
   }
 
@@ -289,7 +295,7 @@ export function registerChatHandlers(
     sessionEpoch += 1
     endCurrentSession()
     temporary = enabled
-    if (sessionMode) { sessionMode.selectedCandidate = null; sessionMode.selectedTopic = null }
+    if (sessionMode) { sessionMode.selectedCandidate = null; sessionMode.selectedTopic = null; sessionMode.selectedArtifact = null }
     if (sessionMode) sessionMode.temporary = enabled
     sessionId = conversations.start(temporary)
     if (sessionMode) sessionMode.sessionId = sessionId

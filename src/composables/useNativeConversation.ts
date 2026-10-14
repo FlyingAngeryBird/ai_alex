@@ -2,7 +2,7 @@ import { ref } from 'vue'
 import type { NativeRealtimeEvent } from '../../electron/main/providers/nativeRealtimeSession'
 import runtimeDefaults from '../../r1-assets/config/runtime.defaults.json'
 
-const needsContextRefresh = (code: string) => code === 'MEMORY_CONTEXT_REFRESH_REQUIRED'
+const needsContextRefresh = (code: string) => ['MEMORY_CONTEXT_REFRESH_REQUIRED', 'REALTIME_CONTEXT_REFRESH_REQUIRED'].includes(code)
 const retryableConnectionFailure = (code: string) => ['REALTIME_NETWORK_FAILED', 'REALTIME_CONNECTION_CLOSED',
   'REALTIME_START_TIMEOUT', 'REALTIME_UPGRADE_FAILED'].includes(code)
 function connectionMessage(code: string): string {

@@ -6,6 +6,8 @@ let artifact = { artifactId: 'test', version: 1, sourceTurnId: 'test', kind: 'te
 const count = ref(0)
 window.seamoR1 = { artifacts: {
   get: async () => ({ ok: true, data: { ...artifact } }),
+  select: async () => ({ ok: true, data: { ...artifact } }),
+  materials: async () => ({ ok: true, data: [] }),
   revise: async input => {
     await new Promise(resolve => setTimeout(resolve, 1000))
     if (input.expectedVersion !== artifact.version) return { ok: false, error: { code: 'VERSION_CONFLICT' } }

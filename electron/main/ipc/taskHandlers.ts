@@ -6,7 +6,7 @@ import type { R1Artifacts } from '../r1/artifacts.js'
 import type { R1SessionMode } from '../r1/sessionMode.js'
 type Ipc = { handle(channel: string, listener: (event: unknown, payload?: unknown) => unknown): void }
 export function registerTaskHandlers(tasks: R1TaskSupervisor, artifacts: R1Artifacts, mode: R1SessionMode,
-  ipc: Ipc = ipcMain): void {
+  ipc: Ipc = ipcMain, artifactChanged: (artifact: ReturnType<R1Artifacts['get']>) => void = () => undefined): void {
   const action = (run: (input: Record<string, unknown>) => unknown) => (_event: unknown, input?: unknown) => {
     try {
       if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('INVALID_TASK_PAYLOAD')
@@ -48,6 +48,7 @@ export function registerTaskHandlers(tasks: R1TaskSupervisor, artifacts: R1Artif
     if (typeof candidateId !== 'string') throw new Error('TASK_CANDIDATE_NOT_FOUND')
     const candidateVersion = tasks.candidateVersion(taskId, candidateId)
     mode.selectedCandidate = { taskId, goalVersion: task.goalVersion, candidateId, candidateVersion }
+    mode.selectedArtifact = null; mode.selectedTopic = null
     return { type: 'candidate', id: candidateId, version: candidateVersion }
   }))
   ipc.handle('r1.tasks.saveCandidate', action(input => tasks.saveCandidate({
@@ -63,11 +64,11 @@ export function registerTaskHandlers(tasks: R1TaskSupervisor, artifacts: R1Artif
     }))
   }
   ipc.handle('r1.artifacts.get', action(input => artifacts.get(input.artifactId as string, owner(), input.version as number | undefined)))
-  ipc.handle('r1.artifacts.revise', action(input => artifacts.revise({ artifactId: input.artifactId as string,
+  ipc.handle('r1.artifacts.revise', action(input => { const result = artifacts.revise({ artifactId: input.artifactId as string,
     expectedVersion: input.expectedVersion as number, content: input.content as string, title: input.title as string | undefined,
-    target: input.target as Parameters<R1Artifacts['revise']>[0]['target'], temporaryOwner: owner() })))
-  ipc.handle('r1.artifacts.undo', action(input => artifacts.undo({ artifactId: input.artifactId as string,
-    expectedVersion: input.expectedVersion as number, restoreVersion: input.restoreVersion as number, temporaryOwner: owner() })))
+    target: input.target as Parameters<R1Artifacts['revise']>[0]['target'], temporaryOwner: owner() }); artifactChanged(result); return result }))
+  ipc.handle('r1.artifacts.undo', action(input => { const result = artifacts.undo({ artifactId: input.artifactId as string,
+    expectedVersion: input.expectedVersion as number, restoreVersion: input.restoreVersion as number, temporaryOwner: owner() }); artifactChanged(result); return result }))
   ipc.handle('r1.artifacts.save', action(input => artifacts.save({ artifactId: input.artifactId as string,
     expectedVersion: input.expectedVersion as number, actionId: input.actionId as string,
     kind: input.kind as 'note' | 'todo' | undefined,

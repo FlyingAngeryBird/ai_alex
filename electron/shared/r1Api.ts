@@ -42,9 +42,12 @@ export type R1Api = {
     onChanged(handler: (event: TaskEvent) => void): () => void
   }
   artifacts: {
+    select(input: { artifactId: string; expectedVersion: number; selection: import('../main/r1/artifacts.js').ArtifactRange | null } | { artifactId: null; expectedVersion: null; selection: null }): Promise<R1Result<Artifact | null>>
+    materials(artifactId: string): Promise<R1Result<import('../main/r1/conversations.js').SessionMessage[]>>
+    onChanged(handler: (event: { artifactId: string; version: number }) => void): () => void
     export(input: { artifactId: string; expectedVersion: number; format: 'txt' | 'md' }): Promise<R1Result<{ cancelled: true } | { cancelled: false; artifactId: string; version: number; path: string }>>
     get(input: { artifactId: string; version?: number }): Promise<R1Result<Artifact>>
-    revise(input: Omit<Parameters<R1Artifacts['revise']>[0], 'temporaryOwner'>): Promise<R1Result<Artifact>>
+    revise(input: Omit<Parameters<R1Artifacts['revise']>[0], 'temporaryOwner' | 'sourceRefs'>): Promise<R1Result<Artifact>>
     undo(input: Omit<Parameters<R1Artifacts['undo']>[0], 'temporaryOwner'>): Promise<R1Result<Artifact>>
     save(input: Omit<Parameters<R1Artifacts['save']>[0], 'temporaryOwner'>): Promise<R1Result<ReturnType<R1Artifacts['save']>>>
   }

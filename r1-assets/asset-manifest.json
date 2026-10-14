@@ -1,6 +1,6 @@
 {
-  "releaseId": "seamo-ai-r1-agent-assets-2.3.1",
-  "version": "2.3.1",
+  "releaseId": "seamo-ai-r1-agent-assets-2.4.2",
+  "version": "2.4.2",
   "files": [
     {
       "path": ".gitignore",
@@ -25,27 +25,27 @@
     {
       "path": "config/prompt-registry.json",
       "bytes": 4431,
-      "sha256": "0e99cc2ca880307fbc0e13b92461bca765ec8c32822db72ac401d479e4d99fef"
+      "sha256": "f6bb9c518031cf5550fbe5b28b9222992a94e6848b647a5be00dfb5791a801ce"
     },
     {
       "path": "config/runtime.defaults.json",
       "bytes": 4957,
-      "sha256": "32cf4109d8a119ec6a78ac2ce0ea44617f34500c45ccfa6fa353d190ca8ba489"
+      "sha256": "51c9a9206e2c921af38a407d47fd5befdbeed86d3d4d5b344c28db819d9c6d3d"
     },
     {
       "path": "config/skill-registry.json",
       "bytes": 4143,
-      "sha256": "adebc7830c5ad17f8cc4ff11a357c2227788cd22162f92cd21a7519b64617f6e"
+      "sha256": "5e5faf382a0815bde9b99f446d441afcfde8e89af263864f338bcf384e981690"
     },
     {
       "path": "contracts/tool-catalog.json",
-      "bytes": 216874,
-      "sha256": "f55abccdc4013c1ccc15b47a6c0a3657596806ee042efeb71cd7f69278cce508"
+      "bytes": 219914,
+      "sha256": "aee211855ae72bc4eeb0d38b53c9da81d15598b3fce9b257d41341d1421ba67f"
     },
     {
       "path": "docs/AGENT_ASSET_APPENDIX.md",
-      "bytes": 114101,
-      "sha256": "2924cb797840e74a9f42cf3b7ece0256cfe2aab11dc2dcec083ebb62fb401efa"
+      "bytes": 118560,
+      "sha256": "214e2ec8b75fe273e2c9d05e92c715959b0b6bd628eb111d123b6ec21d30a287"
     },
     {
       "path": "docs/ARCHITECTURE_CONTRACT.md",
@@ -59,8 +59,8 @@
     },
     {
       "path": "docs/CHANGE_POLICY.md",
-      "bytes": 13432,
-      "sha256": "455ff33235d83ffefad785fee9d2d21484fe17eebcf9f0a45959ce2ea69dafdd"
+      "bytes": 15235,
+      "sha256": "5e88586afebeeb6fc50e897e735abba12aae32daa79bb95ca0a8ee5e2b549145"
     },
     {
       "path": "docs/DETAIL_SPEC.md",
@@ -74,13 +74,13 @@
     },
     {
       "path": "docs/Seamo_AI_R1_PRD_v0.5.1.md",
-      "bytes": 288354,
-      "sha256": "b35a4af094430b591905aca7b555d42817e17682b3dc9560609a2c7570e9398b"
+      "bytes": 292813,
+      "sha256": "a9f6efb34f4764aa5f78f7e2c95c2b41aad57c61c7cdd7ed6d7388a66bbfda43"
     },
     {
       "path": "evals/behavior-cases.jsonl",
-      "bytes": 7030,
-      "sha256": "57883331d17c68d655bfc96984fa5511431b18a2325407b77476f98792bb1b1c"
+      "bytes": 8009,
+      "sha256": "680c21e30eb17c4a3d9ad1525371bcfb1b14f03696b38ed97f513704b2edbf21"
     },
     {
       "path": "evals/task-draft.valid.json",
@@ -94,8 +94,8 @@
     },
     {
       "path": "prompts/conversation.md",
-      "bytes": 3556,
-      "sha256": "65c0e380df5baafe39d13dabf34745d84a1546a29cc637f4e9036a1229756a8f"
+      "bytes": 4445,
+      "sha256": "9677dfee019f3af8faab1be5955ef81484d4895dfc1c5a7cabf77d779f5ed2d9"
     },
     {
       "path": "prompts/memory-extract.md",
@@ -129,8 +129,8 @@
     },
     {
       "path": "prompts/task-harness.md",
-      "bytes": 2623,
-      "sha256": "d17733578c6ca9202cad1ab14037c99edbe9bc9398632894526866799974caeb"
+      "bytes": 3393,
+      "sha256": "805f39c2bbe12e4940a76f1c2820b29705dcd98212c052585b11e4343ecc1c3b"
     },
     {
       "path": "prompts/task-steer.md",
@@ -144,8 +144,8 @@
     },
     {
       "path": "schemas/app-context.schema.json",
-      "bytes": 7751,
-      "sha256": "9209ca0f00a26487db7f3bfc24811c5537531513e86f22588786b6fa166a2086"
+      "bytes": 9443,
+      "sha256": "29ab2a3979c85622ff1201b27e90b4ba0e36b1b854c367ab912cf6dbe2d4e5be"
     },
     {
       "path": "schemas/context-summary.schema.json",
@@ -199,8 +199,8 @@
     },
     {
       "path": "schemas/task-input.schema.json",
-      "bytes": 3683,
-      "sha256": "6b00c0223c3b2b6de24bc47c5c0de3654fc12b678ffb282231ae38af95498afd"
+      "bytes": 6942,
+      "sha256": "58b500ac265dbd96d3907b75896f56d2e14edd611431476f1eecd3eb7b0bb965"
     },
     {
       "path": "schemas/task-steer-input.schema.json",
@@ -235,7 +235,7 @@
     {
       "path": "scripts/validate_assets.py",
       "bytes": 3260,
-      "sha256": "2ca268c3362a515298929b3b257f7a45798e35045d658f55b07bd9d90f91af64"
+      "sha256": "5064c99b752ae3a9eed0630ba8c1e9794d43b3979fc19a742b834daef9ea6f8e"
     },
     {
       "path": "skills/capture-item/SKILL.md",
@@ -289,8 +289,8 @@
     },
     {
       "path": "skills/work-discussion/SKILL.md",
-      "bytes": 2695,
-      "sha256": "1c0553e07b8c20e35a33e801941268c78f828248237c9279435fee597faa0e3e"
+      "bytes": 3207,
+      "sha256": "66c519b2acec60130ac364feaa4d169d8917bb31af2acff16348484a2943d648"
     },
     {
       "path": "skills/work-discussion/references/examples.md",

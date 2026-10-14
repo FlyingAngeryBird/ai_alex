@@ -27,7 +27,7 @@ export function registerTopicHandlers(db: R1Database, mode: R1SessionMode, onInv
   handle('r1.topics.select', ['topicId', 'expectedVersion'], input => {
     const topic = topics.get(input.topicId as string)
     if (topic.version !== input.expectedVersion) throw new Error('VERSION_CONFLICT')
-    mode.selectedTopic = { topicId: topic.topicId, version: topic.version }; mode.selectedCandidate = null
+    mode.selectedTopic = { topicId: topic.topicId, version: topic.version }; mode.selectedCandidate = null; mode.selectedArtifact = null
     onSelected(); return topic
   })
 }

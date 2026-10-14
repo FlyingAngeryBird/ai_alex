@@ -1,5 +1,5 @@
 {
-  "releaseId": "seamo-ai-r1-agent-assets-2.3.1",
+  "releaseId": "seamo-ai-r1-agent-assets-2.4.2",
   "entries": [
     {
       "skillId": "SK01",
@@ -115,7 +115,7 @@
       "skillId": "SK06",
       "name": "work-discussion",
       "legacyKey": "work_discussion",
-      "version": "1.0.0",
+      "version": "1.1.1",
       "description": "讨论工作目标与取舍，整理或改写粘贴短文本，局部续改产物，并按明确要求查证、保存或导出。适用于轻工作协助；不读取未选择文件或操作办公软件。",
       "path": "skills/work-discussion/SKILL.md",
       "resourcePaths": [

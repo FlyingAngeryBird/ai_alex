@@ -56,6 +56,8 @@ export const exposedChannels = [
   'r1.tasks.resume',
   'r1.tasks.cancel',
   'r1.artifacts.get',
+  'r1.artifacts.select',
+  'r1.artifacts.materials',
   'r1.artifacts.revise',
   'r1.artifacts.undo',
   'r1.artifacts.save',
@@ -100,6 +102,7 @@ export const eventChannels = [
   'voice.nativeEvent',
   'r1.reminderDue',
   'r1.memoryInvalidated',
+  'r1.artifactChanged',
   'r1.memoryConfirmation',
   'r1.memoryPolicyChanged',
   'r1.memoryChanged',
@@ -186,6 +189,13 @@ function exposeLingliApi(
       }
     },
     artifacts: {
+      select: input => invokeR1('r1.artifacts.select', input),
+      materials: artifactId => invokeR1('r1.artifacts.materials', { artifactId }),
+      onChanged: handler => {
+        const listener = (...args: unknown[]): void => handler(args[1] as Parameters<typeof handler>[0])
+        renderer.on('r1.artifactChanged', listener)
+        return () => renderer.removeListener('r1.artifactChanged', listener)
+      },
       export: input => invokeR1('r1.artifacts.export', input),
       get: input => invokeR1('r1.artifacts.get', input),
       revise: input => invokeR1('r1.artifacts.revise', input),

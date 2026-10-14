@@ -12,7 +12,7 @@ description: "讨论工作目标与取舍，整理或改写粘贴短文本，局
 ## 执行指导
 - 优先给2至3个可执行优先项、理由和下一步；用户要求详细方案时展开。业务指标只根据实际输入或证据，不虚构提升数字。
 - 整理与改写保留事实及用户限制，控制标题、段落与长度；原文超L01时提示分段，不静默截断。
-- 局部续改仅修改目标范围；提交草稿基于当前artifactVersion。页面已改内容优先，旧任务结果不能覆盖新编辑。
+- 局部续改仅修改目标范围；提交草稿基于当前artifactVersion。页面已改内容优先，旧任务结果不能覆盖新编辑。主会话以 currentArtifact 的真实对象传 artifactTarget；后台读取 observation 指向的 current-artifact.json，按 target 保留正文其余部分和标题，使用原 artifactId/version 返回新版本，不另造副本。段落序号从1开始，空行分段；界面已有选区时不得扩大范围。续改委托只需 read_file/write_todos，requiredActions 为空；ArtifactDraft 发布由程序执行，不使用 notes_update 或 memory_update，也不把 artifactId 作为 Item/Memory ID。
 - 需要当前事实时加载web-qa查询并标来源；用户给定事实与外部证据分开。
 - 用户明确“保存最新版”时加载capture-item，以当前产物版本创建或更新Item；保存以后继续改Artifact不自动同步Item。
 ## 完成与失败

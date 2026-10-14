@@ -91,11 +91,12 @@ export class R1Artifacts {
     })
   }
   revise(input: { artifactId: string; expectedVersion: number; content: string; target?: ArtifactRange | null;
-    title?: string; temporaryOwner?: string | null }): Artifact {
+    title?: string; sourceRefs?: string[]; temporaryOwner?: string | null }): Artifact {
     const current = this.get(input.artifactId, input.temporaryOwner ?? null)
     if (current.version !== input.expectedVersion) throw new Error('VERSION_CONFLICT')
     const content = text(input.content, 8000, 'ARTIFACT_CONTENT_INVALID')
-    const meta = metadata({ ...current, title: input.title ?? current.title, content })
+    const meta = metadata({ ...current, sourceRefs: input.sourceRefs ?? current.sourceRefs, title: input.title ?? current.title, content })
+    this.assertSources(meta.sourceRefs)
     if (input.target) {
       const chars = [...current.content]
       const { start, end } = input.target

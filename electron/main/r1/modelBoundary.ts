@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import type { ChatMessage } from '../providers/llmProvider.js'
 import type { R1Persona } from './persona.js'
 import type { R1ModelTool, R1PromptAssets } from './promptAssets.js'
+type ToolSchema = { properties?: Record<string, ToolSchema>; items?: ToolSchema; enum?: string[]; maxItems?: number }
 
 export class R1ModelRequestBoundary {
   readonly systemText: string
@@ -14,7 +15,7 @@ export class R1ModelRequestBoundary {
 
   constructor(assets: R1PromptAssets, persona: R1Persona, context: Record<string, unknown>,
     authorizedAliases: string[] = [], mode: 'textOnly' | 'realtime' = 'textOnly', checkCurrent: () => void = () => undefined,
-    toolBudgetEmpty = false) {
+    toolBudgetEmpty = false, implementedTaskAliases?: readonly string[]) {
     this.checkCurrent = checkCurrent
     this.historicalAliases = [...authorizedAliases]; this.assetTools = assets
     const snapshot = structuredClone(context)
@@ -24,8 +25,27 @@ export class R1ModelRequestBoundary {
     }
     this.tools = assets.exposeTools({ channel: 'realtime', loadedSkillIds,
       authorizedAliases, temporary: snapshot.temporary === true })
+    if (implementedTaskAliases) {
+      if (!implementedTaskAliases.length) this.tools = this.tools.filter(tool => !['start_task', 'steer_task'].includes(tool.function.name))
+      for (const tool of this.tools) if (['start_task', 'steer_task'].includes(tool.function.name)) {
+        const fields = (tool.function.parameters as ToolSchema).properties!.delegation.properties!
+        const available = fields.toolAliases.items!.enum!.filter(alias => implementedTaskAliases.includes(alias))
+        if (available.length) fields.toolAliases.items!.enum = available
+        else fields.toolAliases.maxItems = 0
+        const required = fields.requiredActions.items!.properties!.alias.enum!.filter(alias => implementedTaskAliases.includes(alias))
+        if (required.length) fields.requiredActions.items!.properties!.alias.enum = required
+        else fields.requiredActions.maxItems = 0
+      }
+    }
     if (toolBudgetEmpty) this.tools = []
-    this.validateInput = (alias, input) => assets.validateToolInput(alias, input)
+    this.validateInput = (alias, input) => {
+      assets.validateToolInput(alias, input)
+      if (implementedTaskAliases && ['start_task', 'steer_task'].includes(alias)) {
+        const delegation = (input as { delegation?: { toolAliases: string[]; requiredActions: Array<{ alias: string }> } }).delegation
+        if (delegation && [...delegation.toolAliases, ...delegation.requiredActions.map(action => action.alias)]
+          .some(name => !implementedTaskAliases.includes(name))) throw new Error('MODEL_TOOL_NOT_EXPOSED')
+      }
+    }
     snapshot.availableToolAliases = this.tools.map(tool => tool.function.name)
     this.systemText = assets.compose(structuredClone(persona), snapshot, mode)
     this.diagnostic = Object.freeze({ assetReleaseId: assets.releaseId,

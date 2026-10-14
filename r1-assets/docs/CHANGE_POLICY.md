@@ -88,3 +88,12 @@ patch：表达澄清或修错且行为合同不变。minor：在已批准范围�
 - 验证证据见 docs/r1/2026-10-14-topics-progress.md；未验证的语义、原生设备、完整上下文容量与安装门槛不得标为通过。
 
 - DEC-R1-TOPICS-020 真实 Bad Case：首轮正常话题引用不合法被拒；复测返回英文结论。PR06 补中文及原 ID/实体范围规则，Boundary 的 JSON Schema 进一步约束实际 user turnId、既有 Topic ID/版本与空 Memory/Task 集合。M03 背景请求按观测耗时设明确 30 秒上限，记录为 summaryRequestTimeoutMs，不替代真实实时首响门槛。
+
+## DEC-R1-ARTIFACT-EDIT-021：当前稿件的真实局部续改
+- 缺口：已有 Artifact 局部范围校验，但主会话没有当前稿、Task 无真实基准资料，无法执行“第二段短一些”。
+- 影响：F09b/F09c；AppContext 增加可选 currentArtifact；start_task/steer_task 增加可选 artifactTarget（实际 ID/版本、整篇/选区/段落范围）。程序从实际正文计算 Unicode 范围，拒绝扩大用户选区；不加关键词路由、新 Prompt 或新工具。
+- 后台仅从当前任务只读 current-artifact.json 取得完整基准；Supervisor 校验实体版本、授权范围及非目标内容，发布同一 Artifact 的新版本。用户手改优先，旧模型结果不覆盖。原始材料只读查看；临时稿、资料与任务仍仅内存。
+- 版本：releaseId 2.4.2、schemaVersion 2.4.0；PR03 1.3.1、PR04 1.1.1、SK06 1.1.1，其余不变。新增字段可选，数据库仍 schema 7。旧任务保留旧资产绑定，不自动改合同。
+- 回退：源码及完整资产回到 91ce1bd，隔离数据验证；不降级或覆盖当前删除抑制。证据见 docs/r1/2026-10-14-artifact-edit-progress.md；实际模型、UI、安装未验证项逐项保留。
+
+- DEC-R1-ARTIFACT-EDIT-021 实际失败：2.4.0 的主会话把 Artifact 委托为 notes_update，后续还误用 memory_update，程序拒绝且没有写入。2.4.1 已限制真实可执行的 delegation 参数，主会话成功受理；M02 从转述的 constraints 猜原稿、改了非目标标点，被范围校验拒绝。2.4.2 在 TaskInput 可选 currentArtifact 中提供同一受控完整基准，保留只读资源路径，并允许范围违规经一次无工具 PR10 修复；不新增路由或模型。新增 E20/E21，不能把这些小样本当完整 G4 验收。

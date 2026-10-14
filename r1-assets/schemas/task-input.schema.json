@@ -161,6 +161,127 @@
         "maxLength": 4
       },
       "maxItems": 6
+    },
+    "currentArtifact": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "artifact": {
+              "type": "object",
+              "properties": {
+                "artifactId": {
+                  "type": "string",
+                  "maxLength": 160
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "sourceTurnId": {
+                  "type": "string",
+                  "maxLength": 160
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "text",
+                    "plan",
+                    "comparison"
+                  ]
+                },
+                "title": {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                "content": {
+                  "type": "string",
+                  "maxLength": 8000
+                },
+                "sourceRefs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 160
+                  },
+                  "maxItems": 50
+                },
+                "savedItemId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 160
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "savedItemVersion": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "temporary": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "artifactId",
+                "version",
+                "sourceTurnId",
+                "kind",
+                "title",
+                "content",
+                "sourceRefs",
+                "savedItemId",
+                "savedItemVersion",
+                "temporary"
+              ],
+              "additionalProperties": false
+            },
+            "target": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "end": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "artifact",
+            "target"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "required": [

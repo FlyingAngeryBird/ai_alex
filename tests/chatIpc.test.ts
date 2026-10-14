@@ -26,8 +26,10 @@ describe('chat IPC handlers', () => {
         return new Response(JSON.stringify({ id: `response-${decision}`, status: 'completed', output }))
       } })
       const driver = new R1ConversationDriver(db, assets, tasks, ark, () => persona.get(), [])
-      const invalidated = vi.fn((epoch: number) => { expect(db.isTransaction).toBe(false); expect(epoch).toBe(1); tasks.invalidateContext() })
-      registerChatHandlers({ handle: (name, handler) => { handlers.set(name, handler) } }, undefined, undefined, conversations, persona, assets, memory, undefined, undefined, driver, invalidated)
+      const mode: import('../electron/main/r1/sessionMode').R1SessionMode = { temporary: false,
+        selectedArtifact: { artifactId: 'revoked-selection', version: 1, selection: null }, selectedTopic: { topicId: 'revoked-topic', version: 1 } }
+      const invalidated = vi.fn((epoch: number) => { expect(db.isTransaction).toBe(false); expect(epoch).toBe(1); tasks.invalidateContext(); mode.selectedArtifact = null; mode.selectedTopic = null })
+      registerChatHandlers({ handle: (name, handler) => { handlers.set(name, handler) } }, undefined, undefined, conversations, persona, assets, memory, mode, undefined, driver, invalidated)
       expect(await handlers.get('chat.sendMessage')!(null, { text: '更正关于茶的记忆，我喜欢绿茶。' })).toMatchObject({ ok: true, data: { reply: expect.stringContaining('已更正') } })
       expect(invalidated).toHaveBeenCalledOnce()
       expect(await handlers.get('chat.sendMessage')!(null, { text: '我们继续聊。' })).toMatchObject({ ok: true, data: { reply: '继续聊聊。' } })

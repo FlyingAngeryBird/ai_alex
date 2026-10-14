@@ -75,6 +75,7 @@ const assistantAudioLevel = ref(0.14)
 const assistantAudioPlaying = ref(false)
 let assistantSpeechGeneration = 0
 const nativeAutoRequested = ref(false)
+const taskPanel = ref<InstanceType<typeof R1TaskPanel> | null>(null)
 const memoryConfirmation = ref<MemoryConfirmation | null>(null)
 const memoryConfirmationBusy = ref(false)
 const memoryConfirmationError = ref('')
@@ -848,6 +849,11 @@ async function handleSendText(text: string, complete?: (accepted: boolean) => vo
   else conversation.disableAutoListen()
   releaseAssistantAudio()
   try {
+    if (taskPanel.value && !await taskPanel.value.flushEditing()) {
+      const cleared = await window.seamoR1.artifacts.select({ artifactId: null, expectedVersion: null, selection: null })
+      if (!cleared.ok) { complete?.(false); conversation.addSystemMessage('当前稿件上下文未能更新，请重试发送。'); return }
+      conversation.addSystemMessage('工作稿的修改尚未保留，当前对话暂不引用它。你的文字仍在编辑器中，可以继续聊天。')
+    }
     const response = await conversation.stopListening(text)
     complete?.(Boolean(response.reply))
     pauseAutoListenForAssistant()
@@ -1121,7 +1127,7 @@ onBeforeUnmount(() => {
         @stop-speech="stopCurrentResponse" />
     </section>
 
-    <R1TaskPanel v-show="taskOpen" :tasks="taskState.tasks.value" :selected="taskState.selected.value"
+    <R1TaskPanel ref="taskPanel" v-show="taskOpen" :active="taskOpen" :tasks="taskState.tasks.value" :selected="taskState.selected.value"
       :busy="taskState.busy.value" :loading="taskState.loading.value" :error="taskState.error.value"
       @close="closePanels" @select="(id) => { taskState.selectedId.value = id }"
       @control="taskState.control" @retry="taskState.refresh" />

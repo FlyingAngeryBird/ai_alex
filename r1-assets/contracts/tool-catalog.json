@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "2.3.0",
+  "schemaVersion": "2.4.0",
   "businessTools": [
     {
       "name": "memory.recall",
@@ -5211,6 +5211,53 @@
               "requiredActions"
             ],
             "additionalProperties": false
+          },
+          "artifactTarget": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "artifactId": {
+                    "type": "string",
+                    "maxLength": 160
+                  },
+                  "expectedVersion": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "whole",
+                      "selection",
+                      "paragraph"
+                    ]
+                  },
+                  "paragraphIndex": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "artifactId",
+                  "expectedVersion",
+                  "scope",
+                  "paragraphIndex"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "续改当前可见工作稿时传真实ID/版本与范围；paragraphIndex从1开始，空行分段；whole/selection时该字段为null。非工作稿任务省略或null。"
           }
         },
         "required": [
@@ -5643,6 +5690,53 @@
               "requiredActions"
             ],
             "additionalProperties": false
+          },
+          "artifactTarget": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "artifactId": {
+                    "type": "string",
+                    "maxLength": 160
+                  },
+                  "expectedVersion": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "whole",
+                      "selection",
+                      "paragraph"
+                    ]
+                  },
+                  "paragraphIndex": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "artifactId",
+                  "expectedVersion",
+                  "scope",
+                  "paragraphIndex"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "续改当前可见工作稿时传真实ID/版本与范围；paragraphIndex从1开始，空行分段；whole/selection时该字段为null。非工作稿任务省略或null。"
           }
         },
         "required": [

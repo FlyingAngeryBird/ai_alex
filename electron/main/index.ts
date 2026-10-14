@@ -46,6 +46,7 @@ import { R1Topics } from './r1/topics.js'
 import { registerTopicHandlers } from './ipc/topicHandlers.js'
 import { R1AutomaticMemory } from './r1/automaticMemory.js'
 import { registerAutomaticMemoryHandlers } from './ipc/automaticMemoryHandlers.js'
+import { registerArtifactContextHandlers } from './ipc/artifactContextHandlers.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 let nativeVoice: { close(code?: string): void } | null = null
@@ -65,6 +66,7 @@ let automaticMemory: R1AutomaticMemory | null = null
 const r1SessionMode: R1SessionMode = { temporary: false }
 function invalidateMemoryContexts(deletionEpoch: number): void {
   topicSummaries?.invalidate()
+  r1SessionMode.selectedArtifact = null
   if (r1SessionMode.selectedTopic && r1Database) {
     try { const current = new R1Topics(r1Database).get(r1SessionMode.selectedTopic.topicId); r1SessionMode.selectedTopic.version = current.version }
     catch { r1SessionMode.selectedTopic = null }
@@ -139,6 +141,7 @@ void app.whenReady().then(async () => {
     registerMemoryConfirmationHandlers(memoryConfirmations)
     r1Artifacts = new R1Artifacts(r1Database)
     r1Tasks = new R1TaskSupervisor(r1Database, r1PromptAssets, () => memory.currentDeletionEpoch(), {
+      artifacts: r1Artifacts,
       temporarySource: messageId => {
         const sessionId = r1SessionMode.temporary && r1SessionMode.sessionId
         if (!sessionId || !r1Conversations?.isTemporary(sessionId)) return undefined
@@ -146,11 +149,20 @@ void app.whenReady().then(async () => {
         return source ? { ...source, temporary: true, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } : undefined
       }
     })
-    registerTaskHandlers(r1Tasks, r1Artifacts, r1SessionMode)
+    const artifactChanged = (artifact: { artifactId: string; version: number }) => {
+      if (r1SessionMode.selectedArtifact?.artifactId === artifact.artifactId && r1SessionMode.selectedArtifact.version !== artifact.version) {
+        r1SessionMode.selectedArtifact = { artifactId: artifact.artifactId, version: artifact.version, selection: null }
+        nativeVoice?.close('REALTIME_CONTEXT_REFRESH_REQUIRED')
+      }
+      for (const window of BrowserWindow.getAllWindows()) window.webContents.send('r1.artifactChanged', { artifactId: artifact.artifactId, version: artifact.version })
+    }
+    registerTaskHandlers(r1Tasks, r1Artifacts, r1SessionMode, undefined, artifactChanged)
+    registerArtifactContextHandlers(r1Database, r1Artifacts, r1Conversations, r1SessionMode, () => nativeVoice?.close('REALTIME_CONTEXT_REFRESH_REQUIRED'))
     r1Tasks.onChanged(event => {
       if (!r1Tasks?.list(r1SessionMode.temporary ? r1SessionMode.sessionId || '__missing__' : null)
         .some(task => task.taskId === event.task.taskId)) return
       for (const window of BrowserWindow.getAllWindows()) window.webContents.send('r1.taskChanged', event)
+      if (event.reason === 'completed') for (const artifact of event.task.result?.artifacts ?? []) artifactChanged(artifact)
     })
     const vault = new CredentialVault(join(app.getPath('userData'), 'credentials.bin'))
     vault.load()
@@ -175,12 +187,12 @@ void app.whenReady().then(async () => {
     r1TaskRunner = new R1TaskRunner(r1Tasks, r1PromptAssets, taskTools, r1Artifacts,
       createArkResponsesProvider(), () => new R1PersonaStore(r1Database!).get())
     r1ConversationDriver = new R1ConversationDriver(r1Database, r1PromptAssets, r1Tasks, createArkResponsesProvider(),
-      () => new R1PersonaStore(r1Database!).get(), taskTools.implementedAliases, focusServices)
+      () => new R1PersonaStore(r1Database!).get(), taskTools.implementedAliases, focusServices, r1Artifacts)
     nativeVoice = registerNativeVoiceHandlers({ db: r1Database, assets: r1PromptAssets,
       persona: new R1PersonaStore(r1Database), memory, conversations: r1Conversations,
       tasks: r1Tasks, mode: r1SessionMode, implementedTaskAliases: taskTools.implementedAliases,
       configurationRevision: () => vault.revision, focusServices, onMemoryInvalidated: invalidateMemoryContexts,
-      memoryConfirmations, automaticMemory, topicSummaries })
+      memoryConfirmations, automaticMemory, topicSummaries, artifacts: r1Artifacts })
     powerMonitor.on('suspend', () => { nativeVoice?.close(); automaticMemory?.invalidate(); topicSummaries?.invalidate(); memoryConfirmations?.revokeAutomatic() })
     r1TaskRunner.start()
     importLegacyJson(r1Database, join(app.getPath('appData'), 'lingli'), 'lingli-json')

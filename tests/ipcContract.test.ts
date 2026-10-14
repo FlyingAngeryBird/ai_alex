@@ -59,6 +59,8 @@ describe('IPC contract', () => {
       'r1.tasks.resume',
       'r1.tasks.cancel',
       'r1.artifacts.get',
+      'r1.artifacts.select',
+      'r1.artifacts.materials',
       'r1.artifacts.revise',
       'r1.artifacts.undo',
       'r1.artifacts.save',
@@ -99,6 +101,6 @@ describe('IPC contract', () => {
   it('exposes only the approved event channels', async () => {
     const { eventChannels } = await import('../electron/preload/index')
 
-    expect(eventChannels).toEqual(['chat.streamChunk', 'tts.streamAudio', 'voice.nativeEvent', 'r1.reminderDue', 'r1.memoryInvalidated', 'r1.memoryConfirmation', 'r1.memoryPolicyChanged', 'r1.memoryChanged', 'r1.focusChanged', 'r1.taskChanged'])
+    expect(eventChannels).toEqual(['chat.streamChunk', 'tts.streamAudio', 'voice.nativeEvent', 'r1.reminderDue', 'r1.memoryInvalidated', 'r1.artifactChanged', 'r1.memoryConfirmation', 'r1.memoryPolicyChanged', 'r1.memoryChanged', 'r1.focusChanged', 'r1.taskChanged'])
   })
 })
