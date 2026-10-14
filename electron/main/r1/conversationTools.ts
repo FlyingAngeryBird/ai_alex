@@ -1,5 +1,6 @@
 import { R1MemoryStore } from './memory.js'
-import { R1MemoryTools, memoryToolAliases } from './memoryTools.js'
+import { R1MemoryTools, memoryToolAliases, isSensitiveMemory, type MemorySaveCandidate } from './memoryTools.js'
+import type { MemoryConfirmation } from './memoryConfirmations.js'
 import { memoryContextCutoff } from './memoryContext.js'
 import { R1FocusTools, focusToolAliases, type FocusToolServices } from './focusTools.js'
 import { R1ReminderTools, reminderToolAliases } from './reminderTools.js'
@@ -12,7 +13,8 @@ import { afterTransactionCommit, inTransaction, type R1Database } from './databa
 
 export type ConversationToolScope = { source: SessionMessage; temporary: boolean; timezone: string;
   assertCurrent(): void; persistenceConfirmed: boolean; signal?: AbortSignal; sourceMessages?: SessionMessage[];
-  onMemoryInvalidated?(deletionEpoch: number): void }
+  onMemoryInvalidated?(deletionEpoch: number): void;
+  requestMemoryConfirmation?(candidate: MemorySaveCandidate, sensitive: boolean): MemoryConfirmation }
 type Delegation = { toolAliases: string[]; requiredActions: Array<{ alias: string; minimumCount: number }> }
 const code = (error: unknown): string => error instanceof Error && /^[A-Z][A-Z0-9_]{1,80}$/.test(error.message)
   ? error.message : 'CONVERSATION_TOOL_FAILED'
@@ -25,6 +27,7 @@ function taskView(task: R1Task) {
 export class R1ConversationTools {
   readonly aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', ...memoryToolAliases, 'notes_create', ...reminderToolAliases]
   memoryMutationReceipt: Record<string, unknown> | null = null
+  memoryConfirmation: MemoryConfirmation | null = null
   private readonly memories: R1MemoryTools
   private readonly focus?: R1FocusTools
   private readonly reminders: R1ReminderTools
@@ -105,6 +108,19 @@ export class R1ConversationTools {
         this.assets.validateToolOutput(alias, output)
         this.loadedSkillIds.add(args.skillId as string)
       } else if ((memoryToolAliases as readonly string[]).includes(alias)) {
+        if (alias === 'memory_remember' || alias === 'memory_update') {
+          const candidate = this.memories.prepare(alias, args)
+          const sensitive = isSensitiveMemory(this.scope.source.body, candidate.content)
+          if (this.scope.temporary || sensitive) {
+            if (!this.scope.requestMemoryConfirmation) throw new Error(this.scope.temporary ? 'MEMORY_TEMPORARY_EXIT_UNAVAILABLE' : 'MEMORY_SENSITIVE_CONFIRMATION_REQUIRED')
+            const pending = this.scope.requestMemoryConfirmation(candidate, sensitive)
+            output = { kind: 'ui_action', uiActionId: pending.confirmationId, status: 'awaiting_user', action: 'confirm_memory', data: {} }
+            this.assets.validateToolOutput(alias, output)
+            this.memoryConfirmation = pending
+            this.calls.set(callId, { fingerprint, output: structuredClone(output) })
+            return output
+          }
+        }
         if (this.scope.temporary) throw new Error('MEMORY_UNAVAILABLE_IN_TEMPORARY_SESSION')
         if (['memory_update', 'memory_forget'].includes(alias) && !this.scope.onMemoryInvalidated) throw new Error('MEMORY_CONTEXT_REFRESH_UNAVAILABLE')
         output = inTransaction(this.db, () => {

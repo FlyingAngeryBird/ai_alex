@@ -216,8 +216,9 @@ export function loadR1PromptAssets(root: string): R1PromptAssets {
       const tool = toolByAlias.get(alias)
       if (!tool) throw new Error('MODEL_TOOL_ALIAS_UNKNOWN')
       validate('tool-output', input)
-      const value = input as { kind: string; tool?: string; status: string; data: Record<string, unknown> }
+      const value = input as { kind: string; tool?: string; action?: string; status: string; data: Record<string, unknown> }
       if (value.kind === 'receipt' && value.tool !== tool.name) throw new Error('MODEL_TOOL_OUTPUT_OWNER_INVALID')
+      if (value.kind === 'ui_action' && value.action === 'confirm_memory' && !['memory_remember', 'memory_update'].includes(alias)) throw new Error('MODEL_TOOL_OUTPUT_OWNER_INVALID')
       const required = (value.kind === 'task_control' && value.status !== 'failed') ||
         (value.kind === 'receipt' && (value.status === 'succeeded' || Object.keys(value.data).length > 0))
       if (required && !outputValidators.get(alias)!(value.data)) throw new Error('MODEL_TOOL_OUTPUT_DATA_INVALID')
@@ -256,7 +257,7 @@ export function loadR1PromptAssets(root: string): R1PromptAssets {
       }
       const grants = new Set(authorizedAliases)
       return tools.filter(tool => tool.contexts.includes(channel) && allowed.has(tool.alias) && grants.has(tool.alias) &&
-        !(temporary && tool.name.startsWith('memory.'))).map(tool => ({ type: 'function', function: {
+        !(temporary && tool.name.startsWith('memory.') && !(channel === 'realtime' && tool.alias === 'memory_remember'))).map(tool => ({ type: 'function', function: {
         name: tool.alias, description: tool.description, parameters: structuredClone(tool.input_schema)
       } }))
     },

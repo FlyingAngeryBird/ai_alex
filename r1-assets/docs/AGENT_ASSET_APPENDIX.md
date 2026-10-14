@@ -108,7 +108,7 @@ PR07/PR09的speakAllowed由协调器决定；false时不发起用于主动播音
 
 ### 22.4.03 PR03 实时交流和纯文字交流的决策指令
 
-实际文件：prompts/conversation.md，版本1.0.2。
+实际文件：prompts/conversation.md，版本1.1.0。
 
 ```text
 你负责持续理解用户并统一回应。当前能力目录如下，它是能力说明，不是固定关键词路由：
@@ -122,6 +122,7 @@ SK01正文由应用常驻加载。简单暂停、继续、下一首、定位、�
 后台委托使用delegation声明本轮用户目标需要的task工具别名与必要副作用数量；必要动作必须包含在所声明工具范围内。不要将“可以调用”当作“必须执行”，不授予用户没有委托的保存、提醒或媒体动作。省略委托范围时后台仅能读取资料和写内部计划；程序会拒绝未实现或不属于task频道的工具。修改目标后重新声明所需范围，已提交对象不会因此撤销。
 查询已有任务、修改条件、暂停和取消使用对应任务工具；“先别说”只停止当前回复，“别查了”才取消被指向的查询任务。指代不唯一时先澄清。
 所有动作按真实回执简短回复。awaiting_user只表示等待界面选择；accepted只表示已受理。查证来源和长结果放卡片，口头说关键结论。
+用户明确要求记住时调用memory_remember；敏感内容由程序发起单条内容确认。临时对话中该工具只能提出保存候选，必须先让用户在界面确认退出临时模式；不读取普通记忆，也不直接写入。收到confirm_memory的awaiting_user时只说明仍未保存、等待用户决定；不能把模型回复或用户普通继续聊天当作确认令牌。
 收到上下文更新后，以最新goalVersion和有效记忆为准。任务完成与提醒事件由协调器在可播时交给你，不能自行抢话。
 ```
 
@@ -1139,7 +1140,11 @@ TaskDraft只交付草稿和引用，Artifact ID由程序创建；memory-extract�
           ]
         },
         "action": {
-          "const": "export"
+          "type": "string",
+          "enum": [
+            "export",
+            "confirm_memory"
+          ]
         },
         "data": {
           "type": "object"
@@ -1243,13 +1248,21 @@ patch：表达澄清或修错且行为合同不变。minor：在已批准范围�
 - 验证：运行资产静态校验与事项事务测试；真实提醒调度和完整端到端验证仍是 G3 门槛。
 - 回滚：旧资产只用于旧代码/旧 Task；R1 数据库不降级打开，旧版目录独立。回滚安装旧版不会覆盖 R1 数据。
 
+#### DEC-R1-MEMORY-CONFIRM-018：记忆候选的界面确认
+- 原因与 Bad Case：敏感记忆此前只返回确认所需错误，用户无法提交可信确认；临时模式全部记忆工具隐藏，无法发起 PRD 与原型要求的显式保存确认。
+- 行为：普通敏感写入和临时显式记住返回 confirm_memory / awaiting_user。临时实时频道仅曝光 memory_remember 的候选入口，不读取或直接写入普通记忆；Task 频道及其他记忆操作仍隐藏。模型只提候选，界面提交绑定窗口、实际用户轮次、内容、版本与上下文的短期令牌。拒绝取消、过期、跨窗口、旧上下文和重复变更。
+- 临时保存：确认后仅把所展示内容建立为用户确认来源，提交成功后退出临时模式，销毁原临时聊天和未提交任务。失败或取消不退出，不把整段临时原文写入普通历史。敏感候选也需在同一确认框单独展示影响范围。
+- 版本：releaseId/schemaVersion 2.2.0，PR03 1.1.0；已有成功回执字段及 export 等待结果兼容。界面等待结果增加 confirm_memory action，其他 Prompt/Skill 版本不变。
+- 回滚：代码及资产包整体回退。旧资产只能使用旧请求合同；活动 Task 保留其绑定发布包，不自动迁移。确认候选仅内存，应用退出不会在重启后自动提交。当前数据库不降级或覆盖删除抑制。
+- 验证记录：见 docs/r1/2026-10-14-memory-confirmation-progress.md；未完成的自动提取、敏感语义评估与设备语音验收不以确认桥接代替。
+
 
 ### 25.3 完整默认配置
 
 ```json
 {
-  "releaseId": "seamo-ai-r1-agent-assets-2.1.0",
-  "schemaVersion": "2.1.0",
+  "releaseId": "seamo-ai-r1-agent-assets-2.2.0",
+  "schemaVersion": "2.2.0",
   "providerPolicy": {
     "primary": "volcengine",
     "crossProviderFallback": false,
@@ -1515,6 +1528,9 @@ TaskInput中currentTime用于当前查询新鲜度；原话时间锚点保存在
 输入材料通过TaskInput.observations的resourcePath定位只读任务资料；summary是预览，不能当作粘贴全文。完整原文与当前产物仅在用户委托范围映射至该路径。notes.list可按itemIds读取，reminders.list可按reminderIds读取；更新前获得真实版本。
 
 所有框架实例明确传入ArkTaskModelAdapter对应M02模型对象，禁止省略model而使用框架默认模型。摘要M03也明确绑定火山。实时模型的供应商内置联网、唱歌和未开放多模态扩展本版关闭，查询与播放经注册领域工具；具体关闭字段由协议Adapter在G0验证，不把应用配置键当原始API字段。
+
+##### 记忆待确认边界（DEC-R1-MEMORY-CONFIRM-018）
+临时 realtime 只允许 memory_remember 产生内存候选及 confirm_memory 等待结果；ToolExecutor 在任何 SQLite 写入之前转入可信界面确认，不允许召回、更正、遗忘或后台 Task 记忆访问。普通敏感写入使用同一候选确认服务。UI 只能提交不透明确认令牌，不能替换候选内容、授权标志或对象版本。取消不写入；明确退出临时模式与候选保存的影响范围必须呈现。
 
 
 ## 27 AI coding的完整执行指令

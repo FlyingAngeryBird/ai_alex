@@ -14,7 +14,7 @@ describe('R1 released prompt assets', () => {
         userAddress: '海', style: '温和而简洁' })
       const assets = loadR1PromptAssets(resolve('r1-assets'))
       const text = assets.compose(saved, modelContext({ personaVersion: saved.version }))
-      expect(assets.releaseId).toBe('seamo-ai-r1-agent-assets-2.1.0')
+      expect(assets.releaseId).toBe('seamo-ai-r1-agent-assets-2.2.0')
       expect(text).toContain('你是Seamo AI应用中的个人语音助手')
       expect(text).toContain('按assistantName称呼自己')
       expect(text).toContain('"assistantName":"Alex"')
@@ -44,6 +44,9 @@ describe('R1 released prompt assets', () => {
     expect(aliases('realtime', ['SK01', 'SK03'])).toEqual(['memory_recall', 'notes_create', 'start_task'])
     expect(aliases('task', ['SK02', 'SK03'])).toEqual(['memory_recall', 'web_search', 'notes_create', 'read_file'])
     expect(aliases('realtime', ['SK01'], true)).toEqual(['start_task'])
+    const memoryGrants = ['memory_remember', 'memory_recall', 'memory_update', 'memory_forget']
+    expect(assets.exposeTools({ channel: 'realtime', loadedSkillIds: ['SK01'], authorizedAliases: memoryGrants, temporary: true }).map(tool => tool.function.name)).toEqual(['memory_remember'])
+    expect(assets.exposeTools({ channel: 'task', loadedSkillIds: [], authorizedAliases: memoryGrants, temporary: true })).toEqual([])
     expect(() => assets.exposeTools({ channel: 'task', loadedSkillIds: ['SK02'],
       authorizedAliases: ['execute'], temporary: false })).toThrow('MODEL_TOOL_ALIAS_UNKNOWN')
     expect(() => assets.exposeTools({ channel: 'task', loadedSkillIds: ['SK99'],
@@ -58,6 +61,7 @@ describe('R1 released prompt assets', () => {
       entityId: null, entityVersion: null, data: { matchStatus: 'no_match', memories: [] }, errorCode: null, retryable: false, runId: null }
     expect(() => assets.validateToolOutput('memory_recall', receipt)).not.toThrow()
     expect(() => assets.validateToolOutput('memory_recall', { ...receipt, tool: 'notes.create' })).toThrow('MODEL_TOOL_OUTPUT_OWNER_INVALID')
+    expect(() => assets.validateToolOutput('memory_recall', { kind: 'ui_action', uiActionId: 'pending', status: 'awaiting_user', action: 'confirm_memory', data: {} })).toThrow('MODEL_TOOL_OUTPUT_OWNER_INVALID')
     expect(() => assets.validateToolOutput('memory_recall', { ...receipt, data: {} })).toThrow('MODEL_TOOL_OUTPUT_DATA_INVALID')
     expect(() => assets.validateToolOutput('memory_recall', { ...receipt, status: 'failed', data: {}, errorCode: 'UNAVAILABLE' })).not.toThrow()
     expect(() => assets.validateToolOutput('start_task', { kind: 'task_control', taskId: 'task', status: 'failed',

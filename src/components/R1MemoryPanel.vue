@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { Pencil, Plus, Search, Trash2, X } from 'lucide-vue-next'
 import type { R1Memory, R1MemorySource } from '../../electron/main/r1/memory'
 
-const props = defineProps<{ temporary: boolean }>()
+const props = defineProps<{ temporary: boolean; revision?: number }>()
 const emit = defineEmits<{ close: [] }>()
 const records = ref<R1Memory[]>([])
 const sources = ref<Record<string, R1MemorySource[]>>({})
@@ -19,6 +19,7 @@ const confirmingId = ref<string | null>(null)
 const busy = ref(false)
 const message = ref('')
 const loading = ref(false)
+watch(() => props.revision, () => { void load() })
 let loadRevision = 0
 
 const visible = computed(() => records.value.filter((record) =>

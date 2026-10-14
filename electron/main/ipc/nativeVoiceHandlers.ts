@@ -1,6 +1,7 @@
 import { focusToolAliases, type FocusToolServices } from '../r1/focusTools.js'
 import { reminderToolAliases } from '../r1/reminderTools.js'
 import { memoryToolAliases, memoryMutationReply } from '../r1/memoryTools.js'
+import type { R1MemoryConfirmations } from '../r1/memoryConfirmations.js'
 import { selectedConversationEntity } from '../r1/sessionMode.js'
 import { ipcMain, type WebContents } from 'electron'
 import { NativePlaybackLedger } from '../r1/nativePlayback.js'
@@ -21,6 +22,7 @@ export function registerNativeVoiceHandlers(deps: {
   conversations: R1Conversations; tasks: R1TaskSupervisor; mode: R1SessionMode;
   implementedTaskAliases: readonly string[]; configurationRevision(): number; focusServices?: FocusToolServices;
   onMemoryInvalidated?(deletionEpoch: number): void;
+  memoryConfirmations?: R1MemoryConfirmations;
 }): { close(): void } {
   const sessions = new Map<number, { id: string; session: NativeRealtimeSession; playback(input: Record<string, unknown>): void }>()
   const aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', ...memoryToolAliases, 'notes_create', ...reminderToolAliases, ...(deps.focusServices ? focusToolAliases : [])]
@@ -67,11 +69,18 @@ export function registerNativeVoiceHandlers(deps: {
           if (typeof event.item_id !== 'string' || typeof event.transcript !== 'string' || !event.transcript.trim()) return
           if (completedInputs.has(event.item_id)) return
           completedInputs.add(event.item_id); turnId = randomUUID(); toolCount = 0
+          deps.memoryConfirmations?.revoke(sender.id)
           sourceTurns.set(event.item_id, turnId)
           const source = deps.conversations.append({ sessionId, turnId, role: 'user', body: event.transcript, status: 'final' })
+          const sourceTurnId = turnId
           tools = new R1ConversationTools(deps.db, deps.assets, deps.tasks, { source, sourceMessages: deps.conversations.messages(sessionId).slice(-20), temporary,
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, persistenceConfirmed: false, assertCurrent,
-            onMemoryInvalidated: deps.onMemoryInvalidated ? epoch => { invalidatedEpoch = epoch } : undefined }, deps.implementedTaskAliases, deps.focusServices)
+            onMemoryInvalidated: deps.onMemoryInvalidated ? epoch => { invalidatedEpoch = epoch } : undefined,
+            requestMemoryConfirmation: deps.memoryConfirmations ? (candidate, sensitive) => deps.memoryConfirmations!.offer(candidate, {
+              ownerId: sender.id, source, temporary, sensitive, assertCurrent() {
+                assertCurrent(); if (turnId !== sourceTurnId) throw new Error('MEMORY_CONFIRMATION_STALE')
+              }
+            }) : undefined }, deps.implementedTaskAliases, deps.focusServices)
           connection.updateBoundary(boundary())
         }
         emit(sender, id, event)

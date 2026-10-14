@@ -180,7 +180,11 @@
           ]
         },
         "action": {
-          "const": "export"
+          "type": "string",
+          "enum": [
+            "export",
+            "confirm_memory"
+          ]
         },
         "data": {
           "type": "object"

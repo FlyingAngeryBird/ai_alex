@@ -5,6 +5,8 @@ import MusicImmersiveView from '@/components/MusicImmersiveView.vue'
 import ParticleSphere from '@/components/ParticleSphere.vue'
 import R1SettingsPanel from '@/components/R1SettingsPanel.vue'
 import R1MemoryPanel from '@/components/R1MemoryPanel.vue'
+import R1MemoryConfirmationDialog from '@/components/R1MemoryConfirmationDialog.vue'
+import type { MemoryConfirmation } from '../electron/main/r1/memoryConfirmations'
 import R1TaskPanel from '@/components/R1TaskPanel.vue'
 import { useNativeConversation } from '@/composables/useNativeConversation'
 import { useTasks } from '@/composables/useTasks'
@@ -71,7 +73,13 @@ const realtimeRecorder = useRealtimeVoiceRecorder({
 })
 const assistantAudioLevel = ref(0.14)
 const assistantAudioPlaying = ref(false)
+let assistantSpeechGeneration = 0
 const nativeAutoRequested = ref(false)
+const memoryConfirmation = ref<MemoryConfirmation | null>(null)
+const memoryConfirmationBusy = ref(false)
+const memoryConfirmationError = ref('')
+const memoryRevision = ref(0)
+let stopMemoryConfirmation: (() => void) | null = null
 let nativeResumeGeneration: number | null = null
 const nativeConversation = useNativeConversation({
   onSpeaking(value) { assistantAudioPlaying.value = value },
@@ -446,6 +454,7 @@ function stopCurrentResponse(): void {
 }
 
 function releaseAssistantAudio(resumeAutoListen = false): void {
+  assistantSpeechGeneration++
   assistantAudioPlaying.value = false
   assistantAudioLevel.value = 0.14
   if (currentAssistantAudioTimer !== null) {
@@ -478,6 +487,8 @@ async function speakAssistantReply(text?: string, voiceOverride?: string): Promi
   }
 
   const voiceId = voiceOverride?.trim() || persona.value?.voiceId.trim() || ''
+  releaseAssistantAudio()
+  const speechGeneration = assistantSpeechGeneration
 
   try {
     markVoiceTrace('tts_first_push')
@@ -490,20 +501,21 @@ async function speakAssistantReply(text?: string, voiceOverride?: string): Promi
       '语音合成响应超时。'
     )
 
+    if (speechGeneration !== assistantSpeechGeneration) return
     if (!result.ok) {
       resumeAutoListenAfterAssistantAudio()
       return
     }
 
     markVoiceTrace('tts_first_audio')
-    releaseAssistantAudio()
     const blob = new Blob([result.data.audio], { type: result.data.mimeType })
     currentAssistantAudioUrl = URL.createObjectURL(blob)
     currentAssistantAudio = new Audio(currentAssistantAudioUrl)
     currentAssistantAudio.addEventListener('playing', () => {
-      markVoiceTrace('tts_play_start')
+      if (speechGeneration === assistantSpeechGeneration) markVoiceTrace('tts_play_start')
     }, { once: true })
     currentAssistantAudio.addEventListener('ended', () => {
+      if (speechGeneration !== assistantSpeechGeneration) return
       markVoiceTrace('tts_play_end')
       releaseAssistantAudio(true)
     }, { once: true })
@@ -515,7 +527,7 @@ async function speakAssistantReply(text?: string, voiceOverride?: string): Promi
     markVoiceTrace('tts_play_invoked')
     await currentAssistantAudio.play()
   } catch {
-    releaseAssistantAudio(true)
+    if (speechGeneration === assistantSpeechGeneration) releaseAssistantAudio(true)
   }
 }
 
@@ -778,6 +790,7 @@ async function handleKeyUp(event: KeyboardEvent): Promise<void> {
 }
 
 async function handleKeyDown(event: KeyboardEvent): Promise<void> {
+  if (memoryConfirmation.value) return
   const target = event.target
   if (target instanceof HTMLElement && (target.isContentEditable ||
     ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return
@@ -883,6 +896,41 @@ async function handleToggleTemporary(): Promise<void> {
     : '已退出临时对话。刚才的临时聊天已清除。')
 }
 
+async function resolveMemoryConfirmation(save: boolean): Promise<void> {
+  const pending = memoryConfirmation.value
+  if (!pending || memoryConfirmationBusy.value) return
+  memoryConfirmationBusy.value = true; memoryConfirmationError.value = ''
+  try {
+    // Stop the awaiting-confirmation narration without revoking the user's confirmation authority.
+    releaseAssistantAudio()
+    if (nativeConversation.active.value) await nativeConversation.interrupt().catch(() => undefined)
+    if (!save) {
+      const result = await window.seamoR1.memory.cancelSave(pending.confirmationId)
+      if (!result.ok && result.error.code !== 'MEMORY_CONFIRMATION_NOT_FOUND') throw new Error('取消未完成，请重试。')
+      if (memoryConfirmation.value?.confirmationId === pending.confirmationId) memoryConfirmation.value = null
+      return
+    }
+    const result = await window.seamoR1.memory.confirmSave(pending.confirmationId)
+    if (!result.ok) {
+      const message = result.error.code === 'VERSION_CONFLICT' ? '这条记忆已有新版本，请取消后重新发起更正。' :
+        ['MEMORY_CONFIRMATION_STALE', 'MEMORY_CONFIRMATION_EXPIRED', 'MEMORY_CONFIRMATION_NOT_FOUND'].includes(result.error.code) ? '这次确认已失效，请重新提出保存请求。' : '记忆没有保存成功，请重试。'
+      if (memoryConfirmation.value?.confirmationId === pending.confirmationId) memoryConfirmationError.value = message
+      else conversation.addSystemMessage(message)
+      return
+    }
+    if (result.data.sessionChanged) {
+      nativeAutoRequested.value = false; nativeResumeGeneration = null; ++autoListenModeGeneration
+      await nativeConversation.stop(); conversation.disableAutoListen(); releaseAssistantAudio()
+      if (startupGreetingTimer !== null) { window.clearTimeout(startupGreetingTimer); startupGreetingTimer = null }
+      conversation.resetConversation(); temporaryMode.value = false; taskState.changeScope(); taskOpen.value = false
+    }
+    memoryRevision.value++
+    if (memoryConfirmation.value?.confirmationId === pending.confirmationId) memoryConfirmation.value = null
+    conversation.addSystemMessage(result.data.sessionChanged ? '已退出临时对话，只保存了你确认的这条记忆。其余临时聊天已清除。' : pending.operation === 'update' ? '这条记忆已更正。' : '这条记忆已保存。')
+  } catch (error) { memoryConfirmationError.value = error instanceof Error ? error.message : '记忆没有保存成功，请重试。' }
+  finally { memoryConfirmationBusy.value = false }
+}
+
 async function handlePreviewVoice(voiceId: string): Promise<void> {
   nativeAutoRequested.value = false; nativeResumeGeneration = null; ++autoListenModeGeneration
   await nativeConversation.stop()
@@ -897,6 +945,9 @@ async function handlePreviewVoice(voiceId: string): Promise<void> {
 }
 
 onMounted(() => {
+  stopMemoryConfirmation = window.seamoR1.memory.onConfirmation(value => {
+    memoryConfirmation.value = value; memoryConfirmationError.value = ''
+  })
   taskState.start()
   void Promise.all([window.seamoR1.credentials.status(), window.seamoR1.persona.get()]).then(([credentials, currentPersona]) => {
     if (credentials.ok) credentialStatus.value = credentials.data
@@ -939,6 +990,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('blur', handleWindowBlur)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   stopMemoryInvalidation?.()
+  stopMemoryConfirmation?.()
   stopReminderNotice?.()
   uninstallDebugBridge()
   window.removeEventListener('keydown', handleKeyDown)
@@ -1054,7 +1106,9 @@ onBeforeUnmount(() => {
     />
     <R1ItemsPanel v-if="itemsOpen" :temporary-mode="temporaryMode" @close="closePanels" @start-focus="openFocusEditor" />
     <SearchPanel v-if="searchEverOpened" v-show="searchOpen" :temporary-mode="temporaryMode" @close="closePanels" />
-    <R1MemoryPanel v-if="memoryOpen" :temporary="temporaryMode" @close="closePanels" />
+    <R1MemoryPanel v-if="memoryOpen" :temporary="temporaryMode" :revision="memoryRevision" @close="closePanels" />
+    <R1MemoryConfirmationDialog v-if="memoryConfirmation" :key="memoryConfirmation.confirmationId" :confirmation="memoryConfirmation"
+      :busy="memoryConfirmationBusy" :error="memoryConfirmationError" @confirm="resolveMemoryConfirmation(true)" @cancel="resolveMemoryConfirmation(false)" />
     <R1HistoryPanel v-if="historyOpen" :temporary="temporaryMode" :allow-text-interrupt="nativeConversation.active.value && !textBusy"
         :assistant-name="persona?.assistantName || 'Seamo AI'" @close="closePanels" />
     <R1FocusDialog v-if="focusEditorOpen" :active="focus.active.value" :busy="focus.busy.value"

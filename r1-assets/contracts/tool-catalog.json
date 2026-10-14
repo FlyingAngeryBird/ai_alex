@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "2.1.0",
+  "schemaVersion": "2.2.0",
   "businessTools": [
     {
       "name": "memory.recall",
@@ -118,7 +118,7 @@
     {
       "name": "memory.remember",
       "alias": "memory_remember",
-      "description": "按明确记住委托或有效自动授权保存事实；授权与来源由程序复验，候选不等于保存。",
+      "description": "按明确记住委托或有效自动授权保存事实；授权与来源由程序复验。敏感内容先返回confirm_memory等待界面确认；临时主会话仅提出保存候选，确认退出临时模式前不写入，候选不等于保存。",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -249,7 +249,7 @@
     {
       "name": "memory.update",
       "alias": "memory_update",
-      "description": "更正指定记忆，校验现有版本并传播更正；不扩大为批量操作。",
+      "description": "更正已观察的指定记忆，校验现有版本并传播更正；敏感内容先返回confirm_memory等待界面确认，不扩大为批量操作。",
       "input_schema": {
         "type": "object",
         "properties": {

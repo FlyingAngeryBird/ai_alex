@@ -39,6 +39,7 @@ export class R1ConversationDriver {
         for (const call of response.calls) {
           remainingTools--
           results.push({ callId: call.call_id, output: tools.execute(call.name, JSON.parse(call.arguments), call.call_id) })
+          if (tools.memoryConfirmation) return { intent: 'chat', music: null, reply: '这条记忆还没有保存，请在确认框中决定。' }
           if (tools.memoryMutationReceipt) return { intent: 'chat', music: null, reply: memoryMutationReply(tools.memoryMutationReceipt) }
         }
         rounds.push({ output: response.output, results }); continue

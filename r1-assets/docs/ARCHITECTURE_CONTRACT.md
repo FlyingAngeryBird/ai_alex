@@ -66,3 +66,6 @@ TaskInput中currentTime用于当前查询新鲜度；原话时间锚点保存在
 输入材料通过TaskInput.observations的resourcePath定位只读任务资料；summary是预览，不能当作粘贴全文。完整原文与当前产物仅在用户委托范围映射至该路径。notes.list可按itemIds读取，reminders.list可按reminderIds读取；更新前获得真实版本。
 
 所有框架实例明确传入ArkTaskModelAdapter对应M02模型对象，禁止省略model而使用框架默认模型。摘要M03也明确绑定火山。实时模型的供应商内置联网、唱歌和未开放多模态扩展本版关闭，查询与播放经注册领域工具；具体关闭字段由协议Adapter在G0验证，不把应用配置键当原始API字段。
+
+### 记忆待确认边界（DEC-R1-MEMORY-CONFIRM-018）
+临时 realtime 只允许 memory_remember 产生内存候选及 confirm_memory 等待结果；ToolExecutor 在任何 SQLite 写入之前转入可信界面确认，不允许召回、更正、遗忘或后台 Task 记忆访问。普通敏感写入使用同一候选确认服务。UI 只能提交不透明确认令牌，不能替换候选内容、授权标志或对象版本。取消不写入；明确退出临时模式与候选保存的影响范围必须呈现。

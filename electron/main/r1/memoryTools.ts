@@ -3,6 +3,10 @@ import { R1MemoryStore, type R1Memory } from './memory.js'
 
 export const memoryToolAliases = ['memory_recall', 'memory_remember', 'memory_update', 'memory_forget'] as const
 export const memoryView = ({ memoryId, content, category, version, sourceRefs }: R1Memory) => ({ memoryId, content, category, version, sourceRefs })
+export type MemorySaveCandidate = { operation: 'remember' | 'update'; content: string; category: R1Memory['category'];
+  validUntil: string | null; memoryId?: string; expectedVersion?: number }
+export const isSensitiveMemory = (source: string, content: string): boolean =>
+  /健康|病|诊断|药|过敏|怀孕|抑郁|焦虑症|手术|血压|血糖|财务|收入|薪资|工资|存款|负债|欠款|资产|银行卡|身份证|护照|密码|密钥|验证码|住址|手机号|电话|邮箱|性取向|宗教|政治|\b\d{11,}\b/.test(`${source}\n${content}`)
 
 /** Authorization check after the model proposes a tool; it does not select or route actions.
  * Ambiguous/quoted instructions and sensitive writes require a separate confirmation flow. */
@@ -18,8 +22,7 @@ export class R1MemoryTools {
     if (!allowed.test(command) || /不要(?:再)?(?:记住|保存|修改|删除|忘记)|别(?:再)?(?:记住|保存|修改|删除|忘记)/.test(text)) throw new Error('MEMORY_EXPLICIT_AUTHORIZATION_REQUIRED')
   }
   private sensitive(content: string): void {
-    // Fail closed for known sensitive classes until a trusted per-candidate confirmation exists.
-    if (/健康|病|诊断|药|过敏|怀孕|抑郁|焦虑症|手术|血压|血糖|财务|收入|薪资|工资|存款|负债|欠款|资产|银行卡|身份证|护照|密码|密钥|验证码|住址|手机号|电话|邮箱|性取向|宗教|政治|\b\d{11,}\b/.test(`${this.source.body}\n${content}`)) throw new Error('MEMORY_SENSITIVE_CONFIRMATION_REQUIRED')
+    if (isSensitiveMemory(this.source.body, content)) throw new Error('MEMORY_SENSITIVE_CONFIRMATION_REQUIRED')
   }
   private target(id: string, version: number): R1Memory {
     const known = this.known.get(id)
@@ -29,6 +32,17 @@ export class R1MemoryTools {
   }
   private expiry(expiry: string | null | undefined): void {
     if (expiry && !this.source.body.includes(expiry)) throw new Error('MEMORY_EXPIRY_CONFIRMATION_REQUIRED')
+  }
+  prepare(alias: 'memory_remember' | 'memory_update', args: Record<string, unknown>): MemorySaveCandidate {
+    this.authorize(alias === 'memory_remember' ? 'remember' : 'update')
+    this.expiry(args.validUntil as string | null)
+    if (alias === 'memory_remember') {
+      if ((args.sourceRefs as string[]).some(ref => ![this.source.messageId, this.source.turnId].includes(ref))) throw new Error('MEMORY_SOURCE_NOT_AVAILABLE')
+      return { operation: 'remember', content: args.content as string, category: args.category as R1Memory['category'], validUntil: args.validUntil as string | null ?? null }
+    }
+    const current = this.target(args.memoryId as string, args.expectedVersion as number)
+    return { operation: 'update', content: args.content as string, category: current.category, memoryId: current.memoryId,
+      expectedVersion: current.version, validUntil: args.validUntil === undefined ? current.expiresAt : args.validUntil as string | null }
   }
   execute(alias: string, args: Record<string, unknown>): { data: Record<string, unknown>; entityId?: string; entityVersion?: number; invalidatedEpoch?: number } {
     if (alias === 'memory_recall') {

@@ -39,6 +39,8 @@ import { R1TaskRunner } from './r1/taskRunner.js'
 import { R1Items } from './r1/items.js'
 import { createArkResponsesProvider } from './providers/arkResponsesProvider.js'
 import { R1ConversationDriver } from './r1/conversationDriver.js'
+import { R1MemoryConfirmations } from './r1/memoryConfirmations.js'
+import { registerMemoryConfirmationHandlers } from './ipc/memoryConfirmationHandlers.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 let nativeVoice: { close(): void } | null = null
@@ -52,8 +54,10 @@ let r1TaskRunner: R1TaskRunner | null = null
 let r1ConversationDriver: R1ConversationDriver | null = null
 let r1Artifacts: R1Artifacts | null = null
 let r1Conversations: R1Conversations | null = null
+let memoryConfirmations: R1MemoryConfirmations | null = null
 const r1SessionMode: R1SessionMode = { temporary: false }
 function invalidateMemoryContexts(deletionEpoch: number): void {
+  memoryConfirmations?.revokeAll()
   nativeVoice?.close()
   r1Tasks?.invalidateContext()
   for (const window of BrowserWindow.getAllWindows()) window.webContents.send('r1.memoryInvalidated', { deletionEpoch })
@@ -112,6 +116,14 @@ void app.whenReady().then(async () => {
     r1PromptAssets = loadR1PromptAssets(join(app.getAppPath(), 'r1-assets'))
     r1Conversations = new R1Conversations(r1Database)
     const memory = new R1MemoryStore(r1Database)
+    memoryConfirmations = new R1MemoryConfirmations(r1Database, {
+      notify(ownerId, confirmation) {
+        const owner = BrowserWindow.getAllWindows().find(window => window.webContents.id === ownerId)
+        if (owner && !owner.isDestroyed() && !owner.webContents.isDestroyed()) owner.webContents.send('r1.memoryConfirmation', confirmation)
+      },
+      onInvalidated: invalidateMemoryContexts, onTemporaryExited: () => nativeVoice?.close()
+    })
+    registerMemoryConfirmationHandlers(memoryConfirmations)
     r1Artifacts = new R1Artifacts(r1Database)
     r1Tasks = new R1TaskSupervisor(r1Database, r1PromptAssets, () => memory.currentDeletionEpoch(), {
       temporarySource: messageId => {
@@ -139,7 +151,8 @@ void app.whenReady().then(async () => {
     nativeVoice = registerNativeVoiceHandlers({ db: r1Database, assets: r1PromptAssets,
       persona: new R1PersonaStore(r1Database), memory, conversations: r1Conversations,
       tasks: r1Tasks, mode: r1SessionMode, implementedTaskAliases: taskTools.implementedAliases,
-      configurationRevision: () => vault.revision, focusServices, onMemoryInvalidated: invalidateMemoryContexts })
+      configurationRevision: () => vault.revision, focusServices, onMemoryInvalidated: invalidateMemoryContexts,
+      memoryConfirmations })
     powerMonitor.on('suspend', () => nativeVoice?.close())
     r1TaskRunner.start()
     importLegacyJson(r1Database, join(app.getPath('appData'), 'lingli'), 'lingli-json')
@@ -174,8 +187,9 @@ void app.whenReady().then(async () => {
     registerChatHandlers(undefined, undefined, undefined, r1Conversations ?? undefined,
       new R1PersonaStore(r1Database), r1PromptAssets ?? undefined,
       new R1MemoryStore(r1Database), r1SessionMode, (sessionId, temporary) => {
+        memoryConfirmations?.revokeAll()
         if (temporary) { r1Tasks?.endTemporary(sessionId); r1Artifacts?.endTemporary(sessionId) }
-      }, r1ConversationDriver ?? undefined, invalidateMemoryContexts)
+      }, r1ConversationDriver ?? undefined, invalidateMemoryContexts, memoryConfirmations ?? undefined)
   }
   if (r1Database && !existsSync(configPath)) {
     const persona = r1Database.prepare('SELECT voice_id FROM persona WHERE id = 1')
@@ -220,6 +234,7 @@ app.on('before-quit', () => {
 })
 
 app.on('window-all-closed', () => {
+  memoryConfirmations?.revokeAll()
   r1SessionMode.currentPlayingTrackKey = null
   if (process.platform !== 'darwin') {
     app.quit()

@@ -29,6 +29,8 @@ export const exposedChannels = [
   'r1.memory.update',
   'r1.memory.sources',
   'r1.memory.forget',
+  'r1.memory.confirmSave',
+  'r1.memory.cancelSave',
   'r1.history.list',
   'r1.history.messages',
   'r1.focus.reportMusicSelection',
@@ -90,6 +92,7 @@ export const eventChannels = [
   'voice.nativeEvent',
   'r1.reminderDue',
   'r1.memoryInvalidated',
+  'r1.memoryConfirmation',
   'r1.focusChanged',
   'r1.taskChanged'
 ] as const
@@ -177,6 +180,13 @@ function exposeLingliApi(
       update: (input) => invokeR1('r1.persona.update', input)
     },
     memory: {
+      confirmSave: confirmationId => invokeR1('r1.memory.confirmSave', { confirmationId }),
+      cancelSave: confirmationId => invokeR1('r1.memory.cancelSave', { confirmationId }),
+      onConfirmation: handler => {
+        const listener = (_event: unknown, value: unknown) => handler(value as Parameters<typeof handler>[0])
+        renderer.on('r1.memoryConfirmation', listener)
+        return () => renderer.removeListener('r1.memoryConfirmation', listener)
+      },
       list: (input) => invokeR1('r1.memory.list', input),
       addManual: (input) => invokeR1('r1.memory.addManual', input),
       update: (input) => invokeR1('r1.memory.update', input),

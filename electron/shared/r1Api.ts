@@ -9,6 +9,7 @@ import type { FocusCommand, FocusEvent, FocusState, R1Focus } from '../main/r1/f
 import type { R1ServiceDiagnostics, ServiceCheckReport } from '../main/r1/serviceDiagnostics.js'
 import type { R1Task, TaskEvent } from '../main/r1/taskSupervisor.js'
 import type { Artifact, R1Artifacts } from '../main/r1/artifacts.js'
+import type { ConfirmedMemory, MemoryConfirmation } from '../main/r1/memoryConfirmations.js'
 
 export type R1Result<T> =
   | { ok: true; data: T }
@@ -41,6 +42,9 @@ export type R1Api = {
     update(input: Parameters<R1PersonaStore['update']>[0]): Promise<R1Result<R1Persona>>
   }
   memory: {
+    confirmSave(confirmationId: string): Promise<R1Result<ConfirmedMemory>>
+    cancelSave(confirmationId: string): Promise<R1Result<null>>
+    onConfirmation(handler: (value: MemoryConfirmation | null) => void): () => void
     list(input?: Parameters<R1MemoryStore['list']>[0]): Promise<R1Result<R1MemoryPage>>
     addManual(input: Parameters<R1MemoryStore['addManual']>[0]): Promise<R1Result<R1Memory>>
     update(input: Parameters<R1MemoryStore['update']>[0]): Promise<R1Result<R1Memory>>

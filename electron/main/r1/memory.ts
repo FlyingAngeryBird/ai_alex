@@ -30,6 +30,10 @@ function view(row: MemoryRow): R1Memory {
 export class R1MemoryStore {
   constructor(private readonly db: R1Database) {}
 
+  validateCandidate(input: { content: string; category: R1Memory['category']; expiresAt: string | null }): void {
+    this.validateContent(input.content, input.category); this.validateExpiry(input.expiresAt)
+  }
+
   list(input: { query?: string; page?: number; scope?: 'about' | 'all' } = {}): R1MemoryPage {
     const query = input.query ?? ''
     const page = input.page ?? 0
@@ -67,8 +71,9 @@ export class R1MemoryStore {
     })
   }
 
-  addManual(input: { content: string; category: R1Memory['category'] }): R1Memory {
+  addManual(input: { content: string; category: R1Memory['category']; expiresAt?: string | null }): R1Memory {
     this.validateContent(input.content, input.category)
+    this.validateExpiry(input.expiresAt ?? null)
     const content = input.content.trim()
     return inTransaction(this.db, () => {
       const sessionId = randomUUID()
@@ -80,7 +85,7 @@ export class R1MemoryStore {
         (message_id, session_id, turn_id, role, body, status, created_at)
         VALUES (?, ?, ?, 'user', ?, 'final', ?)`)
         .run(messageId, sessionId, randomUUID(), content, now)
-      return this.insertMemory(content, input.category, [messageId], null, now)
+      return this.insertMemory(content, input.category, [messageId], input.expiresAt ? new Date(input.expiresAt).toISOString() : null, now)
     })
   }
 
