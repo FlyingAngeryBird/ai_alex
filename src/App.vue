@@ -33,10 +33,19 @@ import type { AutoListenState, ParticleState, VoiceInputMode, VoiceLatencyTrace 
 import type { R1Persona } from '../electron/main/r1/persona'
 import type { CredentialStatus } from '../electron/main/r1/credentials'
 import { invokeWithTimeout } from './utils/invokeWithTimeout'
+import { useAppPreferences } from './composables/useAppPreferences'
+import { createAudioDevices } from './services/audioDevices'
+import { createAssistantSpeech, type SpeechPurpose } from './services/assistantSpeech'
+import { withCaptureAbort } from './services/abortableCapture'
 
 const conversation = useConversation()
-const keyboardRecorder = useKeyboardRecorder()
-const music = useMusic()
+const preferences = useAppPreferences()
+const audioDevices = createAudioDevices({ mediaDevices: () => navigator.mediaDevices,
+  inputId: () => preferences.value.value?.inputDeviceId ?? null, outputId: () => preferences.value.value?.outputDeviceId ?? null,
+  onOutputFailure: handleOutputDeviceFailure })
+const inputConstraints = () => audioDevices.inputConstraints({ channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true })
+const keyboardRecorder = useKeyboardRecorder({ inputConstraints, onDeviceLost: handleInputDeviceLost })
+const music = useMusic({ configureOutput: audioDevices.bindOutput })
 watch(() => music.playback.value.status === 'playing' && music.playback.value.track
   ? `${music.playback.value.track.source ?? 'unknown'}:${music.playback.value.track.id}` : null, trackKey => {
   void window.seamoR1.focus.reportMusicSelection({ trackKey }).catch(() => undefined)
@@ -67,13 +76,22 @@ async function startFocus(durationSec: number, target: string | null): Promise<v
 }
 const conversationPartialText = ref('')
 const realtimeRecorder = useRealtimeVoiceRecorder({
+  inputConstraints, onDeviceLost: handleInputDeviceLost,
   onPartialText: (text) => {
     conversationPartialText.value = text
   }
 })
 const assistantAudioLevel = ref(0.14)
 const assistantAudioPlaying = ref(false)
-let assistantSpeechGeneration = 0
+const speechPurpose = ref<SpeechPurpose | null>(null)
+const speechPlayer = createAssistantSpeech({
+  request: (text, voice) => invokeWithTimeout(window.lingli.invoke('tts.speak', { text, ...(voice ? { voice } : {}) }), 15000, '语音合成响应超时。'),
+  canSpeakProactively: () => Boolean(preferences.value.value && !preferences.value.value.doNotDisturb && preferences.value.value.proactiveSpeechEnabled),
+  configureOutput: audioDevices.bindOutput,
+  onSpeaking(active) { assistantAudioPlaying.value = active; assistantAudioLevel.value = 0.14 },
+  onEnded: resumeAutoListenAfterAssistantAudio, mark: markVoiceTrace,
+  onPurposeChange: purpose => { speechPurpose.value = purpose }
+})
 const nativeAutoRequested = ref(false)
 const taskPanel = ref<InstanceType<typeof R1TaskPanel> | null>(null)
 const memoryConfirmation = ref<MemoryConfirmation | null>(null)
@@ -84,6 +102,7 @@ let stopMemoryChanged: (() => void) | null = null
 let stopMemoryConfirmation: (() => void) | null = null
 let nativeResumeGeneration: number | null = null
 const nativeConversation = useNativeConversation({
+  inputConstraints, configureOutput: audioDevices.bindOutput,
   onSpeaking(value) { assistantAudioPlaying.value = value },
   onConnectionState(state) {
     if (!nativeAutoRequested.value) return
@@ -115,10 +134,10 @@ const nativeConversation = useNativeConversation({
     }
   }
 })
-watch([assistantAudioPlaying, nativeConversation.userSpeaking], ([assistant, user]) => {
-  music.setSpeechActive(assistant || user)
-  if (!assistant) void resumeNativeAfterText()
-})
+watch(assistantAudioPlaying, active => { if (!active) void resumeNativeAfterText() })
+watch(() => preferences.value.value, (next, previous) => { if (next && previous && next.inputDeviceId !== previous.inputDeviceId) handleInputDeviceLost(true) })
+watch(() => preferences.value.value?.outputDeviceId ?? null, () => { void audioDevices.routeOutputs() })
+watch(() => [preferences.value.value?.doNotDisturb, preferences.value.value?.proactiveSpeechEnabled], () => speechPlayer.policyChanged())
 let currentVoiceTrace: VoiceLatencyTrace | null = null
 
 function startVoiceTrace(): void {
@@ -183,10 +202,8 @@ const temporaryMode = ref(false)
 const reminderNotice = ref<{ body: string; dueAtUtc: string; systemRequested: boolean } | null>(null)
 let stopReminderNotice: (() => void) | null = null
 let stopMemoryInvalidation: (() => void) | null = null
-const voicePreviewing = ref(false)
-let currentAssistantAudio: HTMLAudioElement | null = null
-let currentAssistantAudioTimer: number | null = null
-let currentAssistantAudioUrl: string | null = null
+const voicePreviewPending = ref(false)
+const voicePreviewing = computed(() => voicePreviewPending.value || speechPurpose.value === 'preview' && assistantAudioPlaying.value)
 let startupGreetingTimer: number | null = null
 let autoListenGraceTimer: number | null = null
 let autoListenRecoveryTimer: number | null = null
@@ -202,13 +219,13 @@ const pushToTalk = createPushToTalkController({
     conversation.particleState.value !== 'thinking',
   onHeldChange: held => { spaceHeld.value = held },
   onError: error => conversation.markVoiceError(getVoiceErrorMessage(error)),
-  start: async () => {
+  start: async (signal) => {
     clearAutoListenRecoveryTimer()
     clearAutoListenGraceTimer()
     if (activeVoiceInputMode === 'auto_listen') {
       await cancelActiveVoiceCapture()
     }
-    voiceStartPromise = startVoiceCapture()
+    voiceStartPromise = startVoiceCapture(signal)
     try { return await voiceStartPromise } finally { voiceStartPromise = null }
   },
   finish: finishActiveVoiceCapture,
@@ -258,6 +275,7 @@ function getAutoListenRecoveryMs(): number {
 }
 
 const autoListen = useAutoListen({
+  inputConstraints, onDeviceLost: handleInputDeviceLost,
   canDetect: () =>
     music.viewMode.value === 'conversation' &&
     autoListenSession.canDetect(getAutoListenBlockers()),
@@ -315,6 +333,9 @@ const autoListen = useAutoListen({
     }
   }
 })
+
+watch([assistantAudioPlaying, nativeConversation.userSpeaking, realtimeRecorder.userSpeaking, keyboardRecorder.userSpeaking, () => autoListen.diagnostics.value.speaking],
+  ([assistant, native, realtime, keyboard, auto]) => music.setSpeechActive(assistant || native || realtime || keyboard || auto))
 
 function installDebugBridge(): void {
   const debugWindow = window as DebugWindow
@@ -461,82 +482,31 @@ function stopCurrentResponse(): void {
   releaseAssistantAudio(true)
 }
 
-function releaseAssistantAudio(resumeAutoListen = false): void {
-  assistantSpeechGeneration++
-  assistantAudioPlaying.value = false
-  assistantAudioLevel.value = 0.14
-  if (currentAssistantAudioTimer !== null) {
-    window.clearInterval(currentAssistantAudioTimer)
-    currentAssistantAudioTimer = null
-  }
+function releaseAssistantAudio(resumeAutoListen = false): void { speechPlayer.stop(resumeAutoListen) }
 
-  if (currentAssistantAudio) {
-    currentAssistantAudio.pause()
-    currentAssistantAudio = null
-  }
-
-  if (currentAssistantAudioUrl) {
-    URL.revokeObjectURL(currentAssistantAudioUrl)
-    currentAssistantAudioUrl = null
-  }
-
-  if (resumeAutoListen) {
-    resumeAutoListenAfterAssistantAudio()
-  }
+async function speakAssistantReply(text?: string, voiceOverride?: string, purpose: SpeechPurpose = 'reply'): Promise<void> {
+  if (!text?.trim() || !window.lingli) { resumeAutoListenAfterAssistantAudio(); return }
+  if (!preferences.value.value && !await preferences.load()) return
+  const voiceId = voiceOverride?.trim() || persona.value?.voiceId.trim() || ''
+  await speechPlayer.speak(text, voiceId || undefined, purpose)
 }
 
-async function speakAssistantReply(text?: string, voiceOverride?: string): Promise<void> {
-  const content = text?.trim()
-  const api = window.lingli
-
-  if (!content || !api) {
-    resumeAutoListenAfterAssistantAudio()
-    return
-  }
-
-  const voiceId = voiceOverride?.trim() || persona.value?.voiceId.trim() || ''
+function handleInputDeviceLost(changed = false): void {
+  const wasCapturing = nativeConversation.active.value || nativeConversation.starting.value || keyboardRecorder.isRecording.value || realtimeRecorder.isRecording.value || pushToTalk.isBusy() || autoListen.enabled.value
+  nativeAutoRequested.value = false; nativeResumeGeneration = null; ++autoListenModeGeneration
+  void nativeConversation.stop(); autoListen.stop(); void pushToTalk.cancel(); void cancelActiveVoiceCapture()
+  conversation.disableAutoListen()
+  conversationPartialText.value = ''
+  conversation.cancelVoiceInput('', { silent: true })
+  conversation.addSystemMessage(changed ? wasCapturing ? '输入设备已更新，当前收音已停止。可以重新开启语音。' : '输入设备已保存，下次开启语音时使用。' : '麦克风已断开，请选择可用设备后重试；文字仍可使用。')
+}
+function handleOutputDeviceFailure(): void {
   releaseAssistantAudio()
-  const speechGeneration = assistantSpeechGeneration
-
-  try {
-    markVoiceTrace('tts_first_push')
-    const result = await invokeWithTimeout(
-      api.invoke<{ audio: ArrayBuffer; mimeType: string }>('tts.speak', {
-        text: content,
-        ...(voiceId ? { voice: voiceId } : {})
-      }),
-      15000,
-      '语音合成响应超时。'
-    )
-
-    if (speechGeneration !== assistantSpeechGeneration) return
-    if (!result.ok) {
-      resumeAutoListenAfterAssistantAudio()
-      return
-    }
-
-    markVoiceTrace('tts_first_audio')
-    const blob = new Blob([result.data.audio], { type: result.data.mimeType })
-    currentAssistantAudioUrl = URL.createObjectURL(blob)
-    currentAssistantAudio = new Audio(currentAssistantAudioUrl)
-    currentAssistantAudio.addEventListener('playing', () => {
-      if (speechGeneration === assistantSpeechGeneration) markVoiceTrace('tts_play_start')
-    }, { once: true })
-    currentAssistantAudio.addEventListener('ended', () => {
-      if (speechGeneration !== assistantSpeechGeneration) return
-      markVoiceTrace('tts_play_end')
-      releaseAssistantAudio(true)
-    }, { once: true })
-    assistantAudioPlaying.value = true
-    currentAssistantAudioTimer = window.setInterval(() => {
-      const time = currentAssistantAudio?.currentTime ?? 0
-      assistantAudioLevel.value = 0.3 + Math.abs(Math.sin(time * 9.5)) * 0.3
-    }, 80)
-    markVoiceTrace('tts_play_invoked')
-    await currentAssistantAudio.play()
-  } catch {
-    if (speechGeneration === assistantSpeechGeneration) releaseAssistantAudio(true)
-  }
+  nativeAutoRequested.value = false; nativeResumeGeneration = null; ++autoListenModeGeneration
+  void nativeConversation.stop(); autoListen.stop(); void pushToTalk.cancel(); void cancelActiveVoiceCapture()
+  conversation.disableAutoListen(); conversationPartialText.value = ''; conversation.cancelVoiceInput('', { silent: true })
+  music.outputFailed()
+  conversation.addSystemMessage('输出设备切换未成功，已停止播音。请重新选择设备，或使用文字继续。')
 }
 
 function getVoiceErrorMessage(error: unknown): string {
@@ -559,18 +529,18 @@ function shouldFallbackToOneShotRecording(error: unknown): boolean {
   return /AudioContext|音频上下文|ScriptProcessor|当前环境无法创建/i.test(message)
 }
 
-async function ensureMicrophoneAccess(): Promise<void> {
+async function ensureMicrophoneAccess(signal?: AbortSignal): Promise<void> {
   const api = window.lingli
 
   if (!api) {
     throw new Error('语音通道不可用，请确认从 Seamo AI R1 桌面应用启动。')
   }
 
-  const result = await invokeWithTimeout(
+  const result = await withCaptureAbort(invokeWithTimeout(
     api.invoke<MicrophoneAccessResult>('app.requestMicrophoneAccess'),
     6000,
     '麦克风权限请求超时。'
-  )
+  ), signal)
 
   if (!result.ok) {
     throw new Error(result.error.message)
@@ -581,13 +551,15 @@ async function ensureMicrophoneAccess(): Promise<void> {
   }
 }
 
-async function startVoiceCapture(): Promise<boolean> {
+async function startVoiceCapture(signal?: AbortSignal): Promise<boolean> {
   releaseAssistantAudio()
   conversation.startListening()
 
   try {
-    await ensureMicrophoneAccess()
+    if (!preferences.value.value && !await withCaptureAbort(preferences.load(), signal)) throw new Error('偏好暂时无法读取，请稍后重试；文字仍可使用。')
+    await ensureMicrophoneAccess(signal)
   } catch (error) {
+    if (signal?.aborted) { conversation.cancelVoiceInput('', { silent: true }); return false }
     conversation.markVoiceError(getVoiceErrorMessage(error))
     return false
   }
@@ -606,9 +578,10 @@ async function startVoiceCapture(): Promise<boolean> {
       ? autoListen.consumeBufferedAudio()
       : undefined
 
-    await realtimeRecorder.start({ initialAudio, stream: autoListenStream })
+    await realtimeRecorder.start({ initialAudio, stream: autoListenStream, signal })
     return true
   } catch (error) {
+    if (signal?.aborted) { conversation.cancelVoiceInput('', { silent: true }); return false }
     realtimeStartError = error
     if (!shouldFallbackToOneShotRecording(error)) {
       conversation.markVoiceError(
@@ -620,7 +593,7 @@ async function startVoiceCapture(): Promise<boolean> {
     }
 
     try {
-      await keyboardRecorder.start()
+      await keyboardRecorder.start(signal)
       return true
     } catch (fallbackError) {
       conversation.markVoiceError(
@@ -661,6 +634,7 @@ async function finishVoiceCapture(): Promise<void> {
       const transcription = await realtimeRecorder.stopAndTranscribe()
       text = transcription.text
     } catch (error) {
+      if (error instanceof Error && error.message === 'VOICE_CAPTURE_CANCELLED') { conversation.cancelVoiceInput('', { silent: true }); return }
       conversation.cancelVoiceInput(getVoiceErrorMessage(error))
       recoverAutoListenAfterVoiceCancel()
       return
@@ -670,6 +644,7 @@ async function finishVoiceCapture(): Promise<void> {
       const transcription = await keyboardRecorder.stopAndTranscribe()
       text = transcription.text
     } catch (error) {
+      if (error instanceof Error && error.message === 'VOICE_CAPTURE_CANCELLED') { conversation.cancelVoiceInput('', { silent: true }); return }
       conversation.cancelVoiceInput(getVoiceErrorMessage(error))
       recoverAutoListenAfterVoiceCancel()
       return
@@ -757,6 +732,7 @@ async function toggleAutoListen(): Promise<void> {
     conversationPartialText.value = ''
     return
   }
+  if (!preferences.value.value && !await preferences.load()) { conversation.addSystemMessage('偏好暂时无法读取，请稍后重试；文字仍可使用。'); return }
   nativeAutoRequested.value = true
   if (textBusy.value || assistantAudioPlaying.value) {
     nativeResumeGeneration = generation; conversation.setAutoListenState('arming'); return
@@ -969,12 +945,12 @@ async function handlePreviewVoice(voiceId: string): Promise<void> {
   nativeAutoRequested.value = false; nativeResumeGeneration = null; ++autoListenModeGeneration
   await nativeConversation.stop()
   conversation.disableAutoListen()
-  voicePreviewing.value = true
+  voicePreviewPending.value = true
 
   try {
-    await speakAssistantReply('你好，这是当前的音色试听。', voiceId)
+    await speakAssistantReply('你好，这是当前的音色试听。', voiceId, 'preview')
   } finally {
-    voicePreviewing.value = false
+    voicePreviewPending.value = false
   }
 }
 
@@ -984,18 +960,19 @@ onMounted(() => {
   })
   stopMemoryChanged = window.seamoR1.memory.onChanged(() => { memoryRevision.value++ })
   taskState.start()
-  void Promise.all([window.seamoR1.credentials.status(), window.seamoR1.persona.get()]).then(([credentials, currentPersona]) => {
+  try { audioDevices.start() } catch { audioDevices.error.value = '设备列表暂时无法读取，请稍后在设置中重试。' }
+  void Promise.all([window.seamoR1.credentials.status(), window.seamoR1.persona.get(), preferences.load()]).then(([credentials, currentPersona, preferencesReady]) => {
     if (credentials.ok) credentialStatus.value = credentials.data
     if (currentPersona.ok) persona.value = currentPersona.data
     else conversation.addSystemMessage('人格设置暂时无法读取，请重新启动应用。')
-    if (!credentials.ok || !currentPersona.ok ||
+    if (!preferencesReady || !credentials.ok || !currentPersona.ok ||
       !credentials.data.VOLCENGINE_ARK_API_KEY || !credentials.data.VOLCENGINE_ARK_MODEL) return
     startupGreetingTimer = window.setTimeout(() => {
       if (conversation.messages.value.length || conversation.isListening.value || nativeConversation.active.value || nativeConversation.starting.value) return
       void conversation.generateOpeningGreeting().then(() => {
         const greeting = conversation.messages.value[0]
         if (greeting?.role === 'assistant' && conversation.messages.value.length === 1) {
-          void speakAssistantReply(greeting.text)
+          void speakAssistantReply(greeting.text, undefined, 'proactive')
         }
       })
     }, 900)
@@ -1021,6 +998,7 @@ onBeforeUnmount(() => {
   nativeAutoRequested.value = false; nativeResumeGeneration = null; ++autoListenModeGeneration
   void nativeConversation.stop()
   taskState.dispose()
+  audioDevices.dispose(); preferences.dispose()
   void pushToTalk.dispose()
   window.removeEventListener('blur', handleWindowBlur)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
@@ -1133,7 +1111,7 @@ onBeforeUnmount(() => {
       :busy="taskState.busy.value" :loading="taskState.loading.value" :error="taskState.error.value"
       @close="closePanels" @select="(id) => { taskState.selectedId.value = id }"
       @control="taskState.control" @retry="taskState.refresh" />
-    <R1SettingsPanel
+    <R1SettingsPanel :devices="audioDevices"
       v-if="settingsOpen"
       :persona="persona"
       :voice-previewing="voicePreviewing"

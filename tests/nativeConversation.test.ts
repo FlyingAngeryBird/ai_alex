@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { useNativeConversation } from '../src/composables/useNativeConversation'
 afterEach(() => vi.unstubAllGlobals())
 
-function recoveryFixture() {
+function recoveryFixture(options: Pick<Parameters<typeof useNativeConversation>[0], 'inputConstraints' | 'configureOutput'> = {}) {
   const subscriptions: Array<(event: Record<string, unknown>) => void> = [], trackStops: ReturnType<typeof vi.fn>[] = [], order: string[] = []
   class Context {
     destination = {}; audioWorklet = { addModule: async () => undefined }
@@ -33,11 +33,26 @@ function recoveryFixture() {
   vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: media } })
   vi.stubGlobal('window', { lingli: { invoke, on: (_channel: string, listener: typeof subscriptions[number]) => { subscriptions.push(listener); return vi.fn() } } })
   const onError = vi.fn(), onConnectionState = vi.fn(), onText = vi.fn()
-  const voice = useNativeConversation({ onError, onConnectionState, onText, onSpeaking() {} })
+  const voice = useNativeConversation({ ...options, onError, onConnectionState, onText, onSpeaking() {} })
   const starts = () => invoke.mock.calls.filter(([name]) => name === 'voice.nativeStart')
   const emit = (index: number, event: Record<string, unknown>) => subscriptions[index]({ connectionId: (starts()[index][1] as { connectionId: string }).connectionId, ...event })
   return { voice, starts, invoke, emit, onError, onText, onConnectionState, worklets, trackStops, order, startReplies, media }
 }
+
+it('binds native capture/output to selected devices and stops cleanly after the microphone is lost', async () => {
+  const releaseOutput = vi.fn(), configureOutput = vi.fn(async () => releaseOutput), s = recoveryFixture({ inputConstraints: () => ({ deviceId: { exact: 'synthetic-mic' } }), configureOutput })
+  let ended!: () => void
+  const trackStop = vi.fn()
+  s.media.mockResolvedValueOnce({ getTracks: () => [{ stop: trackStop, addEventListener: ((_event: string, listener: () => void) => { ended = listener }) as () => void }] })
+  try {
+    expect(await s.voice.start()).toBe(true)
+    expect(s.media).toHaveBeenCalledWith({ audio: { deviceId: { exact: 'synthetic-mic' } } })
+    expect(configureOutput).toHaveBeenCalledTimes(1)
+    ended(); await vi.waitFor(() => expect(trackStop).toHaveBeenCalledTimes(1))
+    expect(s.voice.active.value).toBe(false); expect(s.onError).toHaveBeenCalledWith(expect.stringContaining('麦克风已断开'))
+    expect(releaseOutput).toHaveBeenCalledTimes(1)
+  } finally { await s.voice.stop() }
+})
 
 it('rebuilds after context invalidation, clears old audio first, and rejects old connection events', async () => {
   const s = recoveryFixture()

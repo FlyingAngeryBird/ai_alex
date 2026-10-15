@@ -8,6 +8,7 @@ import type { MusicCommand, MusicReport, MusicSnapshot } from '../../electron/ma
 type UseMusicOptions = {
   createAudioContext?: () => AudioContext | null
   createAudioElement?: () => HTMLAudioElement
+  configureOutput?: (target: HTMLMediaElement | AudioContext) => Promise<() => void>
 }
 
 type AudioEnergyRange = {
@@ -137,6 +138,8 @@ export function useMusic(options: UseMusicOptions = {}) {
   }
   let analyser: AnalyserNode | null = null
   let audioContext: AudioContext | null = null
+  let releaseAudioOutput: (() => void) | null = null, releaseAnalysisOutput: (() => void) | null = null
+  let analysisStarting: { audio: HTMLAudioElement; promise: Promise<void> } | null = null
   let audioElement: HTMLAudioElement | null = null
   let frequencyData: Uint8Array<ArrayBuffer> | null = null
   let mediaSource: MediaElementAudioSourceNode | null = null
@@ -207,7 +210,7 @@ export function useMusic(options: UseMusicOptions = {}) {
         const request = activePlayRequestId
         await audioElement.play()
         if (request !== activePlayRequestId || command.playbackRequestId !== deviceRequest || stopped) return
-        playback.value = { ...playback.value, status: 'playing' }; startAudioAnalysis(audioElement)
+        playback.value = { ...playback.value, status: 'playing' }; await startAudioAnalysis(audioElement)
         report('playing', command.commandId)
       }
     } catch { report('failed', command.commandId, command.playbackRequestId) }
@@ -339,6 +342,13 @@ export function useMusic(options: UseMusicOptions = {}) {
       track: null
     }
   }
+  function outputFailed(): void {
+    if (!audioElement && !r1Snapshot?.state.track) return
+    activePlayRequestId++
+    if (r1) report('failed')
+    markMusicError('输出设备不可用，音乐已停止。请重新选择设备后重试。')
+    musicNotice.value = '输出设备不可用，音乐已停止。请重新选择设备后重试。'
+  }
 
   function clearAudioLevelTimer(): void {
     if (audioLevelTimer !== undefined) {
@@ -371,6 +381,7 @@ export function useMusic(options: UseMusicOptions = {}) {
   }
 
   function closeAudioContext(): void {
+    releaseAnalysisOutput?.(); releaseAnalysisOutput = null
     const context = audioContext
     audioContext = null
 
@@ -465,11 +476,17 @@ export function useMusic(options: UseMusicOptions = {}) {
     }, 80)
   }
 
-  function startAudioAnalysis(audio: HTMLAudioElement): void {
+  async function startAudioAnalysis(audio: HTMLAudioElement): Promise<void> {
+    if (analysisStarting?.audio === audio) return analysisStarting.promise
+    const entry = { audio, promise: startAudioAnalysisImpl(audio).finally(() => { if (analysisStarting === entry) analysisStarting = null }) }
+    analysisStarting = entry; return entry.promise
+  }
+  async function startAudioAnalysisImpl(audio: HTMLAudioElement): Promise<void> {
     clearAudioLevelTimer()
     resetAudioEnergyRanges()
 
     if (analyser && frequencyData && mediaSource) {
+      await audioContext?.resume?.()
       startAudioLevelTimer()
       return
     }
@@ -483,7 +500,13 @@ export function useMusic(options: UseMusicOptions = {}) {
       return
     }
 
+    const context = audioContext
     try {
+      if (options.configureOutput && !releaseAnalysisOutput) {
+        const release = await options.configureOutput(context)
+        if (audio !== audioElement || context !== audioContext) { release(); return }
+        releaseAnalysisOutput = release
+      }
       analyser = audioContext.createAnalyser()
       analyser.fftSize = 256
       analyser.smoothingTimeConstant = 0.58
@@ -492,12 +515,16 @@ export function useMusic(options: UseMusicOptions = {}) {
       analyser.connect(audioContext.destination)
       frequencyData = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount))
       previousFrequencyData = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount))
-      void audioContext.resume?.()
+      await context.resume?.()
+      if (audio !== audioElement || context !== audioContext) return
       startAudioLevelTimer()
     } catch {
+      if (audio !== audioElement || context !== audioContext) return
+      const graphWasBound = Boolean(mediaSource)
       stopAudioAnalysis()
       clearAudioLevelTimer()
       setUnmeasuredAudioBands()
+      if (graphWasBound) throw new Error('MUSIC_OUTPUT_UNAVAILABLE')
     }
   }
 
@@ -557,6 +584,7 @@ export function useMusic(options: UseMusicOptions = {}) {
   }
 
   function releaseAudioResources(): void {
+    releaseAudioOutput?.(); releaseAudioOutput = null
     ducking.attach(null)
     removeAudioListeners?.()
     stopAudioAnalysis()
@@ -599,6 +627,11 @@ export function useMusic(options: UseMusicOptions = {}) {
     const cleanupAudioListeners = attachAudioListeners(audio)
 
     try {
+      if (options.configureOutput) {
+        const release = await options.configureOutput(audio)
+        if (requestId !== activePlayRequestId) { release(); audio.pause(); return }
+        releaseAudioOutput = release
+      }
       await audio.play()
       if (requestId !== activePlayRequestId) {
         cleanupAudioListeners()
@@ -616,10 +649,10 @@ export function useMusic(options: UseMusicOptions = {}) {
         status: 'playing'
       }
       searchResultsVisible.value = false
-      startAudioAnalysis(audio)
+      await startAudioAnalysis(audio)
     } catch {
       if (requestId === activePlayRequestId) {
-        markMusicError('这首歌暂时播放不了，我换一首再试试。')
+        markMusicError('这首歌暂时播放不了，请重试或选择其他音源。')
       }
     }
   }
@@ -881,10 +914,10 @@ export function useMusic(options: UseMusicOptions = {}) {
         status: 'playing'
       }
       if (audioElement) {
-        startAudioAnalysis(audioElement)
+        await startAudioAnalysis(audioElement)
       }
     } catch {
-      markMusicError('这首歌暂时播放不了，我换一首再试试。')
+      markMusicError('这首歌暂时播放不了，请重试或选择其他音源。')
     }
   }
   async function pauseTrack(trackKey: string): Promise<void> {
@@ -1067,6 +1100,7 @@ export function useMusic(options: UseMusicOptions = {}) {
     toggleFavorite,
     togglePlayback,
     pauseTrack,
+    outputFailed,
     viewMode
   }
 }

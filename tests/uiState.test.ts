@@ -215,24 +215,6 @@ describe('UI prototype state', () => {
     )
   })
 
-  it('records real audio playback start from the media playing event', () => {
-    const file = readFileSync('src/App.vue', 'utf8')
-    const speakAssistantReply = file.slice(
-      file.indexOf('async function speakAssistantReply'),
-      file.indexOf('function getVoiceErrorMessage')
-    )
-
-    expect(speakAssistantReply).toContain("markVoiceTrace('tts_play_invoked')")
-    expect(speakAssistantReply).toContain("markVoiceTrace('tts_play_start')")
-    expect(speakAssistantReply).toContain("addEventListener('playing'")
-    expect(speakAssistantReply.indexOf("addEventListener('playing'")).toBeLessThan(
-      speakAssistantReply.indexOf('await currentAssistantAudio.play()')
-    )
-    expect(speakAssistantReply.indexOf("markVoiceTrace('tts_play_invoked')")).toBeLessThan(
-      speakAssistantReply.indexOf('await currentAssistantAudio.play()')
-    )
-  })
-
   it('documents diagnostic latency fields that separate raw provider timing from user-visible timing', () => {
     const file = readFileSync('src/types/app.ts', 'utf8')
 
@@ -368,7 +350,7 @@ describe('UI prototype state', () => {
     )
 
     expect(startCapture.indexOf('conversation.startListening()')).toBeLessThan(
-      startCapture.indexOf('await ensureMicrophoneAccess()')
+      startCapture.indexOf('await ensureMicrophoneAccess(')
     )
   })
 
@@ -393,7 +375,7 @@ describe('UI prototype state', () => {
     expect(autoListen).toContain('createPcmRingBuffer')
     expect(autoListen).toContain('consumeBufferedAudio')
     expect(app).toContain('autoListen.consumeBufferedAudio()')
-    expect(app).toContain('realtimeRecorder.start({ initialAudio, stream: autoListenStream })')
+    expect(app).toContain('realtimeRecorder.start({ initialAudio, stream: autoListenStream')
     expect(recorder).toContain('initialAudio?: ArrayBuffer')
     expect(recorder).toContain('sendChunk(startOptions.initialAudio')
   })

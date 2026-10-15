@@ -48,6 +48,8 @@ import { R1AutomaticMemory } from './r1/automaticMemory.js'
 import { registerAutomaticMemoryHandlers } from './ipc/automaticMemoryHandlers.js'
 import { registerArtifactContextHandlers } from './ipc/artifactContextHandlers.js'
 import { R1Music } from './r1/music.js'
+import { R1Preferences } from './r1/preferences.js'
+import { registerPreferencesHandlers } from './ipc/preferencesHandlers.js'
 import { registerR1MusicHandlers } from './ipc/musicR1Handlers.js'
 import { createConfiguredMusicProvider } from './ipc/musicHandlers.js'
 
@@ -135,6 +137,8 @@ void app.whenReady().then(async () => {
     r1Database = openR1Database(join(app.getPath('userData'), 'r1.sqlite'))
     r1PromptAssets = loadR1PromptAssets(join(app.getAppPath(), 'r1-assets'))
     r1Conversations = new R1Conversations(r1Database)
+    const preferences = new R1Preferences(r1Database)
+    registerPreferencesHandlers(preferences)
     importLegacyJson(r1Database, join(app.getPath('appData'), 'lingli'), 'lingli-json')
     importLegacyJson(r1Database, join(app.getPath('appData'), 'lingmo'), 'lingmo-json')
     const legacyMusic = await getDefaultMusicStore().loadLibrary()
@@ -268,7 +272,7 @@ void app.whenReady().then(async () => {
   }
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+    if (!shutdownStarted && BrowserWindow.getAllWindows().length === 0) {
       createMainWindow()
     }
   })
@@ -295,6 +299,9 @@ app.on('before-quit', event => {
 })
 
 app.on('window-all-closed', () => {
+  // The quit path already drained these services and closed SQLite. Window
+  // destruction during the final app.quit must not start new database reads.
+  if (shutdownStarted) return
   topicSummaries?.invalidate()
   automaticMemory?.invalidate()
   memoryConfirmations?.revokeAll()

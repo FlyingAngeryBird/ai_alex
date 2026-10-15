@@ -20,6 +20,8 @@ type UseAutoListenOptions = {
   onSpeechEnd?: () => Promise<void> | void
   onSpeechStart?: () => Promise<void> | void
   thresholds?: VoiceActivityThresholds
+  inputConstraints?: () => MediaTrackConstraints
+  onDeviceLost?: () => void
 }
 
 function getErrorMessage(error: unknown): string {
@@ -190,7 +192,7 @@ export function useAutoListen(options: UseAutoListenOptions = {}) {
       }
 
       const acquiredStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
+        audio: options.inputConstraints?.() ?? {
           autoGainControl: true,
           echoCancellation: true,
           noiseSuppression: true
@@ -201,6 +203,9 @@ export function useAutoListen(options: UseAutoListenOptions = {}) {
         return false
       }
       stream = acquiredStream
+      for (const track of stream.getTracks()) track.addEventListener?.('ended', () => {
+        if (generation === lifecycleGeneration) { stop(); options.onDeviceLost?.() }
+      }, { once: true })
       audioContext = new AudioContextConstructor()
       analyser = audioContext.createAnalyser()
       analyser.fftSize = 1024

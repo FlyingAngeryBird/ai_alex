@@ -1,0 +1,56 @@
+export type SpeechPurpose = 'reply' | 'preview' | 'proactive'
+type TtsResult = { ok: true; data: { audio: ArrayBuffer; mimeType: string } } | { ok: false; error: { code: string; message: string } }
+/** Owns fallback speech output; policy changes and stale promises cannot revive it. */
+export function createAssistantSpeech(options: {
+  request(text: string, voice?: string): Promise<TtsResult>
+  canSpeakProactively(): boolean
+  configureOutput?: (audio: HTMLAudioElement) => Promise<() => void>
+  onSpeaking(active: boolean): void
+  onEnded(): void
+  onPurposeChange?(purpose: SpeechPurpose | null): void
+  mark?(point: string): void
+  createAudio?: (url: string) => HTMLAudioElement
+  objectUrl?: (blob: Blob) => string
+  revokeUrl?: (url: string) => void
+}) {
+  let generation = 0, audio: HTMLAudioElement | null = null, url: string | null = null
+  let releaseOutput: (() => void) | null = null, purpose: SpeechPurpose | null = null
+  const allowed = (reason: SpeechPurpose) => reason !== 'proactive' || options.canSpeakProactively()
+  function stop(resume = false): void {
+    generation++; purpose = null; options.onPurposeChange?.(null); options.onSpeaking(false)
+    audio?.pause(); audio = null
+    releaseOutput?.(); releaseOutput = null
+    if (url) (options.revokeUrl ?? URL.revokeObjectURL)(url)
+    url = null
+    if (resume) options.onEnded()
+  }
+  function policyChanged(): void { if (purpose === 'proactive' && !allowed(purpose)) stop(true) }
+  async function speak(text: string, voice?: string, reason: SpeechPurpose = 'reply'): Promise<void> {
+    if (!text.trim() || !allowed(reason)) return
+    stop(); purpose = reason; options.onPurposeChange?.(reason); const epoch = generation
+    const current = () => epoch === generation && allowed(reason)
+    try {
+      options.mark?.('tts_first_push')
+      const result = await options.request(text.trim(), voice)
+      if (!current()) return
+      if (!result.ok) { stop(true); return }
+      options.mark?.('tts_first_audio')
+      url = (options.objectUrl ?? URL.createObjectURL)(new Blob([result.data.audio], { type: result.data.mimeType }))
+      const target = (options.createAudio ?? (value => new Audio(value)))(url)
+      audio = target
+      target.addEventListener('playing', () => { if (current()) { options.onSpeaking(true); options.mark?.('tts_play_start') } else target.pause() }, { once: true })
+      target.addEventListener('ended', () => { if (epoch === generation) { options.mark?.('tts_play_end'); stop(true) } }, { once: true })
+      target.addEventListener('error', () => { if (epoch === generation) stop(true) }, { once: true })
+      if (options.configureOutput) {
+        const release = await options.configureOutput(target)
+        if (!current()) { release(); target.pause(); return }
+        releaseOutput = release
+      }
+      if (!current()) { target.pause(); return }
+      options.mark?.('tts_play_invoked')
+      await target.play()
+      if (!current()) target.pause()
+    } catch { if (epoch === generation) stop(true) }
+  }
+  return { speak, stop, policyChanged }
+}

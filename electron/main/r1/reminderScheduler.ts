@@ -1,17 +1,19 @@
 import { Notification, BrowserWindow } from 'electron'
 import { R1Items } from './items.js'
 import type { R1Database } from './database.js'
+import { R1Preferences } from './preferences.js'
 
 export type ReminderDueEvent = {
   reminderId: string
   body: string
   dueAtUtc: string
   systemRequested: boolean
+  silent?: boolean
 }
 
 type NotificationPort = {
   isSupported(): boolean
-  show(title: string, body: string): void
+  show(title: string, body: string, options?: { silent: boolean }): void
 }
 
 type WindowPort = {
@@ -24,7 +26,7 @@ export class ReminderScheduler {
 
   constructor(private readonly db: R1Database,
     private readonly notifications: NotificationPort,
-    private readonly windows: WindowPort) {
+    private readonly windows: WindowPort, private readonly isQuiet: () => boolean = () => false) {
     this.items = new R1Items(db)
   }
 
@@ -48,10 +50,11 @@ export class ReminderScheduler {
     for (const row of due) {
       if (!this.items.deliver(row.reminder_id, row.schedule_version, 'in_app').delivered) continue
       let systemRequested = false
+      const silent = this.isQuiet()
       if (this.notifications.isSupported() &&
         this.items.markSystemRequested(row.reminder_id, row.schedule_version)) {
         try {
-          this.notifications.show('Seamo AI 提醒', row.body)
+          this.notifications.show('Seamo AI 提醒', row.body, { silent })
           systemRequested = true
         } catch {
           // The in-app record remains visible. Do not claim the OS showed a notification.
@@ -59,7 +62,7 @@ export class ReminderScheduler {
         }
       }
       this.windows.broadcast({ reminderId: row.reminder_id, body: row.body,
-        dueAtUtc: row.due_at_utc, systemRequested })
+        dueAtUtc: row.due_at_utc, systemRequested, silent })
     }
   }
 }
@@ -67,12 +70,12 @@ export class ReminderScheduler {
 export function createElectronReminderScheduler(db: R1Database): ReminderScheduler {
   return new ReminderScheduler(db, {
     isSupported: () => Notification.isSupported(),
-    show: (title, body) => new Notification({ title, body }).show()
+    show: (title, body, options) => new Notification({ title, body, silent: options?.silent }).show()
   }, {
     broadcast: (event) => {
       for (const window of BrowserWindow.getAllWindows()) {
         window.webContents.send('r1.reminderDue', event)
       }
     }
-  })
+  }, () => new R1Preferences(db).get().doNotDisturb)
 }

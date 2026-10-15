@@ -7,6 +7,18 @@ import { R1Items } from '../electron/main/r1/items'
 import { ReminderScheduler } from '../electron/main/r1/reminderScheduler'
 
 describe('R1 reminder scheduler', () => {
+  it('keeps quiet-mode reminders and their receipts while requesting a silent system notification', () => {
+    const db = openR1Database(':memory:'), show = vi.fn(), broadcast = vi.fn()
+    try {
+      const due = new R1Items(db).createReminder({ actionId: 'quiet', linkPurpose: 'independent', body: '合成提醒', dueAtUtc: new Date(Date.now() + 1000).toISOString(), timezone: 'Asia/Shanghai' }).reminder
+      const scheduler = new ReminderScheduler(db, { isSupported: () => true, show }, { broadcast }, () => true)
+      vi.useFakeTimers(); vi.setSystemTime(new Date(Date.now() + 2000))
+      scheduler.tick(); scheduler.tick()
+      expect(show).toHaveBeenCalledExactlyOnceWith('Seamo AI 提醒', '合成提醒', { silent: true })
+      expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({ reminderId: due.reminderId, silent: true, systemRequested: true }))
+      expect(db.prepare('SELECT COUNT(*) AS n FROM deliveries').get()).toMatchObject({ n: 1 })
+    } finally { vi.useRealTimers(); db.close() }
+  })
   it('records one in-app delivery and one system request per schedule version', () => {
     const db = openR1Database(':memory:')
     try {

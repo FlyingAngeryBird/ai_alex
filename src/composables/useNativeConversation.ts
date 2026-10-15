@@ -20,6 +20,8 @@ export function useNativeConversation(options: {
   onText(event: NativeRealtimeEvent): void; onError(message: string): void;
   onSpeaking(speaking: boolean): void;
   onConnectionState?(state: 'rebuilding' | 'ready'): void;
+  inputConstraints?: () => MediaTrackConstraints;
+  configureOutput?: (context: AudioContext) => Promise<() => void>;
 }) {
   const userSpeaking = ref(false)
   const active = ref(false), starting = ref(false), speaking = ref(false)
@@ -34,6 +36,7 @@ export function useNativeConversation(options: {
   let closing = false
   let wanted = false, intent = 0, networkRetries = 0
   let recovery: Promise<void> | null = null
+  let releaseOutput: (() => void) | null = null
   let queuedRecovery: string | null = null
   const setSpeaking = (value: boolean) => { speaking.value = value; options.onSpeaking(value) }
   function clearPlayback(): Promise<void> {
@@ -65,6 +68,7 @@ export function useNativeConversation(options: {
   }
   async function stopNow(): Promise<void> {
     closing = true
+    userSpeaking.value = false
     active.value = false
     processor?.port.postMessage({ type: 'capture', enabled: false })
     await clearPlayback()
@@ -75,6 +79,7 @@ export function useNativeConversation(options: {
     source?.disconnect(); source = null
     stream?.getTracks().forEach(track => track.stop()); stream = null
     setSpeaking(false); cancelled.clear(); responseId = null
+    releaseOutput?.(); releaseOutput = null
     const old = context; context = null; if (old) void old.close()
     if (id) await window.lingli.invoke('voice.nativeStop', { connectionId: id }).catch(() => undefined)
     closing = false
@@ -148,12 +153,21 @@ export function useNativeConversation(options: {
       const permission = await window.lingli.invoke<{ granted: boolean }>('app.requestMicrophoneAccess')
       if (!current()) return false
       if (!permission.ok || !permission.data.granted) throw new Error('请在系统设置中允许麦克风访问。')
-      const captured = await navigator.mediaDevices.getUserMedia({ audio: {
+      const captured = await navigator.mediaDevices.getUserMedia({ audio: options.inputConstraints?.() ?? {
         channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true
       } })
       if (!current()) { captured.getTracks().forEach(track => track.stop()); return false }
       stream = captured
-      context = new AudioContext(); await context.resume()
+      for (const track of captured.getTracks()) track.addEventListener?.('ended', () => {
+        if (current()) { options.onError('麦克风已断开。请在设置中选择可用设备后重新开启；文字仍可使用。'); void stop() }
+      }, { once: true })
+      context = new AudioContext()
+      if (options.configureOutput) {
+        const release = await options.configureOutput(context)
+        if (!current()) { release(); return false }
+        releaseOutput = release
+      }
+      await context.resume()
       if (!current()) return false
       await context.audioWorklet.addModule(new URL('native-duplex-worklet.js', document.baseURI).href)
       if (!current()) return false

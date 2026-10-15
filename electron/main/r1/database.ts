@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-export const R1_SCHEMA_VERSION = 8
+export const R1_SCHEMA_VERSION = 9
 
 export type R1Database = DatabaseSync
 
@@ -365,6 +365,15 @@ export function openR1Database(databasePath: string): R1Database {
       if (!columns.has('source_ref')) db.exec('ALTER TABLE music_feedback ADD COLUMN source_ref TEXT')
       db.exec('UPDATE music_settings SET queue_version=(SELECT COALESCE(MAX(queue_version),0) FROM music_queue)')
       db.exec('PRAGMA user_version = 8')
+    })
+  }
+  if (migratedVersion < 9) {
+    inTransaction(db, () => {
+      db.exec(`CREATE TABLE IF NOT EXISTS app_preferences (id INTEGER PRIMARY KEY CHECK(id=1),
+        input_device_id TEXT, output_device_id TEXT, do_not_disturb INTEGER NOT NULL DEFAULT 0 CHECK(do_not_disturb IN (0,1)),
+        proactive_speech INTEGER NOT NULL DEFAULT 1 CHECK(proactive_speech IN (0,1)), version INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL)`)
+      db.prepare('INSERT OR IGNORE INTO app_preferences(id,updated_at) VALUES(1,?)').run(new Date().toISOString())
+      db.exec('PRAGMA user_version=9')
     })
   }
   return db

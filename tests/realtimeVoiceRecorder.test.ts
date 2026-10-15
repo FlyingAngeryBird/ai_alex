@@ -35,6 +35,23 @@ class FakeAudioContext {
 }
 
 describe('realtime voice recorder', () => {
+  it('cleans a cancelled ASR startup and closes a session whose acknowledgement arrives late', async () => {
+    const audioContext = new FakeAudioContext(), track = { stop: vi.fn() }, calls: Array<[LingliChannel, unknown]> = []
+    let release!: (value: AppResult<unknown>) => void
+    const invoke = async <T>(channel: LingliChannel, payload?: unknown): Promise<AppResult<T>> => {
+      calls.push([channel, payload])
+      if (channel === 'voice.startRealtime') return await new Promise<AppResult<T>>(resolve => { release = resolve as typeof release })
+      return { ok: true, data: { text: '' } as T }
+    }
+    const recorder = useRealtimeVoiceRecorder({ createAudioContext: () => audioContext as unknown as AudioContext, lingli: { invoke },
+      mediaDevices: { getUserMedia: async () => ({ getTracks: () => [track] }) as unknown as MediaStream } })
+    const pending = recorder.start(), rejected = expect(pending).rejects.toThrow('VOICE_CAPTURE_CANCELLED')
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+    await recorder.cancel(); await rejected
+    release({ ok: true, data: { sessionId: 'late-synthetic-session' } })
+    await vi.waitFor(() => expect(calls).toContainEqual(['voice.stopRealtime', { sessionId: 'late-synthetic-session' }]))
+    expect(recorder.isRecording.value).toBe(false); expect(track.stop).toHaveBeenCalledTimes(1)
+  })
   it('cleans up a cancelled stream and ignores a late partial transcript', async () => {
     const audioContext = new FakeAudioContext()
     const track = { stop: vi.fn() }

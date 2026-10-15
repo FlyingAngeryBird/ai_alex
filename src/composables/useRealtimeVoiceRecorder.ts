@@ -1,6 +1,8 @@
 import { ref } from 'vue'
 import type { AppResult, LingliChannel } from '@/types/electron-api'
 import { invokeWithTimeout } from '../utils/invokeWithTimeout'
+import { acquireAudioInput, withCaptureAbort } from '../services/abortableCapture'
+import { createVoiceActivityDetector, defaultVoiceActivityThresholds } from '../services/voiceActivity'
 
 type RealtimeStartResult = {
   sessionId: string
@@ -19,11 +21,14 @@ type RealtimeVoiceRecorderOptions = {
   lingli?: LingliApi
   mediaDevices?: Pick<MediaDevices, 'getUserMedia'>
   onPartialText?: (text: string) => void
+  inputConstraints?: () => MediaTrackConstraints
+  onDeviceLost?: () => void
 }
 
 type RealtimeVoiceStartOptions = {
   initialAudio?: ArrayBuffer
   stream?: MediaStream
+  signal?: AbortSignal
 }
 
 const TARGET_SAMPLE_RATE = 16000
@@ -108,6 +113,8 @@ function int16ToArrayBuffer(samples: Int16Array<ArrayBufferLike>): ArrayBuffer {
 export function useRealtimeVoiceRecorder(options: RealtimeVoiceRecorderOptions = {}) {
   const errorMessage = ref('')
   const isRecording = ref(false)
+  const userSpeaking = ref(false)
+  const detector = createVoiceActivityDetector({ ...defaultVoiceActivityThresholds, adaptiveNoise: false })
 
   let audioContext: AudioContext | null = null
   let pending: Int16Array<ArrayBufferLike> = new Int16Array(0)
@@ -117,13 +124,18 @@ export function useRealtimeVoiceRecorder(options: RealtimeVoiceRecorderOptions =
   let ownsStream = false
   let source: MediaStreamAudioSourceNode | null = null
   let stream: MediaStream | null = null
+  let abortCapture: AbortController | null = null, generation = 0, starting = false
+  const trackListeners: Array<() => void> = []
+  function releaseCapture(): void {
+    if (processor) processor.onaudioprocess = null
+    processor?.disconnect(); source?.disconnect()
+    trackListeners.splice(0).forEach(remove => remove())
+    if (ownsStream) stream?.getTracks().forEach(track => track.stop())
+    stream = null; ownsStream = false; isRecording.value = false; userSpeaking.value = false; detector.reset()
+  }
 
   function cleanup(): void {
-    processor?.disconnect()
-    source?.disconnect()
-    if (ownsStream) {
-      stream?.getTracks().forEach((track) => track.stop())
-    }
+    releaseCapture()
     void audioContext?.close()
 
     audioContext = null
@@ -199,33 +211,39 @@ export function useRealtimeVoiceRecorder(options: RealtimeVoiceRecorderOptions =
   }
 
   async function start(startOptions: RealtimeVoiceStartOptions = {}): Promise<void> {
-    if (isRecording.value) {
+    if (isRecording.value || starting) {
       return
     }
 
     errorMessage.value = ''
+    starting = true; const epoch = ++generation
+    abortCapture = new AbortController()
+    const captureSignal = startOptions.signal ? AbortSignal.any([startOptions.signal, abortCapture.signal]) : abortCapture.signal
     let startedSessionId = ''
 
     try {
       const mediaDevices = getMediaDevices(options)
       const api = getLingliApi(options)
 
-      stream = startOptions.stream ?? await mediaDevices.getUserMedia({
-        audio: {
+      stream = startOptions.stream ?? await acquireAudioInput(mediaDevices, options.inputConstraints?.() ?? {
           echoCancellation: true,
           noiseSuppression: true
-        }
-      })
+        }, captureSignal)
       ownsStream = !startOptions.stream
+      if (epoch !== generation || captureSignal.aborted) throw new Error('VOICE_CAPTURE_CANCELLED')
+      for (const track of stream.getTracks()) {
+        const ended = () => { if (epoch === generation) { void cancel(); options.onDeviceLost?.() } }
+        track.addEventListener?.('ended', ended); trackListeners.push(() => track.removeEventListener?.('ended', ended))
+      }
       audioContext = createAudioContext(options)
 
-      const startResult = await invokeWithTimeout(
+      const startResult = await withCaptureAbort(invokeWithTimeout(
         api.invoke<RealtimeStartResult>('voice.startRealtime', {
           sampleRate: TARGET_SAMPLE_RATE
         }),
         15000,
         '实时语音识别启动超时。'
-      )
+      ), captureSignal, result => { if (result.ok) void closeRealtimeSession(result.data.sessionId) })
 
       if (!startResult.ok) {
         errorMessage.value = startResult.error.message
@@ -245,6 +263,8 @@ export function useRealtimeVoiceRecorder(options: RealtimeVoiceRecorderOptions =
         }
 
         const samples = event.inputBuffer.getChannelData(0)
+        let energy = 0; for (const sample of samples) energy += sample * sample
+        detector.push(Math.sqrt(energy / samples.length), performance.now()); userSpeaking.value = detector.getDiagnostics().speaking
         pending = concatPcm(pending, downsampleToPcm16(samples, audioContext.sampleRate))
         queueAvailableChunks()
       }
@@ -258,7 +278,7 @@ export function useRealtimeVoiceRecorder(options: RealtimeVoiceRecorderOptions =
       }
       cleanup()
       throw error
-    }
+    } finally { starting = false }
   }
 
   async function stopAndTranscribe(): Promise<RealtimeStopResult> {
@@ -267,6 +287,8 @@ export function useRealtimeVoiceRecorder(options: RealtimeVoiceRecorderOptions =
     }
 
     const activeSessionId = sessionId
+    const epoch = generation
+    releaseCapture()
 
     let response: AppResult<RealtimeStopResult>
     let stopRequested = false
@@ -274,13 +296,14 @@ export function useRealtimeVoiceRecorder(options: RealtimeVoiceRecorderOptions =
     try {
       await flush()
       stopRequested = true
-      response = await invokeWithTimeout(
+      response = await withCaptureAbort(invokeWithTimeout(
         getLingliApi(options).invoke<RealtimeStopResult>('voice.stopRealtime', {
           sessionId: activeSessionId
         }),
         15000,
         '实时语音识别停止超时。'
-      )
+      ), abortCapture?.signal)
+      if (epoch !== generation) throw new Error('VOICE_CAPTURE_CANCELLED')
     } catch (error) {
       if (!stopRequested) {
         await closeRealtimeSession(activeSessionId)
@@ -299,6 +322,7 @@ export function useRealtimeVoiceRecorder(options: RealtimeVoiceRecorderOptions =
   }
 
   async function cancel(): Promise<void> {
+    generation++; abortCapture?.abort()
     const activeSessionId = sessionId
     cleanup()
     await closeRealtimeSession(activeSessionId)
@@ -308,6 +332,7 @@ export function useRealtimeVoiceRecorder(options: RealtimeVoiceRecorderOptions =
     errorMessage,
     flush,
     isRecording,
+    userSpeaking,
     cancel,
     start,
     stopAndTranscribe

@@ -32,7 +32,7 @@ describe('R1 database and legacy import', () => {
       expect(migrated.prepare('SELECT base_volume,queue_version FROM music_settings').get()).toMatchObject({ base_volume: 100, queue_version: 9 })
       expect(migrated.prepare('SELECT entry_id FROM music_queue').all()).toEqual([{ entry_id: 'entry-old' }])
       expect(migrated.prepare('SELECT kind,scene,source_ref FROM music_feedback').get()).toMatchObject({ kind: 'skip', scene: null, source_ref: null })
-      const snapshot = readdirSync(directory).find(name => name.includes('.pre-schema-7-to-8-'))!
+      const snapshot = readdirSync(directory).find(name => name.includes(`.pre-schema-7-to-${R1_SCHEMA_VERSION}-`))!
       const previous = new DatabaseSync(join(directory, snapshot), { readOnly: true })
       try {
         expect(previous.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 7 })

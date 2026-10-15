@@ -16,6 +16,7 @@ import type { MemoryPolicy } from '../main/r1/memoryPolicy.js'
 import type { ConfirmedMemory, MemoryConfirmation } from '../main/r1/memoryConfirmations.js'
 import type { MusicCommand, MusicReport, MusicSnapshot } from '../main/r1/music.js'
 import type { MusicTrack, MusicSourcePreference } from '../main/music/gdstudioMusicProvider.js'
+import type { AppPreferences, PreferencesPatch } from '../main/r1/preferences.js'
 
 export type R1Result<T> =
   | { ok: true; data: T }
@@ -25,6 +26,11 @@ type MethodInput<K extends keyof R1Items> = R1Items[K] extends (input: infer I) 
 type MethodOutput<K extends keyof R1Items> = R1Items[K] extends (...args: never[]) => infer O ? O : never
 
 export type R1Api = {
+  preferences: {
+    get(): Promise<R1Result<AppPreferences>>
+    update(input: PreferencesPatch): Promise<R1Result<AppPreferences>>
+    onChanged(handler: (value: AppPreferences) => void): () => void
+  }
   music: {
     attach(): Promise<R1Result<{ nonce: string; snapshot: MusicSnapshot }>>
     detach(): Promise<R1Result<null>>

@@ -6,8 +6,39 @@ import type { MemoryPolicy } from '../../electron/main/r1/memoryPolicy'
 import type { R1Persona } from '../../electron/main/r1/persona'
 import type { CredentialField, CredentialPatch, CredentialStatus } from '../../electron/main/r1/credentials'
 import type { ServiceCheckReport, ServiceCheckTarget } from '../../electron/main/r1/serviceDiagnostics'
+import { useAppPreferences } from '../composables/useAppPreferences'
+import type { createAudioDevices } from '../services/audioDevices'
 
-const props = defineProps<{ persona: R1Persona | null; voicePreviewing: boolean }>()
+const props = defineProps<{ persona: R1Persona | null; voicePreviewing: boolean; devices?: ReturnType<typeof createAudioDevices> }>()
+const preferences = useAppPreferences()
+const permissionBusy = ref(false)
+let permissionAbort: AbortController | null = null
+onBeforeUnmount(() => permissionAbort?.abort())
+const outputSelectionSupported = typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype &&
+  typeof AudioContext !== 'undefined' && 'setSinkId' in AudioContext.prototype
+onMounted(() => { void preferences.load() })
+async function toggleQuiet(key: 'doNotDisturb' | 'proactiveSpeechEnabled', event: Event): Promise<void> {
+  const checkbox = event.target as HTMLInputElement, enabled = checkbox.checked
+  checkbox.checked = preferences.value.value?.[key] ?? false
+  await preferences.update({ [key]: enabled })
+}
+async function selectDevice(key: 'inputDeviceId' | 'outputDeviceId', event: Event): Promise<void> {
+  const select = event.target as HTMLSelectElement, selected = select.value || null
+  select.value = preferences.value.value?.[key] ?? ''
+  await preferences.update({ [key]: selected })
+}
+async function requestDevicePermission(): Promise<void> {
+  if (!props.devices || permissionBusy.value) return
+  permissionBusy.value = true
+  permissionAbort = new AbortController()
+  try {
+    const result = await window.lingli.invoke<{ granted: boolean }>('app.requestMicrophoneAccess')
+    if (disposed) return
+    if (!result.ok || !result.data.granted) { props.devices.error.value = '麦克风权限未开启。可在系统隐私设置授权；文字仍可使用。'; return }
+    await props.devices.requestPermission(permissionAbort.signal)
+  } catch { props.devices.error.value = '设备授权未完成，请稍后重试。' }
+  finally { permissionBusy.value = false }
+}
 const emit = defineEmits<{
   close: []
   saved: [persona: R1Persona]
@@ -229,6 +260,36 @@ async function clearCredential(field: CredentialField): Promise<void> {
         <button type="button" class="r1-settings-save" :disabled="busy || !persona" @click="savePersona">保存偏好</button>
       </section>
       <section class="r1-settings-section">
+        <details><summary>设备与安静模式</summary>
+          <div class="setting-line"><div><strong>勿扰</strong><small>暂停主动语音，提醒静默保留</small></div>
+            <label class="switch"><input type="checkbox" aria-label="勿扰" :checked="preferences.value.value?.doNotDisturb ?? false" :disabled="!preferences.value.value || preferences.busy.value" @change="toggleQuiet('doNotDisturb', $event)" /><span /></label></div>
+          <div class="setting-line"><div><strong>主动语音</strong><small>允许自动问候和主动播报</small></div>
+            <label class="switch"><input type="checkbox" aria-label="主动语音" :checked="preferences.value.value?.proactiveSpeechEnabled ?? false" :disabled="!preferences.value.value || preferences.busy.value" @change="toggleQuiet('proactiveSpeechEnabled', $event)" /><span /></label></div>
+          <p>关闭主动语音不会删除提醒或任务结果。你发起的交流与音色试听仍可出声。</p>
+          <template v-if="devices">
+            <label for="r1-input-device">输入设备</label>
+            <select id="r1-input-device" :value="preferences.value.value?.inputDeviceId ?? ''" :disabled="!preferences.value.value || preferences.busy.value" @change="selectDevice('inputDeviceId', $event)">
+              <option value="">系统默认麦克风</option>
+              <option v-if="preferences.value.value?.inputDeviceId && !devices.inputs.value.some(device => device.deviceId === preferences.value.value?.inputDeviceId)" :value="preferences.value.value.inputDeviceId">已保存的设备（当前不可用）</option>
+              <option v-for="(device, index) in devices.inputs.value.filter(device => device.deviceId)" :key="device.deviceId" :value="device.deviceId">{{ device.label || `麦克风 ${index + 1}` }}</option>
+            </select>
+            <label for="r1-output-device">输出设备</label>
+            <select id="r1-output-device" :value="preferences.value.value?.outputDeviceId ?? ''" :disabled="!preferences.value.value || preferences.busy.value || !outputSelectionSupported" @change="selectDevice('outputDeviceId', $event)">
+              <option value="">系统默认输出</option>
+              <option v-if="preferences.value.value?.outputDeviceId && !devices.outputs.value.some(device => device.deviceId === preferences.value.value?.outputDeviceId)" :value="preferences.value.value.outputDeviceId">已保存的设备（当前不可用）</option>
+              <option v-for="(device, index) in devices.outputs.value.filter(device => device.deviceId)" :key="device.deviceId" :value="device.deviceId">{{ device.label || `输出设备 ${index + 1}` }}</option>
+            </select>
+            <p v-if="!outputSelectionSupported">当前运行环境不支持指定输出设备，请在系统声音设置中选择。</p>
+            <button v-if="preferences.value.value?.outputDeviceId" type="button" :disabled="preferences.busy.value" @click="preferences.update({ outputDeviceId: null })">恢复系统默认输出</button>
+            <div class="r1-settings-check"><button type="button" :disabled="permissionBusy" @click="requestDevicePermission">{{ permissionBusy ? '授权中…' : '授权并刷新设备' }}</button><button type="button" :disabled="devices.refreshing.value" @click="devices.refresh">刷新列表</button></div>
+            <p>只有主动开启语音时才持续收音。授权刷新会短暂打开并释放麦克风；切换输入设备会停止当前收音，重新开启后生效。</p>
+            <p v-if="devices.error.value" role="alert">{{ devices.error.value }}</p>
+            <p v-else-if="devices.routingActive.value" role="status">正在切换输出设备…</p>
+          </template>
+          <p v-if="preferences.error.value" role="alert">{{ preferences.error.value }}</p>
+        </details>
+      </section>
+      <section class="r1-settings-section">
         <h3>记忆与临时对话</h3>
         <div class="setting-line"><div><strong>记住重要的事</strong><small>自动记忆 · {{ memoryPolicy ? (memoryPolicy.enabled ? '已开启' : '未开启') : '正在读取' }}</small></div>
           <label class="switch"><input type="checkbox" aria-label="设置自动记忆" :checked="memoryPolicy?.enabled ?? false"
@@ -270,6 +331,7 @@ async function clearCredential(field: CredentialField): Promise<void> {
 </template>
 
 <style scoped>
+.r1-settings-section select { width: 100%; min-height: 34px; padding: 7px 9px; background: #1b2422; color: var(--r1-text); border: 1px solid var(--r1-line); border-radius: 5px; font: inherit; }
 .r1-settings-check { display: flex; align-items: center; gap: 10px; margin: 8px 0; font-size: 11px; line-height: 1.6; }
 .r1-settings-check button { flex-shrink: 0; min-height: 30px; padding: 4px 9px; border: 1px solid var(--r1-line); border-radius: 5px; background: #1b2422; color: var(--r1-aqua); font: inherit; }
 .r1-settings-check button:disabled { opacity: .45; }

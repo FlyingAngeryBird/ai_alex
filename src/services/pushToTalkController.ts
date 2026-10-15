@@ -2,7 +2,7 @@ export type PushToTalkSource = 'keyboard' | 'button'
 type Phase = 'idle' | 'starting' | 'recording' | 'finishing' | 'cancelling'
 
 export function createPushToTalkController(options: {
-  start(): Promise<boolean>
+  start(signal: AbortSignal): Promise<boolean>
   finish(): Promise<void>
   cancel(): Promise<void>
   canStart(): boolean
@@ -15,6 +15,7 @@ export function createPushToTalkController(options: {
   let desired: 'held' | 'released' | 'cancelled' = 'released'
   let timer: ReturnType<typeof setTimeout> | null = null
   let disposed = false
+  let captureAbort: AbortController | null = null
   const idleWaiters: Array<() => void> = []
   function clearTimer(): void {
     if (timer !== null) clearTimeout(timer)
@@ -24,6 +25,7 @@ export function createPushToTalkController(options: {
     clearTimer()
     phase = 'idle'
     owner = null
+    captureAbort = null
     options.onHeldChange(false)
     idleWaiters.splice(0).forEach(resolve => resolve())
   }
@@ -38,9 +40,10 @@ export function createPushToTalkController(options: {
     owner = source
     desired = 'held'
     phase = 'starting'
+    captureAbort = new AbortController()
     options.onHeldChange(true)
     let started = false
-    try { started = await options.start() } catch (error) { options.onError(error) }
+    try { started = await options.start(captureAbort.signal) } catch (error) { options.onError(error) }
     if (!started) { idle(); return }
     if ((desired as string) === 'cancelled' || disposed) await settle('cancel')
     else if ((desired as string) === 'released') await settle('finish')
@@ -59,6 +62,7 @@ export function createPushToTalkController(options: {
   async function cancel(): Promise<void> {
     if (!['starting', 'recording'].includes(phase)) return
     desired = 'cancelled'
+    if (phase === 'starting') captureAbort?.abort()
     options.onHeldChange(false)
     clearTimer()
     if (phase === 'recording') await settle('cancel')

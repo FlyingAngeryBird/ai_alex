@@ -5,6 +5,7 @@ describe('IPC contract', () => {
     const { exposedChannels } = await import('../electron/preload/index')
 
     expect(exposedChannels).toEqual([
+      'r1.preferences.get', 'r1.preferences.update',
       'r1.music.attach', 'r1.music.detach', 'r1.music.snapshot', 'r1.music.report', 'r1.music.search', 'r1.music.control', 'r1.music.clearHistory', 'r1.music.exit',
       'app.getRuntimeState',
       'app.requestMicrophoneAccess',
@@ -102,6 +103,6 @@ describe('IPC contract', () => {
   it('exposes only the approved event channels', async () => {
     const { eventChannels } = await import('../electron/preload/index')
 
-    expect(eventChannels).toEqual(['r1.musicCommand', 'r1.musicChanged', 'chat.streamChunk', 'tts.streamAudio', 'voice.nativeEvent', 'r1.reminderDue', 'r1.memoryInvalidated', 'r1.artifactChanged', 'r1.memoryConfirmation', 'r1.memoryPolicyChanged', 'r1.memoryChanged', 'r1.focusChanged', 'r1.taskChanged'])
+    expect(eventChannels).toEqual(['r1.preferencesChanged', 'r1.musicCommand', 'r1.musicChanged', 'chat.streamChunk', 'tts.streamAudio', 'voice.nativeEvent', 'r1.reminderDue', 'r1.memoryInvalidated', 'r1.artifactChanged', 'r1.memoryConfirmation', 'r1.memoryPolicyChanged', 'r1.memoryChanged', 'r1.focusChanged', 'r1.taskChanged'])
   })
 })
