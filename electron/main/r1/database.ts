@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-export const R1_SCHEMA_VERSION = 9
+export const R1_SCHEMA_VERSION = 10
 
 export type R1Database = DatabaseSync
 
@@ -374,6 +374,13 @@ export function openR1Database(databasePath: string): R1Database {
         proactive_speech INTEGER NOT NULL DEFAULT 1 CHECK(proactive_speech IN (0,1)), version INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL)`)
       db.prepare('INSERT OR IGNORE INTO app_preferences(id,updated_at) VALUES(1,?)').run(new Date().toISOString())
       db.exec('PRAGMA user_version=9')
+    })
+  }
+  if (migratedVersion < 10) {
+    inTransaction(db, () => {
+      const columns = new Set((db.prepare('PRAGMA table_info(app_preferences)').all() as { name: string }[]).map(row => row.name))
+      if (!columns.has('reduced_motion')) db.exec('ALTER TABLE app_preferences ADD COLUMN reduced_motion INTEGER NOT NULL DEFAULT 0 CHECK(reduced_motion IN (0,1))')
+      db.exec('PRAGMA user_version=10')
     })
   }
   return db

@@ -1194,7 +1194,10 @@ describe('UI prototype state', () => {
     vi.advanceTimersByTime(80)
 
     expect(audioContext.createAnalyser).toHaveBeenCalledTimes(1)
-    expect(firstFallbackBands.bass).toBe(0.14)
+    expect(firstFallbackBands.bass).toBe(0)
+    expect(firstFallbackBands.mid).toBe(0)
+    expect(firstFallbackBands.treble).toBe(0)
+    expect(music.audioLevel.value).toBe(0)
     expect(music.audioBands.value).toEqual(firstFallbackBands)
 
     vi.useRealTimers()

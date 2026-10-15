@@ -34,8 +34,8 @@ describe('music aura engine rhythm field', () => {
     })).toBe('strong')
   })
 
-  it('creates visible beat constellations for weak-rhythm songs through the hybrid beat clock', () => {
-    let state = createMusicAuraEngineState()
+  it('does not fabricate beat constellations for weak sustained audio from elapsed time alone', () => {
+    let state = { ...createMusicAuraEngineState(), previousBass: 0.34, previousFlux: 0.04 }
 
     for (let frame = 0; frame < 80; frame += 1) {
       state = advanceMusicAuraEngine(state, {
@@ -48,12 +48,19 @@ describe('music aura engine rhythm field', () => {
       }, 0.05, true)
     }
 
-    expect(state.beatCursor).toBeGreaterThanOrEqual(4)
-    expect(state.pulses.length).toBeGreaterThanOrEqual(2)
-    expect(Math.max(...state.pulses.map((pulse) => pulse.strength))).toBeGreaterThan(0.42)
-    expect(new Set(state.pulses.flatMap((pulse) => pulse.groups)).size).toBeGreaterThan(3)
-    expect(state.pulses.every((pulse) => pulse.mood === 'soft')).toBe(true)
-    expect(state.pulses.every((pulse) => (pulse.releaseSeconds ?? 0) >= 0.82)).toBe(true)
+    expect(state.beatCursor).toBe(0)
+    expect(state.pulses).toHaveLength(0)
+    expect(state.coreFlash).toBe(0)
+  })
+
+  it('keeps silent or unavailable frequency data free of artificial beats over time', () => {
+    let state = createMusicAuraEngineState()
+    for (let frame = 0; frame < 1200; frame++) {
+      state = advanceMusicAuraEngine(state, { bass: 0, mid: 0, treble: 0, beat: 0, flux: 0, centroid: 0.32 }, 0.05, true)
+    }
+    expect(state.beatCursor).toBe(0)
+    expect(state.pulses).toHaveLength(0)
+    expect(state.coreFlash).toBe(0)
   })
 
   it('uses shorter stronger flashes for pop and strong rhythm instead of one fixed blink', () => {

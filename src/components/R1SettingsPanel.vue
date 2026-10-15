@@ -9,7 +9,7 @@ import type { ServiceCheckReport, ServiceCheckTarget } from '../../electron/main
 import { useAppPreferences } from '../composables/useAppPreferences'
 import type { createAudioDevices } from '../services/audioDevices'
 
-const props = defineProps<{ persona: R1Persona | null; voicePreviewing: boolean; devices?: ReturnType<typeof createAudioDevices> }>()
+const props = defineProps<{ persona: R1Persona | null; voicePreviewing: boolean; devices?: ReturnType<typeof createAudioDevices>; systemReducedMotion?: boolean }>()
 const preferences = useAppPreferences()
 const permissionBusy = ref(false)
 let permissionAbort: AbortController | null = null
@@ -17,7 +17,7 @@ onBeforeUnmount(() => permissionAbort?.abort())
 const outputSelectionSupported = typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype &&
   typeof AudioContext !== 'undefined' && 'setSinkId' in AudioContext.prototype
 onMounted(() => { void preferences.load() })
-async function toggleQuiet(key: 'doNotDisturb' | 'proactiveSpeechEnabled', event: Event): Promise<void> {
+async function toggleQuiet(key: 'doNotDisturb' | 'proactiveSpeechEnabled' | 'reducedMotion', event: Event): Promise<void> {
   const checkbox = event.target as HTMLInputElement, enabled = checkbox.checked
   checkbox.checked = preferences.value.value?.[key] ?? false
   await preferences.update({ [key]: enabled })
@@ -290,7 +290,7 @@ async function clearCredential(field: CredentialField): Promise<void> {
         </details>
       </section>
       <section class="r1-settings-section">
-        <h3>记忆与临时对话</h3>
+        <h3>记忆与感受</h3>
         <div class="setting-line"><div><strong>记住重要的事</strong><small>自动记忆 · {{ memoryPolicy ? (memoryPolicy.enabled ? '已开启' : '未开启') : '正在读取' }}</small></div>
           <label class="switch"><input type="checkbox" aria-label="设置自动记忆" :checked="memoryPolicy?.enabled ?? false"
             :disabled="!memoryPolicy || memoryPolicyBusy" @change="toggleAutomaticMemory" /><span /></label></div>
@@ -299,6 +299,11 @@ async function clearCredential(field: CredentialField): Promise<void> {
         <p v-if="memoryPolicy?.state === 'processing'" role="status">正在整理这一轮明确的信息…</p>
         <p v-else-if="memoryPolicy?.state === 'failed' || memoryPolicy?.state === 'unavailable'" role="status">这次自动整理未完成，记忆页只显示已保存的内容。请检查对话服务配置。</p>
         <p v-if="memoryPolicyError" role="alert">{{ memoryPolicyError }}</p>
+        <div class="setting-line"><div><strong>减弱音乐动态</strong><small>保留粒子球的基础呼吸</small></div>
+          <label class="switch"><input type="checkbox" aria-label="减弱音乐动态" :checked="preferences.value.value?.reducedMotion ?? false" :disabled="!preferences.value.value || preferences.busy.value" @change="toggleQuiet('reducedMotion', $event)" /><span /></label></div>
+        <p>只减弱视觉变化，音频和歌词照常运行。</p>
+        <p v-if="systemReducedMotion">系统已开启减少动态，当前界面会遵循系统设置。</p>
+        <p v-if="preferences.error.value" role="alert">{{ preferences.error.value }}</p>
       </section>
       <section class="r1-settings-section">
         <h3>服务状态</h3>

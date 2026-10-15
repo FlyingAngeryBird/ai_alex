@@ -34,12 +34,15 @@ import type { R1Persona } from '../electron/main/r1/persona'
 import type { CredentialStatus } from '../electron/main/r1/credentials'
 import { invokeWithTimeout } from './utils/invokeWithTimeout'
 import { useAppPreferences } from './composables/useAppPreferences'
+import { useSystemReducedMotion } from './composables/useSystemReducedMotion'
 import { createAudioDevices } from './services/audioDevices'
 import { createAssistantSpeech, type SpeechPurpose } from './services/assistantSpeech'
 import { withCaptureAbort } from './services/abortableCapture'
 
 const conversation = useConversation()
 const preferences = useAppPreferences()
+const systemReducedMotion = useSystemReducedMotion()
+const reducedMotion = computed(() => systemReducedMotion.value || Boolean(preferences.value.value?.reducedMotion))
 const audioDevices = createAudioDevices({ mediaDevices: () => navigator.mediaDevices,
   inputId: () => preferences.value.value?.inputDeviceId ?? null, outputId: () => preferences.value.value?.outputDeviceId ?? null,
   onOutputFailure: handleOutputDeviceFailure })
@@ -1021,7 +1024,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="r1-shell" :data-view="viewMode" :class="{ 'r1-has-side-panel': hasSidePanel, 'r1-has-wide-panel': searchOpen || taskOpen }">
+  <main class="r1-shell" :data-view="viewMode" :class="{ 'r1-has-side-panel': hasSidePanel, 'r1-has-wide-panel': searchOpen || taskOpen, 'r1-reduce-motion': reducedMotion }">
     <header class="r1-app-header">
       <button class="r1-brand" type="button" @click="music.closeImmersive(); closePanels()"
         aria-label="返回 Seamo 陪伴首页"><AudioLines :size="25" /><span>Seamo <em>AI</em></span></button>
@@ -1049,7 +1052,7 @@ onBeforeUnmount(() => {
       <R1FocusChip v-if="focus.active.value && focus.state.value" :focus="focus.state.value" :busy="focus.busy.value"
         @pause="focus.control('pause')" @resume="focus.control('resume')" @stop="focus.control('stop')" />
       <div class="r1-particle-space" :data-mode="viewMode">
-        <ParticleSphere :state="particleState" :audio-level="audioLevel" :audio-bands="music.audioBands.value" />
+        <ParticleSphere :state="reducedMotion ? 'idle' : particleState" :audio-level="reducedMotion ? 0 : audioLevel" :audio-bands="music.audioBands.value" />
       </div>
       <MiniPlayer v-if="viewMode === 'conversation' && music.hasActiveTrack.value"
         class="r1-ambient-player" :playback="music.playback.value"
@@ -1111,7 +1114,7 @@ onBeforeUnmount(() => {
       :busy="taskState.busy.value" :loading="taskState.loading.value" :error="taskState.error.value"
       @close="closePanels" @select="(id) => { taskState.selectedId.value = id }"
       @control="taskState.control" @retry="taskState.refresh" />
-    <R1SettingsPanel :devices="audioDevices"
+    <R1SettingsPanel :devices="audioDevices" :system-reduced-motion="systemReducedMotion"
       v-if="settingsOpen"
       :persona="persona"
       :voice-previewing="voicePreviewing"

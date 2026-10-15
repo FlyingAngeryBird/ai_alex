@@ -27,12 +27,12 @@ function createInitialPlayback(): PlaybackState {
 
 function createInitialAudioBands(): MusicAudioBands {
   return {
-    bass: 0.14,
+    bass: 0,
     beat: 0,
     centroid: 0.32,
     flux: 0,
-    mid: 0.14,
-    treble: 0.14
+    mid: 0,
+    treble: 0
   }
 }
 
@@ -118,7 +118,7 @@ export function useMusic(options: UseMusicOptions = {}) {
   }
   const viewMode = ref<ViewMode>('conversation')
   const playback = ref<PlaybackState>(createInitialPlayback())
-  const audioLevel = ref(0.14)
+  const audioLevel = ref(0)
   const audioBands = ref<MusicAudioBands>(createInitialAudioBands())
   const searchResults = ref<MusicTrack[]>([])
   const searchResultsVisible = ref(false)
@@ -263,7 +263,7 @@ export function useMusic(options: UseMusicOptions = {}) {
   }
 
   function setUnmeasuredAudioBands(): void {
-    audioLevel.value = 0.14
+    audioLevel.value = 0
     audioBands.value = createInitialAudioBands()
   }
 
@@ -359,7 +359,7 @@ export function useMusic(options: UseMusicOptions = {}) {
 
   function pauseAudioAnalysis(): void {
     clearAudioLevelTimer()
-    audioLevel.value = 0.14
+    audioLevel.value = 0
     audioBands.value = createInitialAudioBands()
   }
 
@@ -404,7 +404,7 @@ export function useMusic(options: UseMusicOptions = {}) {
 
     audioLevelTimer = globalThis.setInterval(() => {
       if (!analyser || !frequencyData || playback.value.status !== 'playing') {
-        audioLevel.value = 0.14
+        audioLevel.value = 0
         audioBands.value = createInitialAudioBands()
         return
       }

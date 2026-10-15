@@ -51,6 +51,29 @@
 @media(max-width:1050px){.r1-shell .music-view:has(.search-glass) .music-layout-v10{opacity:.15;pointer-events:none}.r1-shell .music-view:has(.search-glass) .lyrics{opacity:.15}}
 @media(max-width:760px){.r1-shell .music-topbar{top:12px;left:15px;right:15px}.r1-shell .music-view .search-glass,.r1-shell .music-view .search-glass[data-results=true]{top:62px}.r1-shell .music-layout-v10{left:23px;right:23px;bottom:114px;width:auto;grid-template-columns:65px 1fr;gap:14px}.r1-shell .music-layout-v10 .cover-art,.r1-shell .music-layout-v10 .cover-label{width:65px}.r1-shell .music-layout-v10 .lyrics{top:32%;bottom:42%;left:3%;right:3%;width:auto}.r1-shell .music-layout-v10 .music-copy h2{font-size:24px}.r1-shell .music-layout--loading{left:23px;bottom:128px;width:calc(100% - 46px)}}
 @media(prefers-reduced-motion:reduce){.r1-main-space{transition:none}}
+.r1-reduce-motion *, .r1-reduce-motion *::before, .r1-reduce-motion *::after{animation-duration:0.01ms!important;transition-duration:0.01ms!important;scroll-behavior:auto!important}
+.r1-reduce-motion .r1-particle-space{opacity:0.8}
+/* Match the source prototype's base text and compact desktop viewport rules. */
+.r1-shell{font-size:14px}
+.r1-brand{padding:0;font-weight:500}
+.r1-app-header time{margin-left:14px}
+.r1-basic-side header{align-items:center;padding-bottom:21px}
+.r1-basic-side header small{display:block;margin-bottom:7px;font-size:8px;letter-spacing:0}
+.r1-basic-side h2{margin:0;font-size:22px;line-height:1.5}
+.r1-settings-section{padding:0 0 24px;margin:0 0 23px;border-top:0;border-bottom:1px solid var(--r1-line)}
+.r1-settings-section h3{margin-bottom:20px;font-size:14px;line-height:1.6;color:#cad2c4}
+.r1-settings-section label{margin:18px 0 8px;font-size:12px;color:#a3afa6}
+.r1-settings-section input:not([type=checkbox]),.r1-settings-section textarea{min-height:40px;padding:10px 11px;font-size:13px;line-height:1.65;background:rgba(255,255,255,.025)}
+@media(max-height:760px) and (min-width:761px){
+  :root{--r1-header:60px}
+  .r1-conversation{bottom:124px;gap:15px}
+  .r1-current-reply{font-size:21px;line-height:1.6;max-height:105px}
+  .r1-presence{margin-bottom:10px}
+  .r1-particle-space{inset:-24px 0 222px}
+  .r1-particle-space[data-mode=music]{inset:-18px 35% 215px -3%}
+  .r1-starters{gap:22px}
+}
+@media(max-width:1100px){.r1-app-header time{margin-left:0}}
 .r1-focus-modal>input{box-sizing:border-box;width:100%;padding:10px;border:1px solid #35413d;border-radius:5px;background:#111718;color:#eff1e9;font:inherit}.r1-focus-music-rule{display:flex!important;align-items:center;gap:8px}.r1-focus-music-rule input{width:auto}
 
 .r1-header-task{border:1px solid var(--r1-line);border-radius:18px;background:#ffffff04;color:var(--r1-aqua);padding:6px 12px;font-size:11px;cursor:pointer}

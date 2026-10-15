@@ -193,7 +193,8 @@ function shouldTriggerBeat(
     return false
   }
 
-  return rhythmEnergy >= profile.triggerThreshold || state.beatTimerSeconds >= state.beatIntervalSeconds
+  // Time limits the rate of measured onsets; elapsed time alone is not a beat.
+  return rhythmEnergy >= profile.triggerThreshold
 }
 
 export function advanceMusicAuraEngine(

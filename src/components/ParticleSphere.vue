@@ -25,12 +25,12 @@ const props = withDefaults(defineProps<{
   state: ParticleState
 }>(), {
   audioBands: () => ({
-    bass: 0.14,
+    bass: 0,
     beat: 0,
     centroid: 0.32,
     flux: 0,
-    mid: 0.14,
-    treble: 0.14
+    mid: 0,
+    treble: 0
   })
 })
 

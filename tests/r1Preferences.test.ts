@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { expect, it, vi } from 'vitest'
-import { openR1Database, inTransaction } from '../electron/main/r1/database'
+import { openR1Database, inTransaction, R1_SCHEMA_VERSION } from '../electron/main/r1/database'
 import { R1Preferences } from '../electron/main/r1/preferences'
 import { registerPreferencesHandlers } from '../electron/main/ipc/preferencesHandlers'
 import { createPreferencesController } from '../src/composables/useAppPreferences'
@@ -11,7 +11,7 @@ it('persists versioned device and quiet preferences while keeping rollback and s
   const db = openR1Database(':memory:'), preferences = new R1Preferences(db), changed = vi.fn()
   preferences.onChanged(changed)
   try {
-    expect(preferences.get()).toEqual({ inputDeviceId: null, outputDeviceId: null, doNotDisturb: false, proactiveSpeechEnabled: true, version: 1 })
+    expect(preferences.get()).toEqual({ inputDeviceId: null, outputDeviceId: null, doNotDisturb: false, proactiveSpeechEnabled: true, reducedMotion: false, version: 1 })
     expect(() => inTransaction(db, () => { preferences.update({ expectedVersion: 1, doNotDisturb: true }); throw new Error('rollback') })).toThrow('rollback')
     expect(changed).not.toHaveBeenCalled(); expect(preferences.get().version).toBe(1)
     preferences.update({ expectedVersion: 1, doNotDisturb: true, inputDeviceId: 'selected-mic', outputDeviceId: 'headphones', proactiveSpeechEnabled: false })
@@ -29,7 +29,7 @@ it('migrates schema8 without altering music and leaves a verified schema8 rollba
   try {
     expect(upgraded.prepare('SELECT base_volume,queue_version FROM music_settings').get()).toMatchObject({ base_volume: 30, queue_version: 7 })
     expect(new R1Preferences(upgraded).get().version).toBe(1)
-    const previous = new DatabaseSync(join(directory, readdirSync(directory).find(name => name.includes('.pre-schema-8-to-9-'))!), { readOnly: true })
+    const previous = new DatabaseSync(join(directory, readdirSync(directory).find(name => name.includes(`.pre-schema-8-to-${R1_SCHEMA_VERSION}-`))!), { readOnly: true })
     try { expect(previous.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 8 }); expect(previous.prepare('PRAGMA integrity_check').get()).toMatchObject({ integrity_check: 'ok' }) }
     finally { previous.close() }
   } finally { upgraded.close(); rmSync(directory, { recursive: true, force: true }) }
@@ -49,4 +49,20 @@ it('uses actual preference IPC/CAS and ignores a late older read in the shared f
     expect(frontend.value.value).toMatchObject({ version: 2, doNotDisturb: true })
     expect(handlers.get('r1.preferences.update')!(null, { expectedVersion: 1, doNotDisturb: false })).toMatchObject({ ok: false, error: { code: 'VERSION_CONFLICT' } })
   } finally { frontend.dispose(); db.close() }
+})
+it('upgrades schema9 while preserving saved device/quiet choices and a usable rollback snapshot', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'seamo-motion-')), path = join(directory, 'r1.sqlite'), db = openR1Database(path)
+  new R1Preferences(db).update({ expectedVersion: 1, inputDeviceId: 'selected-mic', doNotDisturb: true })
+  db.exec('ALTER TABLE app_preferences DROP COLUMN reduced_motion; PRAGMA user_version=9'); db.close()
+  const upgraded = openR1Database(path)
+  try {
+    const preferences = new R1Preferences(upgraded)
+    expect(preferences.get()).toMatchObject({ version: 2, inputDeviceId: 'selected-mic', doNotDisturb: true, reducedMotion: false })
+    preferences.update({ expectedVersion: 2, reducedMotion: true })
+    expect(new R1Preferences(upgraded).get()).toMatchObject({ version: 3, reducedMotion: true })
+    expect(() => preferences.update({ expectedVersion: 3, reducedMotion: 'true' } as never)).toThrow('INVALID_PREFERENCES_PATCH')
+    const snapshot = new DatabaseSync(join(directory, readdirSync(directory).find(name => name.includes(`.pre-schema-9-to-${R1_SCHEMA_VERSION}-`))!), { readOnly: true })
+    try { expect(snapshot.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 9 }); expect(snapshot.prepare('SELECT do_not_disturb,version FROM app_preferences').get()).toMatchObject({ do_not_disturb: 1, version: 2 }) }
+    finally { snapshot.close() }
+  } finally { upgraded.close(); rmSync(directory, { recursive: true, force: true }) }
 })
