@@ -14,6 +14,8 @@ import type { TopicSummaryState } from '../main/r1/topicSummaries.js'
 import type { AutomaticMemoryState } from '../main/r1/automaticMemory.js'
 import type { MemoryPolicy } from '../main/r1/memoryPolicy.js'
 import type { ConfirmedMemory, MemoryConfirmation } from '../main/r1/memoryConfirmations.js'
+import type { MusicCommand, MusicReport, MusicSnapshot } from '../main/r1/music.js'
+import type { MusicTrack, MusicSourcePreference } from '../main/music/gdstudioMusicProvider.js'
 
 export type R1Result<T> =
   | { ok: true; data: T }
@@ -23,6 +25,18 @@ type MethodInput<K extends keyof R1Items> = R1Items[K] extends (input: infer I) 
 type MethodOutput<K extends keyof R1Items> = R1Items[K] extends (...args: never[]) => infer O ? O : never
 
 export type R1Api = {
+  music: {
+    attach(): Promise<R1Result<{ nonce: string; snapshot: MusicSnapshot }>>
+    detach(): Promise<R1Result<null>>
+    snapshot(): Promise<R1Result<MusicSnapshot>>
+    report(input: { nonce: string; report: MusicReport }): Promise<R1Result<null>>
+    search(input: { keyword: string; sourcePreference?: MusicSourcePreference }): Promise<R1Result<MusicTrack[]>>
+    clearHistory(): Promise<R1Result<null>>
+    exit(input: { expectedVersion: number }): Promise<R1Result<Record<string, unknown>>>
+    control(input: { alias: string; args: Record<string, unknown>; temporarySaveConfirmed?: boolean }): Promise<R1Result<Record<string, unknown>>>
+    onCommand(handler: (command: MusicCommand) => void): () => void
+    onChanged(handler: (snapshot: MusicSnapshot) => void): () => void
+  }
   topics: {
     list(input?: { query?: string; page?: number }): Promise<R1Result<ReturnType<R1Topics['list']> & { preparation: TopicSummaryState }>>
     details(topicId: string): Promise<R1Result<{ topic: R1Topic; versions: Array<R1Topic & { origin: string }>; sources: TopicSource[]; related: ReturnType<R1Topics['related']> }>>

@@ -59,6 +59,7 @@ export class R1TaskSupervisor {
   private suspended = false
   private closed = false
   private pendingEvents: TaskEvent[] | null = null
+  private readonly musicOperations = new Map<string, { fingerprint: string; promise: Promise<TaskToolReceipt> }>()
   constructor(private readonly db: R1Database, private readonly assets: R1PromptAssets,
     private readonly deletionEpoch: () => number, private readonly options: {
       clock?: () => number; temporarySource?: (messageId: string) => TaskSource | undefined; artifacts?: R1Artifacts
@@ -435,7 +436,60 @@ ${source.snippet}
     for (const event of events) for (const listener of this.listeners) { try { listener(structuredClone(event)) } catch { /* committed */ } }
     return structuredClone(output)
   }
-  /** External reads reserve authority/budget before I/O, then commit only against the same live lease. */
+  /** Reserve authority before audio I/O; keep actual device receipts even if the run is cancelled. */
+  async executeMusicTool(lease: TaskLease, alias: string, input: unknown, run: () => Promise<Record<string, unknown>>, callId?: string): Promise<TaskToolReceipt> {
+    this.assertLease(lease); this.assets.validateToolInput(alias, input)
+    if (!alias.startsWith('music_')) throw new Error('TASK_TOOL_IMPLEMENTATION_UNAVAILABLE')
+    if (callId !== undefined && (!callId || callId.length > 300)) throw new Error('TASK_TOOL_CALL_ID_INVALID')
+    const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object'
+      ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, nested]) => [key, canonical(nested)])) : value
+    const fingerprint = JSON.stringify({ alias, input: canonical(input) })
+    const key = callId ? `${lease.runId}:${callId}` : randomUUID()
+    const pending = this.musicOperations.get(key)
+    if (pending) { if (pending.fingerprint !== fingerprint) throw new Error('TASK_TOOL_CALL_ID_REUSED'); return pending.promise }
+    const promise = this.executeMusicToolOnce(lease, alias, canonical(input), run, callId).finally(() => { this.musicOperations.delete(key) })
+    this.musicOperations.set(key, { fingerprint, promise }); return promise
+  }
+  private async executeMusicToolOnce(lease: TaskLease, alias: string, input: unknown, run: () => Promise<Record<string, unknown>>, callId?: string): Promise<TaskToolReceipt> {
+    const fingerprint = createHash('sha256').update(JSON.stringify(input)).digest('hex')
+    const actionId = this.consumeTool(lease, alias, callId ? { callId, fingerprint } : undefined)
+    const record = this.checked(lease.taskId)
+    if (record.checkpoint.receiptActionIds.includes(actionId)) {
+      const previous = this.readReceipt(lease, actionId)
+      if (previous.status === 'unknown') throw new Error('TASK_RECEIPT_RECONCILIATION_REQUIRED')
+      return previous
+    }
+    if (record.checkpoint.actions!.find(action => action.actionId === actionId)!.runId !== lease.runId) throw new Error('TASK_RECEIPT_RECONCILIATION_REQUIRED')
+    let receipt: TaskToolReceipt
+    try {
+      const data = await run()
+      receipt = { kind: 'receipt', actionId, tool: this.assets.toolDefinition(alias).name, status: 'succeeded',
+        entityId: (data.state as { track?: { trackKey?: string } } | undefined)?.track?.trackKey ?? null,
+        entityVersion: (data.state as { playerVersion?: number } | undefined)?.playerVersion ?? null, data, errorCode: null, retryable: false, runId: lease.runId }
+      this.assets.validateToolOutput(alias, receipt)
+    } catch (error) {
+      const code = error instanceof Error && /^[A-Z][A-Z0-9_]{1,80}$/.test(error.message) ? error.message : 'MUSIC_OPERATION_FAILED'
+      receipt = { kind: 'receipt', actionId, tool: this.assets.toolDefinition(alias).name,
+        status: code === 'MUSIC_PLAYBACK_UNKNOWN' ? 'unknown' : ['MUSIC_SUPERSEDED', 'TASK_NOT_RUNNING', 'TASK_CONTEXT_STALE'].includes(code) ? 'cancelled' : 'failed',
+        entityId: null, entityVersion: null, data: {}, errorCode: code, retryable: false, runId: lease.runId }
+    }
+    this.assets.validateToolOutput(alias, receipt)
+    // An audio device may have acted before a cancellation/goal change. Keep its
+    // actual receipt, then reject the stale model continuation instead of hiding the action.
+    const current = this.records.get(lease.taskId)
+    if (current && current.checkpoint.actions?.some(action => action.actionId === actionId && action.runId === lease.runId)) {
+      inTransaction(this.db, () => {
+        if (!current.temporary) this.db.prepare(`INSERT INTO receipts(action_id,task_id,run_id,entity_id,entity_version,status,actual_result_json,created_at)
+          VALUES (?,?,?,?,?,?,?,?)`).run(actionId, lease.taskId, lease.runId, receipt.entityId, receipt.entityVersion, receipt.status, JSON.stringify(receipt), new Date().toISOString())
+        current.checkpoint.toolReceipts ??= []; current.checkpoint.toolReceipts.push(structuredClone(receipt))
+        current.checkpoint.receiptActionIds.push(actionId)
+        current.checkpoint.observations.push({ refId: actionId, kind: 'receipt', version: 1, summary: `${receipt.tool}: ${receipt.status}`, resourcePath: `/task/${lease.taskId}/receipts/${actionId}.json` })
+        this.persist(current)
+      })
+    }
+    this.assertLease(lease); this.emit(this.checked(lease.taskId), 'updated'); return receipt
+  }
+
   async executeReadTool(lease: TaskLease, alias: string, input: unknown,
     run: () => Promise<Record<string, unknown>>, callId?: string): Promise<TaskToolReceipt> {
     this.assertLease(lease)
@@ -518,7 +572,7 @@ ${source.snippet}
     const record = this.checked(lease.taskId)
     const output = record.checkpoint.toolReceipts?.find(receipt => receipt.actionId === actionId)
     if (!output) throw new Error('TASK_RECEIPT_NOT_VERIFIED')
-    if (!record.temporary || output.entityId !== null) {
+    if (!record.temporary || output.entityId !== null && !output.tool.startsWith('music.')) {
       const row = this.db.prepare('SELECT status, task_id FROM receipts WHERE action_id = ?').get(actionId) as { status: string; task_id: string } | undefined
       if (!row || row.status !== output.status || (!record.temporary && row.task_id !== record.taskId)) throw new Error('TASK_RECEIPT_RECONCILIATION_REQUIRED')
     }
@@ -547,7 +601,7 @@ ${source.snippet}
       const row = this.db.prepare('SELECT status, entity_id FROM receipts WHERE action_id = ?').get(receipt.actionId) as {
         status: TaskToolReceipt['status']; entity_id: string | null
       } | undefined
-      const status = record.temporary && receipt.entityId === null ? receipt.status : row?.status ?? 'unknown'
+      const status = record.temporary && (receipt.entityId === null || receipt.tool.startsWith('music.')) ? receipt.status : row?.status ?? 'unknown'
       return { actionId: receipt.actionId, tool: receipt.tool, status,
         entityId: row?.entity_id ?? receipt.entityId, summary: '以实际执行回执为准。' }
     })

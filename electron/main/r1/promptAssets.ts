@@ -28,6 +28,7 @@ export type R1PromptAssets = {
   releaseId: string
   schemaVersion: string
   summaryWindow(): { recentTurnLimit: number; triggerFraction: number; requestTimeoutMs: number }
+  musicPolicy(): { resourceAttempts: number; deviceTimeoutMs: number }
   toolAliases: readonly string[]
   compose(persona: R1Persona, context: Record<string, unknown>, mode?: 'textOnly' | 'realtime'): string
   composeTask(persona: R1Persona, taskInput: Record<string, unknown>): R1CompiledPrompt
@@ -204,6 +205,7 @@ export function loadR1PromptAssets(root: string): R1PromptAssets {
       return structuredClone(tool)
     },
     summaryWindow: () => ({ recentTurnLimit: runtime.context.recentTurnLimit, triggerFraction: runtime.context.summaryTriggerFraction, requestTimeoutMs: runtime.limits.summaryRequestTimeoutMs }),
+    musicPolicy: () => ({ resourceAttempts: runtime.limits.musicResourceAttempts, deviceTimeoutMs: runtime.limits.connectTimeoutMs }),
     taskBudget(complexity) {
       if (!['light', 'complex'].includes(complexity)) throw new Error('TASK_COMPLEXITY_INVALID')
       const limits = runtime.limits

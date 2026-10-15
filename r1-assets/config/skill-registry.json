@@ -1,5 +1,5 @@
 {
-  "releaseId": "seamo-ai-r1-agent-assets-2.4.2",
+  "releaseId": "seamo-ai-r1-agent-assets-2.5.1",
   "entries": [
     {
       "skillId": "SK01",
@@ -87,7 +87,7 @@
       "skillId": "SK05",
       "name": "music-companion",
       "legacyKey": "music_companion",
-      "version": "1.0.0",
+      "version": "1.1.1",
       "description": "按明确播放需求推荐或匹配歌曲，控制播放器、队列、收藏与反馈，配合边听边聊。适用于点歌或媒体控制；提到歌曲和情绪表达不自动播放。",
       "path": "skills/music-companion/SKILL.md",
       "resourcePaths": [

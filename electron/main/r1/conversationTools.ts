@@ -12,6 +12,8 @@ import type { R1Task, R1TaskSupervisor } from './taskSupervisor.js'
 import { R1Items } from './items.js'
 import { R1Artifacts } from './artifacts.js'
 import { bindArtifactEdit, type ArtifactEditingContext, type ArtifactEditProposal } from './artifactContext.js'
+import { musicAliases, type R1Music } from './music.js'
+import { R1MusicTools } from './musicTools.js'
 import { afterTransactionCommit, inTransaction, type R1Database } from './database.js'
 
 export type ConversationToolScope = { source: SessionMessage; temporary: boolean; timezone: string;
@@ -34,16 +36,20 @@ export class R1ConversationTools {
   memoryConfirmation: MemoryConfirmation | null = null
   private readonly memories: R1MemoryTools
   private readonly focus?: R1FocusTools
+  private readonly music?: R1MusicTools
+  private readonly musicService?: R1Music
+  private readonly pendingCalls = new Map<string, { fingerprint: string; promise: Promise<Record<string, unknown>> }>()
   private readonly reminders: R1ReminderTools
   private readonly calls = new Map<string, { fingerprint: string; output: Record<string, unknown> }>()
   readonly loadedSkillIds = new Set<string>(['SK01'])
   constructor(private readonly db: R1Database, private readonly assets: R1PromptAssets,
     private readonly tasks: R1TaskSupervisor, private readonly scope: ConversationToolScope,
-    private readonly implementedTaskAliases: readonly string[], services?: FocusToolServices, private readonly artifacts: R1Artifacts = new R1Artifacts(db)) {
+    private readonly implementedTaskAliases: readonly string[], services?: FocusToolServices, private readonly artifacts: R1Artifacts = new R1Artifacts(db), music?: R1Music) {
     scope.assertCurrent()
     const recallProperties = assets.toolDefinition('memory_recall').output_data_schema.properties as Record<string, unknown> | undefined
     this.memories = new R1MemoryTools(new R1MemoryStore(db), scope.source, recallProperties && Object.hasOwn(recallProperties, 'topics') ? new R1Topics(db) : undefined)
     if (services) { this.aliases.push(...focusToolAliases); this.focus = new R1FocusTools(services, scope.source, scope.assertCurrent) }
+    if (music) { this.musicService = music; this.aliases.push(...musicAliases); this.music = new R1MusicTools(music, { ...scope, sourceRef: scope.source.messageId }) }
     this.reminders = new R1ReminderTools(new R1Items(db), { source: { ...scope.source, timezone: scope.timezone },
       assertCurrent: scope.assertCurrent, checkSources: refs => this.checkReminderSources(refs), timeSource: refs => this.reminderSource(refs), requirePersistence: () => {
         scope.assertCurrent()
@@ -93,7 +99,48 @@ export class R1ConversationTools {
     return { ...current, body: day ? `${day} ${current.body}` : current.body,
       createdAt: previous?.createdAt ?? current.createdAt, timezone: this.scope.timezone }
   }
-  execute(alias: string, input: unknown, callId: string): Record<string, unknown> {
+  async executeAsync(alias: string, input: unknown, callId: string): Promise<Record<string, unknown>> {
+    if (!(musicAliases as readonly string[]).includes(alias)) return this.execute(alias, input, callId)
+    const fingerprint = this.validateCall(alias, input, callId), prior = this.calls.get(callId)
+    if (prior) return structuredClone(prior.output)
+    const pending = this.pendingCalls.get(callId)
+    if (pending) { if (pending.fingerprint !== fingerprint) throw new Error('CONVERSATION_CALL_ID_REUSED'); return pending.promise }
+    const actionId = randomUUID(), args = input as Record<string, unknown>
+    const promise = (async () => {
+      let receipt: Record<string, unknown>
+      let mediaConfirmed = false
+      try {
+        const local = ['music_get_state', 'music_queue', 'music_favorite', 'music_feedback'].includes(alias)
+        const build = (data: Record<string, unknown>) => ({ kind: 'receipt', actionId, tool: this.assets.toolDefinition(alias).name,
+          status: 'succeeded', entityId: alias === 'music_feedback' ? data.feedbackId : (data.state as { track?: { trackKey?: string } } | undefined)?.track?.trackKey ?? args.trackKey ?? null,
+          entityVersion: (data.state as { playerVersion?: number } | undefined)?.playerVersion ?? null, data, errorCode: null, retryable: false, runId: null })
+        if (local) receipt = inTransaction(this.db, () => { this.scope.assertCurrent(); const value = build(this.music!.local(alias, args)); this.assets.validateToolOutput(alias, value); this.saveMusicReceipt(value); return value })
+        else {
+          receipt = build(await this.music!.execute(alias, args)); mediaConfirmed = true
+          this.assets.validateToolOutput(alias, receipt)
+          // Cache the observed outcome before durable I/O, so a storage failure cannot repeat audio.
+          this.calls.set(callId, { fingerprint, output: structuredClone(receipt) })
+          this.saveMusicReceipt(receipt)
+        }
+      } catch (error) {
+        if (mediaConfirmed) throw new Error('MUSIC_RECEIPT_PERSIST_FAILED')
+        const errorCode = code(error)
+        receipt = { kind: 'receipt', actionId, tool: this.assets.toolDefinition(alias).name,
+          status: errorCode === 'MUSIC_PLAYBACK_UNKNOWN' ? 'unknown' : ['MUSIC_SUPERSEDED', 'SESSION_CHANGED', 'RESPONSE_STOPPED'].includes(errorCode) ? 'cancelled' : 'failed',
+          entityId: null, entityVersion: null, data: {}, errorCode, retryable: false, runId: null }
+        this.assets.validateToolOutput(alias, receipt); this.saveMusicReceipt(receipt)
+      }
+      this.calls.set(callId, { fingerprint, output: structuredClone(receipt) })
+      this.scope.assertCurrent(); return receipt
+    })().finally(() => { this.pendingCalls.delete(callId) })
+    this.pendingCalls.set(callId, { fingerprint, promise }); return this.musicService!.trackExecution(promise)
+  }
+  private saveMusicReceipt(receipt: Record<string, unknown>): void {
+    if (this.scope.temporary) return
+    this.db.prepare('INSERT OR IGNORE INTO receipts(action_id,entity_id,entity_version,status,actual_result_json,created_at) VALUES (?,?,?,?,?,?)')
+      .run(receipt.actionId as string, receipt.entityId as string | null, receipt.entityVersion as number | null, receipt.status as string, JSON.stringify(receipt), new Date().toISOString())
+  }
+  private validateCall(alias: string, input: unknown, callId: string): string {
     this.scope.assertCurrent(); this.assets.validateToolInput(alias, input)
     if (!this.aliases.includes(alias)) throw new Error('MODEL_TOOL_NOT_EXPOSED')
     if (!this.assets.exposeTools({ channel: 'realtime', loadedSkillIds: [...this.loadedSkillIds],
@@ -103,8 +150,12 @@ export class R1ConversationTools {
     const previous = this.calls.get(callId)
     if (previous) {
       if (previous.fingerprint !== fingerprint) throw new Error('CONVERSATION_CALL_ID_REUSED')
-      return structuredClone(previous.output)
     }
+    return fingerprint
+  }
+  execute(alias: string, input: unknown, callId: string): Record<string, unknown> {
+    const fingerprint = this.validateCall(alias, input, callId), previous = this.calls.get(callId)
+    if (previous) return structuredClone(previous.output)
     if (this.memoryMutationReceipt) throw new Error('MEMORY_CONTEXT_REVOKED')
     const args = input as Record<string, unknown>
     let output: Record<string, unknown>

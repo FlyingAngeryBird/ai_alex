@@ -6,16 +6,32 @@ import { randomUUID } from 'node:crypto'
 import type { R1PromptAssets } from './promptAssets.js'
 import type { R1TaskSupervisor, TaskLease, TaskToolReceipt } from './taskSupervisor.js'
 import type { R1Items } from './items.js'
+import { musicAliases, type R1Music } from './music.js'
+import { R1MusicTools } from './musicTools.js'
 type PlanInput = Parameters<R1TaskSupervisor['updatePlan']>[1]
 
 /** Registered synchronous local tools; no host filesystem, shell or model-controlled authorization. */
 export class R1TaskToolExecutor {
   private readonly focusTools = new Map<string, R1FocusTools>()
   private readonly reminders = new Map<string, R1ReminderTools>()
+  private readonly musicTools = new Map<string, R1MusicTools>()
   readonly implementedAliases: readonly string[]
   constructor(private readonly tasks: R1TaskSupervisor, private readonly assets: R1PromptAssets,
-    private readonly items?: R1Items, private readonly search?: ReturnType<typeof createBraveSearchProvider>, private readonly pages?: ReturnType<typeof createPageReader>, private readonly services?: FocusToolServices) {
-    this.implementedAliases = Object.freeze(['read_file', 'write_todos', ...(items ? ['notes_create', ...reminderToolAliases] : []), ...(search ? ['web_search'] : []), ...(pages ? ['web_read_page'] : []), ...(services ? focusToolAliases : [])])
+    private readonly items?: R1Items, private readonly search?: ReturnType<typeof createBraveSearchProvider>, private readonly pages?: ReturnType<typeof createPageReader>, private readonly services?: FocusToolServices,
+    private readonly music?: R1Music) {
+    this.implementedAliases = Object.freeze(['read_file', 'write_todos', ...(items ? ['notes_create', ...reminderToolAliases] : []), ...(search ? ['web_search'] : []), ...(pages ? ['web_read_page'] : []), ...(services ? focusToolAliases : []), ...(music ? musicAliases : [])])
+  }
+  private musicSession(lease: TaskLease): R1MusicTools {
+    let tools = this.musicTools.get(lease.runId)
+    if (!tools) {
+      this.musicTools.clear(); const source = this.tasks.originalSource(lease)
+      const tasks = this.tasks
+      tools = new R1MusicTools(this.music!, { temporary: source.temporary,
+        get persistenceConfirmed() { tasks.assertPersistenceAllowed(lease); return true },
+        sourceRef: source.messageId, assertCurrent: () => this.tasks.assertLease(lease) })
+      this.musicTools.set(lease.runId, tools)
+    }
+    return tools
   }
   private reminderTools(lease: TaskLease): R1ReminderTools {
     let tools = this.reminders.get(lease.runId)
@@ -29,6 +45,11 @@ export class R1TaskToolExecutor {
     return tools
   }
   async executeAsync(lease: TaskLease, alias: string, input: unknown, callId?: string, signal?: AbortSignal): Promise<TaskToolReceipt> {
+    if ((musicAliases as readonly string[]).includes(alias)) {
+      if (!this.music) throw new Error('TASK_TOOL_IMPLEMENTATION_UNAVAILABLE')
+      if (['music_get_state', 'music_queue', 'music_favorite', 'music_feedback'].includes(alias)) return this.execute(lease, alias, input, callId)
+      return this.music.trackExecution(this.tasks.executeMusicTool(lease, alias, input, () => this.musicSession(lease).execute(alias, input as Record<string, unknown>), callId))
+    }
     if (alias === 'web_read_page') {
       if (!this.pages) throw new Error('TASK_TOOL_IMPLEMENTATION_UNAVAILABLE')
       const args = input as Parameters<NonNullable<typeof this.pages>['read']>[0]
@@ -58,6 +79,10 @@ export class R1TaskToolExecutor {
     this.assets.validateToolInput(alias, input)
     if (!this.implementedAliases.includes(alias)) throw new Error('TASK_TOOL_IMPLEMENTATION_UNAVAILABLE')
     const receipt = this.tasks.executeLocalTool(lease, alias, input, actionId => {
+      if ((musicAliases as readonly string[]).includes(alias)) {
+        if (alias !== 'music_get_state') this.tasks.assertPersistenceAllowed(lease)
+        return { data: this.musicSession(lease).local(alias, input as Record<string, unknown>) }
+      }
       if ((focusToolAliases as readonly string[]).includes(alias)) {
         let focus = this.focusTools.get(lease.runId)
         if (!focus) {
@@ -106,6 +131,12 @@ export class R1TaskToolExecutor {
       return { data }
     }, callId)
     if (this.items) this.reminderTools(lease).observe(receipt)
+    if (this.music && alias === 'read_file' && receipt.status === 'succeeded') {
+      try {
+        const replay = JSON.parse(String(receipt.data.content)) as { tool?: string; status?: string; data?: Record<string, unknown> }
+        if (replay.tool?.startsWith('music.') && replay.status === 'succeeded' && replay.data) this.musicSession(lease).observe(replay.data)
+      } catch { /* Non-receipt material cannot grant a music identity. */ }
+    }
     return receipt
   }
 }

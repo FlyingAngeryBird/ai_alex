@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "2.4.0",
+  "schemaVersion": "2.5.1",
   "businessTools": [
     {
       "name": "memory.recall",
@@ -3267,6 +3267,92 @@
               "maxLength": 300
             },
             "maxItems": 50
+          },
+          "feedback": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "properties": {
+                "feedbackId": {
+                  "type": "string",
+                  "maxLength": 160
+                },
+                "track": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "trackKey": {
+                          "type": "string",
+                          "maxLength": 160
+                        },
+                        "title": {
+                          "type": "string",
+                          "maxLength": 300
+                        },
+                        "artist": {
+                          "type": "string",
+                          "maxLength": 300
+                        },
+                        "sourceProvider": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        "durationSec": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "trackKey",
+                        "title",
+                        "artist",
+                        "sourceProvider",
+                        "durationSec"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "feedback": {
+                  "type": "string",
+                  "enum": [
+                    "like",
+                    "dislike",
+                    "skip"
+                  ]
+                },
+                "scene": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "feedbackId",
+                "track",
+                "feedback",
+                "scene"
+              ],
+              "additionalProperties": false
+            }
           }
         },
         "required": [

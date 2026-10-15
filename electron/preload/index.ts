@@ -2,6 +2,7 @@ import { createRequire } from 'node:module'
 import type { R1Api, R1Result } from '../shared/r1Api.js'
 
 export const exposedChannels = [
+  'r1.music.attach', 'r1.music.detach', 'r1.music.snapshot', 'r1.music.report', 'r1.music.search', 'r1.music.control', 'r1.music.clearHistory', 'r1.music.exit',
   'app.getRuntimeState',
   'app.requestMicrophoneAccess',
   'chat.sendMessage',
@@ -97,6 +98,7 @@ export const exposedChannels = [
 export type ExposedChannel = (typeof exposedChannels)[number]
 
 export const eventChannels = [
+  'r1.musicCommand', 'r1.musicChanged',
   'chat.streamChunk',
   'tts.streamAudio',
   'voice.nativeEvent',
@@ -166,6 +168,14 @@ function exposeLingliApi(
     return renderer.invoke(channel, payload) as Promise<R1Result<T>>
   }
   const r1Api: R1Api = {
+    music: {
+      attach: () => invokeR1('r1.music.attach'), detach: () => invokeR1('r1.music.detach'), snapshot: () => invokeR1('r1.music.snapshot'),
+      report: input => invokeR1('r1.music.report', input), search: input => invokeR1('r1.music.search', input),
+      control: input => invokeR1('r1.music.control', input), clearHistory: () => invokeR1('r1.music.clearHistory'),
+      exit: input => invokeR1('r1.music.exit', input),
+      onCommand: handler => { const listener = (...args: unknown[]) => handler(args[1] as Parameters<typeof handler>[0]); renderer.on('r1.musicCommand', listener); return () => renderer.removeListener('r1.musicCommand', listener) },
+      onChanged: handler => { const listener = (...args: unknown[]) => handler(args[1] as Parameters<typeof handler>[0]); renderer.on('r1.musicChanged', listener); return () => renderer.removeListener('r1.musicChanged', listener) }
+    },
     topics: {
       list: input => invokeR1('r1.topics.list', input),
       details: topicId => invokeR1('r1.topics.details', { topicId }),

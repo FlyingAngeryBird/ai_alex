@@ -12,12 +12,13 @@ import { R1ConversationTools, type ConversationToolScope } from './conversationT
 import { R1ModelRequestBoundary } from './modelBoundary.js'
 import { R1Artifacts } from './artifacts.js'
 import { currentArtifactContext, type ArtifactEditingContext } from './artifactContext.js'
+import type { R1Music } from './music.js'
 
 export class R1ConversationDriver {
   constructor(private readonly db: R1Database, private readonly assets: R1PromptAssets,
     private readonly tasks: R1TaskSupervisor, private readonly provider: ReturnType<typeof createArkResponsesProvider>,
     private readonly persona: () => R1Persona, private readonly implementedTaskAliases: readonly string[], private readonly services?: FocusToolServices,
-    private readonly artifacts: R1Artifacts = new R1Artifacts(db)) {}
+    private readonly artifacts: R1Artifacts = new R1Artifacts(db), private readonly music?: R1Music) {}
   artifactContext(mode: import('./sessionMode.js').R1SessionMode | undefined) { return currentArtifactContext(mode, this.artifacts) }
   topicContext(mode: import('./sessionMode.js').R1SessionMode | undefined) { return topicConversationContext(this.db, mode) }
   selectedEntity(mode: import('./sessionMode.js').R1SessionMode | undefined) {
@@ -25,7 +26,7 @@ export class R1ConversationDriver {
   }
   async reply(input: { scope: ConversationToolScope; messages: ChatMessage[]; context: Record<string, unknown> }): Promise<AssistantOutput> {
     const tools = new R1ConversationTools(this.db, this.assets, this.tasks, { ...input.scope,
-      selectedArtifact: input.context.currentArtifact as ArtifactEditingContext | null | undefined }, this.implementedTaskAliases, this.services, this.artifacts)
+      selectedArtifact: input.context.currentArtifact as ArtifactEditingContext | null | undefined }, this.implementedTaskAliases, this.services, this.artifacts, this.music)
     const rounds: ArkResponseRound[] = []
     // The conversation only dispatches immediate actions/control; long work has its own frozen Task budget.
     let remainingTools = 6
@@ -45,7 +46,7 @@ export class R1ConversationDriver {
         const results: ArkResponseRound['results'] = []
         for (const call of response.calls) {
           remainingTools--
-          results.push({ callId: call.call_id, output: tools.execute(call.name, JSON.parse(call.arguments), call.call_id) })
+          results.push({ callId: call.call_id, output: await tools.executeAsync(call.name, JSON.parse(call.arguments), call.call_id) })
           if (tools.memoryConfirmation) return { intent: 'chat', music: null, reply: '这条记忆还没有保存，请在确认框中决定。' }
           if (tools.memoryMutationReceipt) return { intent: 'chat', music: null, reply: memoryMutationReply(tools.memoryMutationReceipt) }
         }

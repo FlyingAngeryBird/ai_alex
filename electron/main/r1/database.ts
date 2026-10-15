@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-export const R1_SCHEMA_VERSION = 7
+export const R1_SCHEMA_VERSION = 8
 
 export type R1Database = DatabaseSync
 
@@ -352,6 +352,19 @@ export function openR1Database(databasePath: string): R1Database {
           'sourceRefs', json(source_refs_json), 'status', status, 'version', version, 'deletionEpoch', deletion_epoch, 'updatedAt', updated_at),
         'legacy', updated_at FROM topics WHERE deleted_at IS NULL`)
       db.exec('PRAGMA user_version = 7')
+    })
+  }
+  if (migratedVersion < 8) {
+    inTransaction(db, () => {
+      db.exec(`CREATE TABLE IF NOT EXISTS music_settings (id INTEGER PRIMARY KEY CHECK(id=1),
+        base_volume REAL NOT NULL DEFAULT 100, queue_version INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS music_search_history (query TEXT PRIMARY KEY, searched_at TEXT NOT NULL)`)
+      db.prepare('INSERT OR IGNORE INTO music_settings(id, updated_at) VALUES (1, ?)').run(new Date().toISOString())
+      const columns = new Set((db.prepare('PRAGMA table_info(music_feedback)').all() as { name: string }[]).map(row => row.name))
+      if (!columns.has('scene')) db.exec('ALTER TABLE music_feedback ADD COLUMN scene TEXT')
+      if (!columns.has('source_ref')) db.exec('ALTER TABLE music_feedback ADD COLUMN source_ref TEXT')
+      db.exec('UPDATE music_settings SET queue_version=(SELECT COALESCE(MAX(queue_version),0) FROM music_queue)')
+      db.exec('PRAGMA user_version = 8')
     })
   }
   return db

@@ -1,4 +1,5 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { DatabaseSync } from 'node:sqlite'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -20,6 +21,27 @@ afterEach(() => {
 })
 
 describe('R1 database and legacy import', () => {
+  it('upgrades v7 music without losing saved identities and retains a readable v7 rollback snapshot', () => {
+    const directory = makeDirectory(), path = join(directory, 'v7.sqlite'), db = openR1Database(path)
+    db.prepare('INSERT INTO music_favorites VALUES (?,?,?)').run('netease:old', JSON.stringify({ source: 'netease', id: 'old', title: '原收藏', artist: '原歌手', durationMs: 0 }), '2026-10-14')
+    db.prepare('INSERT INTO music_queue VALUES (?,?,?,?,?)').run('entry-old', 0, 'netease:old', '{}', 9)
+    db.prepare('INSERT INTO music_feedback(feedback_id,track_key,kind,created_at) VALUES (?,?,?,?)').run('feedback-old', 'netease:old', 'skip', '2026-10-14')
+    db.exec('DROP TABLE music_settings; DROP TABLE music_search_history; ALTER TABLE music_feedback DROP COLUMN scene; ALTER TABLE music_feedback DROP COLUMN source_ref; PRAGMA user_version=7'); db.close()
+    const migrated = openR1Database(path)
+    try {
+      expect(migrated.prepare('SELECT base_volume,queue_version FROM music_settings').get()).toMatchObject({ base_volume: 100, queue_version: 9 })
+      expect(migrated.prepare('SELECT entry_id FROM music_queue').all()).toEqual([{ entry_id: 'entry-old' }])
+      expect(migrated.prepare('SELECT kind,scene,source_ref FROM music_feedback').get()).toMatchObject({ kind: 'skip', scene: null, source_ref: null })
+      const snapshot = readdirSync(directory).find(name => name.includes('.pre-schema-7-to-8-'))!
+      const previous = new DatabaseSync(join(directory, snapshot), { readOnly: true })
+      try {
+        expect(previous.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 7 })
+        expect(previous.prepare('SELECT track_key FROM music_favorites').get()).toMatchObject({ track_key: 'netease:old' })
+        expect(previous.prepare('SELECT entry_id FROM music_queue').get()).toMatchObject({ entry_id: 'entry-old' })
+        expect(previous.prepare('PRAGMA integrity_check').get()).toMatchObject({ integrity_check: 'ok' })
+      } finally { previous.close() }
+    } finally { migrated.close() }
+  })
   it('migrates a v6 Topic as its actual baseline version and blocks pre-upgrade summary backfill', () => {
     const path = join(makeDirectory(), 'v6.sqlite'), db = openR1Database(path), now = new Date().toISOString()
     db.prepare(`INSERT INTO topics (topic_id,title,summary,unresolved_json,source_refs_json,status,version,updated_at)

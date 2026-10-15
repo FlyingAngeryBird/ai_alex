@@ -47,7 +47,7 @@ const focus = useFocus(event => {
   const currentTrackKey = track ? `${track.source ?? 'unknown'}:${track.id}` : null
   if (event.focus.endMusicRule === 'pause_user_selected_track' &&
     event.focus.endTargetTrackKey === currentTrackKey && music.playback.value.status === 'playing') {
-    void music.togglePlayback()
+    void music.pauseTrack(currentTrackKey!)
   }
   focusNotice.value = '这一段专注已完成，可以休息一下。'
 })
@@ -1080,6 +1080,8 @@ onBeforeUnmount(() => {
       <MusicImmersiveView
         v-if="viewMode === 'music'"
         :active-tab="music.activeTab.value"
+        :queue="music.queueEntries.value" :queue-version="music.queueVersion.value" :temporary="temporaryMode" :notice="music.musicNotice.value"
+        @seek="music.seek" @add-queue="music.addToQueue" @remove-queue="music.removeQueue" @move-queue="music.moveQueue" @feedback="music.feedbackAndSkip"
         :volume="music.volume.value" :assistant-speaking="assistantAudioPlaying" @volume-change="music.setVolume"
         :favorites="music.favorites.value"
         :playback="music.playback.value"

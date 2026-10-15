@@ -140,7 +140,7 @@ export function registerChatHandlers(
   memoryConfirmations?: R1MemoryConfirmations,
   automaticMemory?: R1AutomaticMemory,
   topicSummaries?: R1TopicSummaries
-): void {
+): { close(): void } {
   clearMemory()
   let activeSystemPrompt: string | null = null
   let activePersonaVersion: number | null = null
@@ -420,4 +420,5 @@ export function registerChatHandlers(
       return fail(normalized.code, normalized.message)
     }
   })
+  return { close() { responseController?.abort(); responseGeneration++; sessionEpoch++ } }
 }

@@ -5,6 +5,7 @@ import type { R1MemoryConfirmations } from '../r1/memoryConfirmations.js'
 import { topicConversationContext } from '../r1/topicContext.js'
 import { currentArtifactContext } from '../r1/artifactContext.js'
 import { R1Artifacts } from '../r1/artifacts.js'
+import { musicAliases, type R1Music } from '../r1/music.js'
 import type { R1TopicSummaries } from '../r1/topicSummaries.js'
 import type { R1AutomaticMemory } from '../r1/automaticMemory.js'
 import { selectedConversationEntity } from '../r1/sessionMode.js'
@@ -32,9 +33,10 @@ export function registerNativeVoiceHandlers(deps: {
   automaticMemory?: R1AutomaticMemory;
   connect?: ConstructorParameters<typeof NativeRealtimeSession>[0]['connect'];
   artifacts?: R1Artifacts;
+  music?: R1Music;
 }): { close(code?: string): void } {
   const sessions = new Map<number, { id: string; session: NativeRealtimeSession; playback(input: Record<string, unknown>): void }>()
-  const aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', ...memoryToolAliases, 'notes_create', ...reminderToolAliases, ...(deps.focusServices ? focusToolAliases : [])]
+  const aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', ...memoryToolAliases, 'notes_create', ...reminderToolAliases, ...(deps.focusServices ? focusToolAliases : []), ...(deps.music ? musicAliases : [])]
   const fail = (code: string) => ({ ok: false, error: { code, message: code } })
   const emit = (owner: WebContents, id: string, event: NativeRealtimeEvent) => {
     if (!owner.isDestroyed()) owner.send('voice.nativeEvent', { ...event, connectionId: id })
@@ -109,13 +111,14 @@ export function registerNativeVoiceHandlers(deps: {
           const source = deps.conversations.append({ sessionId, turnId, role: 'user', body: event.transcript, status: 'final' })
           const sourceTurnId = turnId
           tools = new R1ConversationTools(deps.db, deps.assets, deps.tasks, { source, selectedArtifact, sourceMessages: deps.conversations.messages(sessionId).slice(-20), temporary,
-            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, persistenceConfirmed: false, assertCurrent,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, persistenceConfirmed: false,
+            assertCurrent() { assertCurrent(); if (turnId !== sourceTurnId) throw new Error('REALTIME_TOOL_SOURCE_REPLACED') },
             onMemoryInvalidated: deps.onMemoryInvalidated ? epoch => { invalidatedEpoch = epoch } : undefined,
             requestMemoryConfirmation: deps.memoryConfirmations ? (candidate, sensitive) => deps.memoryConfirmations!.offer(candidate, {
               ownerId: sender.id, source, temporary, sensitive, assertCurrent() {
                 assertCurrent(); if (turnId !== sourceTurnId) throw new Error('MEMORY_CONFIRMATION_STALE')
               }
-            }) : undefined }, deps.implementedTaskAliases, deps.focusServices, artifacts)
+            }) : undefined }, deps.implementedTaskAliases, deps.focusServices, artifacts, deps.music)
           connection.updateBoundary(boundary())
         }
         emit(sender, id, event)
@@ -124,12 +127,15 @@ export function registerNativeVoiceHandlers(deps: {
       onToolCalls(calls) {
         assertCurrent()
         if (!tools || toolCount + calls.length > 6) { connection.close('REALTIME_TOOL_SOURCE_OR_BUDGET_INVALID'); return }
+        const ownerTools = tools, sourceTurn = turnId
+        toolCount += calls.length
+        void (async () => {
         const results = []
         for (const call of calls) {
-          const result = tools!.execute(call.name, call.arguments, call.callId)
-          toolCount++
+          if (sourceTurn !== turnId || tools !== ownerTools) throw new Error('REALTIME_TOOL_SOURCE_REPLACED')
+          const result = await ownerTools.executeAsync(call.name, call.arguments, call.callId)
           results.push({ callId: call.callId, result })
-          if (tools!.memoryMutationReceipt) {
+          if (ownerTools.memoryMutationReceipt) {
             // Do not ask a cloud session containing revoked facts to generate the acknowledgement.
             const reply = memoryMutationReply(result), responseId = randomUUID()
             deps.conversations.append({ sessionId, turnId, responseId, role: 'assistant', body: reply, status: 'generated' })
@@ -139,8 +145,10 @@ export function registerNativeVoiceHandlers(deps: {
             return
           }
         }
+        if (sourceTurn !== turnId || tools !== ownerTools) throw new Error('REALTIME_TOOL_SOURCE_REPLACED')
         connection.updateBoundary(boundary())
         for (const result of results) connection.returnToolResult(result.callId, result.result)
+        })().catch(() => connection.close('REALTIME_CONTEXT_REFRESH_REQUIRED'))
       },
       onClosed(code) {
         try { assertCurrent(); playback.interruptPending() } catch { /* Revoked or ended context cannot publish a late partial. */ }

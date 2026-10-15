@@ -108,7 +108,7 @@ PR07/PR09的speakAllowed由协调器决定；false时不发起用于主动播音
 
 ### 22.4.03 PR03 实时交流和纯文字交流的决策指令
 
-实际文件：prompts/conversation.md，版本1.3.1。
+实际文件：prompts/conversation.md，版本1.3.2。
 
 ```text
 你负责持续理解用户并统一回应。当前能力目录如下，它是能力说明，不是固定关键词路由：
@@ -119,6 +119,7 @@ PR07/PR09的speakAllowed由协调器决定；false时不发起用于主动播音
 “这个”“第二个”“接着昨天聊”先依据当前选中对象、最近有效产物和上下文中的候选身份定位；有多个合理对象时问一项。不要把未播出的后半段当作用户已听过。
 SK01正文由应用常驻加载。简单暂停、继续、下一首、定位、音量及状态查询按已声明即时工具规则直接处理。其他领域动作需要相应Skill正文；若本版本尚未加载，先调用load_skill，读取返回内容后再决定工具组合。Skill加载不构成行动授权。
 明确一步动作使用即时工具。联网查证、候选比较、工作产物生成或需要多步观察的组合目标调用start_task，传递目标、条件和必要来源；受理后可继续交流，不等整个任务完成。
+明确曲名或歌手的一次点歌使用即时音乐工具：先加载 SK05，读取 music_get_state 并通过 music_search 获取真实 trackKey，再用所见 playerVersion 调用 music_play。状态查询与搜索可同批提出，依赖它们的播放必须等待回执。场景候选比较或其他多步组合音乐目标仍可启动后台任务。后台委托若需要改变播放状态，工具范围包含 music_get_state 以取得版本；requiredActions 仅用于写入/媒体副作用，不把 music_search 等只读工具填进去。需要引用本轮来源时使用 AppContext.turnId 或实际来源 messageId，不能编造标识。
 后台委托使用delegation声明本轮用户目标需要的task工具别名与必要副作用数量；必要动作必须包含在所声明工具范围内。不要将“可以调用”当作“必须执行”，不授予用户没有委托的保存、提醒或媒体动作。省略委托范围时后台仅能读取资料和写内部计划；程序会拒绝未实现或不属于task频道的工具。修改目标后重新声明所需范围，已提交对象不会因此撤销。
 查询已有任务、修改条件、暂停和取消使用对应任务工具；“先别说”只停止当前回复，“别查了”才取消被指向的查询任务。指代不唯一时先澄清。
 所有动作按真实回执简短回复。awaiting_user只表示等待界面选择；accepted只表示已受理。查证来源和长结果放卡片，口头说关键结论。
@@ -476,9 +477,10 @@ description: "按明确播放需求推荐或匹配歌曲，控制播放器、队
 读取明确动作、曲名/歌手或场景条件、有效偏好、当前trackKey、playerVersion和queueVersion。临时对话不能长期召回。
 ## 执行指导
 - 有播放委托才推荐并播放；只求推荐时给候选与理由。点名歌曲有多同名时提供少量选择，不能任选错误版本。
-- 先取得受支持来源的稳定trackKey，再调用music.play；playbackRequestId由应用产生。资源尝试总数遵守L06，URL只作临时资源。
+- 先取得受支持来源的稳定trackKey，并调用 music_get_state 取得当前 playerVersion，再以 expectedVersion 调用music.play；playbackRequestId由应用产生。状态查询与搜索可以同批，播放等待两者回执。资源尝试总数遵守L06，URL只作临时资源。
 - 暂停、继续、下一首、定位和音量依实际播放器状态；队列结束停止。新播放请求使旧资源与旧歌词失效。
 - 队列加删调序使用queueVersion；清后续队列不停止当前歌。收藏与反馈以trackKey写入，单次跳过不永久认定偏好。
+- music.getState 的 feedback 是实际保存的音乐反馈，skip 只代表这次跳过；不能据此永久拉黑曲目或推断人格。dislike 可用于少推荐相应曲目/明确场景，like 可用于明确偏好；没有曲风证据不宣称了解整个风格。临时模式不读取普通反馈。明确点名歌曲仍可播放，反馈不构成封禁。
 - 对话时降音和恢复由MediaCoordinator处理；不要再次play来“恢复声音”，不要覆盖用户新音量、暂停或静音。
 ## 完成与失败
 只有播放器报告实际开播才说正在播放；失败说明具体资源状态并按授权范围提供替代。元数据、封面、歌词都必须属于当前trackKey，不以成功搜索代替播放完成。
@@ -607,7 +609,7 @@ TaskDraft只交付草稿和引用，Artifact ID由程序创建；memory-extract�
 | focus.resume | focus_resume | focusId＊, expectedVersion＊ | focus | write |
 | focus.stop | focus_stop | focusId＊, expectedVersion＊ | focus | write |
 | music.search | music_search | keyword＊, artist, instrumental | tracks, resultId | external_read |
-| music.getState | music_get_state | 无 | state, resourceAttempts, failureReasons | read |
+| music.getState | music_get_state | 无 | state, resourceAttempts, failureReasons, feedback | read |
 | music.play | music_play | trackKey＊, expectedVersion＊ | state, resourceAttempts, failureReasons | media |
 | music.pause | music_pause | expectedVersion＊ | state, resourceAttempts, failureReasons | media |
 | music.resume | music_resume | expectedVersion＊ | state, resourceAttempts, failureReasons | media |
@@ -1375,13 +1377,26 @@ patch：表达澄清或修错且行为合同不变。minor：在已批准范围�
 
 - DEC-R1-ARTIFACT-EDIT-021 实际失败：2.4.0 的主会话把 Artifact 委托为 notes_update，后续还误用 memory_update，程序拒绝且没有写入。2.4.1 已限制真实可执行的 delegation 参数，主会话成功受理；M02 从转述的 constraints 猜原稿、改了非目标标点，被范围校验拒绝。2.4.2 在 TaskInput 可选 currentArtifact 中提供同一受控完整基准，保留只读资源路径，并允许范围违规经一次无工具 PR10 修复；不新增路由或模型。新增 E20/E21，不能把这些小样本当完整 G4 验收。
 
+#### DEC-R1-MUSIC-022：实际设备回执、统一状态与独立反馈
+- 缺口：旧 Provider 将解析到 URL 直接当作 playing，前端队列仅内存，模型音乐工具未接通。
+- 行为：主进程拥有 playerVersion/queueVersion；媒体命令绑定设备 nonce、playbackRequestId 和 commandId，实际音频确认后才成功。搜索、解析、开播分离；同曲同歌手同版本有界跨源，最多三次，不换其他曲目代替成功。队列、收藏、反馈独立持久化，跳过不等于永久封禁；临时持久化由界面单独确认。
+- 原型：沿用音乐资料库的发现/队列/收藏、进度条和反馈菜单，不改变粒子几何。边听边聊的降音不更改用户基准、不恢复用户暂停。
+- 合同：music_get_state 增加可选 feedback（至多20条真实记录，临时为空）；releaseId/schemaVersion 2.5.0，SK05 1.1.0，其余 Prompt 不变。无新模型或工具别名。SQLite 8 增加音乐设置、查询历史和反馈场景/来源，升级前保留快照；当前 R1 JSON 资料只读导入一次。
+- 回退：代码及完整资产回到 de8b600，使用隔离备份；旧代码拒绝打开 schema8，不覆盖当前删除抑制。证据见 docs/r1/2026-10-15-music-progress.md；真实听测和安装未验证项保持未通过。
+
+##### DEC-R1-MUSIC-023：即时点歌的观察顺序与临时偏好隔离
+
+真实 Ark 在 2.5.0 的首次点歌核验中提出了将只读 music_search 错填入 requiredActions 的后台委托（该字段仅允许副作用），未执行播放。按最终 PRD 的即时音乐边界，PR03 1.3.2 和 SK05 1.1.1 明确先加载 Skill、取得曲目与状态、再实际开播；场景比较仍可委托后台。发布资产 2.5.1，不扩大工具权限或预算。临时音乐搜索及换源不读取普通反馈；任务媒体调用并发去重，取消后保留已发生的实际回执。证据和未通过项见 docs/r1/2026-10-15-music-progress.md；回退源码 de8b600，SQLite8 使用升级前快照或隔离数据目录回退。
+
+DEC-R1-MUSIC-023 补充：沿用原型已有“退出播放”按钮，类型化 UI IPC 经领域 stop 和实际设备回执后释放当前曲目，独立队列保留；记录通用 Receipt（music.exit），不增加模型工具别名。搜索来源并行、数量遵守请求上限；默认空搜索框，选曲后收起列表，未开播曲目标为待验证，封面失败回退占位。
+
 
 ### 25.3 完整默认配置
 
 ```json
 {
-  "releaseId": "seamo-ai-r1-agent-assets-2.4.2",
-  "schemaVersion": "2.4.0",
+  "releaseId": "seamo-ai-r1-agent-assets-2.5.1",
+  "schemaVersion": "2.5.1",
   "providerPolicy": {
     "primary": "volcengine",
     "crossProviderFallback": false,

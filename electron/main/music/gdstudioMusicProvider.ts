@@ -55,6 +55,7 @@ export type MusicPlayPayload = {
 export type MusicProviderName = 'gdstudio'
 
 export type MusicProvider = {
+  close?(): void
   authorize(): Promise<{ authorized: boolean; provider: MusicProviderName }>
   getPlaybackState(): Promise<PlaybackState>
   pause(): Promise<PlaybackState>
@@ -64,6 +65,7 @@ export type MusicProvider = {
 }
 
 export type GdStudioProviderOptions = {
+  timeoutMs?: number
   env?: Record<string, string | undefined>
   fetch?: typeof fetch
   now?: () => number
@@ -286,13 +288,16 @@ export function createGdStudioMusicProvider(
     readEnv(env, 'GD_MUSIC_API_BASE_URL') || DEFAULT_API_BASE
   const bitrate =
     readEnv(env, 'GD_MUSIC_DEFAULT_BR') || DEFAULT_BITRATE
-  const searchCount =
-    readEnv(env, 'GD_MUSIC_SEARCH_COUNT') || DEFAULT_SEARCH_COUNT
+  const searchCount = String(Math.max(1, Math.min(50, Math.floor(readPositiveNumber(
+    readEnv(env, 'GD_MUSIC_SEARCH_COUNT'), Number(DEFAULT_SEARCH_COUNT)
+  )))))
   const cacheTtlMs = readPositiveNumber(
     readEnv(env, 'GD_MUSIC_CACHE_TTL_MS'),
     DEFAULT_CACHE_TTL_MS
   )
   const searchCache = new Map<string, SearchCacheEntry>()
+  const requests = new Set<AbortController>()
+  let closed = false
   let playback: PlaybackState = {
     durationMs: null,
     positionMs: 0,
@@ -301,13 +306,14 @@ export function createGdStudioMusicProvider(
   }
 
   async function requestJson(url: URL): Promise<unknown> {
-    const response = await fetcher(url.toString())
-
-    if (!response.ok) {
-      throw new Error(`GD Studio 请求失败（${response.status}）。`)
-    }
-
-    return response.json()
+    if (closed) throw new Error('MUSIC_PROVIDER_CLOSED')
+    const controller = new AbortController(); requests.add(controller)
+    const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 8000)
+    try {
+      const response = await fetcher(url.toString(), { signal: controller.signal })
+      if (!response.ok) throw new Error('MUSIC_PROVIDER_HTTP_FAILED')
+      return await response.json()
+    } finally { clearTimeout(timer); requests.delete(controller) }
   }
 
   function buildUrl(params: Record<string, string>): URL {
@@ -343,6 +349,7 @@ export function createGdStudioMusicProvider(
     const tracks = readSearchItems(body)
       .map((item) => normalizeCandidate(item, source))
       .filter((track): track is GdStudioCandidate => track !== null)
+      .slice(0, Number(searchCount))
     const hydratedTracks = await Promise.all(
       tracks.map(async (track) => {
         if (!track.picId) {
@@ -382,11 +389,12 @@ export function createGdStudioMusicProvider(
   async function searchCandidates(payload: MusicSearchPayload): Promise<GdStudioCandidate[]> {
     const query = payload.query.trim()
     const tracks: GdStudioCandidate[] = []
+    let successes = 0
 
-    for (const source of normalizeSourcePreference(payload.sourcePreference)) {
-      tracks.push(...await trySearchSource(query, source))
-    }
+    const results = await Promise.allSettled(normalizeSourcePreference(payload.sourcePreference).map(source => searchSource(query, source)))
+    for (const result of results) if (result.status === 'fulfilled') { tracks.push(...result.value); successes++ }
 
+    if (!successes) throw new Error('MUSIC_PROVIDER_UNAVAILABLE')
     return tracks
   }
 
@@ -584,6 +592,7 @@ export function createGdStudioMusicProvider(
   }
 
   return {
+    close() { closed = true; for (const controller of requests) controller.abort(); requests.clear() },
     async authorize() {
       return {
         authorized: true,

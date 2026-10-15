@@ -47,6 +47,9 @@ import { registerTopicHandlers } from './ipc/topicHandlers.js'
 import { R1AutomaticMemory } from './r1/automaticMemory.js'
 import { registerAutomaticMemoryHandlers } from './ipc/automaticMemoryHandlers.js'
 import { registerArtifactContextHandlers } from './ipc/artifactContextHandlers.js'
+import { R1Music } from './r1/music.js'
+import { registerR1MusicHandlers } from './ipc/musicR1Handlers.js'
+import { createConfiguredMusicProvider } from './ipc/musicHandlers.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 let nativeVoice: { close(code?: string): void } | null = null
@@ -59,6 +62,8 @@ let r1Tasks: R1TaskSupervisor | null = null
 let r1TaskRunner: R1TaskRunner | null = null
 let r1ConversationDriver: R1ConversationDriver | null = null
 let r1Artifacts: R1Artifacts | null = null
+let r1Music: R1Music | null = null
+let chatController: { close(): void } | null = null
 let r1Conversations: R1Conversations | null = null
 let memoryConfirmations: R1MemoryConfirmations | null = null
 let topicSummaries: R1TopicSummaries | null = null
@@ -130,6 +135,14 @@ void app.whenReady().then(async () => {
     r1Database = openR1Database(join(app.getPath('userData'), 'r1.sqlite'))
     r1PromptAssets = loadR1PromptAssets(join(app.getAppPath(), 'r1-assets'))
     r1Conversations = new R1Conversations(r1Database)
+    importLegacyJson(r1Database, join(app.getPath('appData'), 'lingli'), 'lingli-json')
+    importLegacyJson(r1Database, join(app.getPath('appData'), 'lingmo'), 'lingmo-json')
+    const legacyMusic = await getDefaultMusicStore().loadLibrary()
+    const musicPolicy = r1PromptAssets.musicPolicy()
+    r1Music = new R1Music(r1Database, createConfiguredMusicProvider({ timeoutMs: musicPolicy.deviceTimeoutMs }),
+      { legacy: legacyMusic, timeoutMs: musicPolicy.deviceTimeoutMs, resourceAttempts: musicPolicy.resourceAttempts })
+    registerR1MusicHandlers(r1Database, r1Music, r1PromptAssets, r1SessionMode)
+    r1Music.onChanged(snapshot => { for (const window of BrowserWindow.getAllWindows()) window.webContents.send('r1.musicChanged', snapshot) })
     const memory = new R1MemoryStore(r1Database)
     memoryConfirmations = new R1MemoryConfirmations(r1Database, {
       notify(ownerId, confirmation) {
@@ -183,20 +196,18 @@ void app.whenReady().then(async () => {
     })
     r1Focus = new R1Focus(r1Database)
     const focusServices = { focus: r1Focus, currentTrackKey: () => r1SessionMode.currentPlayingTrackKey ?? null }
-    const taskTools = new R1TaskToolExecutor(r1Tasks, r1PromptAssets, new R1Items(r1Database), createBraveSearchProvider(), createPageReader(), focusServices)
+    const taskTools = new R1TaskToolExecutor(r1Tasks, r1PromptAssets, new R1Items(r1Database), createBraveSearchProvider(), createPageReader(), focusServices, r1Music)
     r1TaskRunner = new R1TaskRunner(r1Tasks, r1PromptAssets, taskTools, r1Artifacts,
       createArkResponsesProvider(), () => new R1PersonaStore(r1Database!).get())
     r1ConversationDriver = new R1ConversationDriver(r1Database, r1PromptAssets, r1Tasks, createArkResponsesProvider(),
-      () => new R1PersonaStore(r1Database!).get(), taskTools.implementedAliases, focusServices, r1Artifacts)
+      () => new R1PersonaStore(r1Database!).get(), taskTools.implementedAliases, focusServices, r1Artifacts, r1Music)
     nativeVoice = registerNativeVoiceHandlers({ db: r1Database, assets: r1PromptAssets,
       persona: new R1PersonaStore(r1Database), memory, conversations: r1Conversations,
       tasks: r1Tasks, mode: r1SessionMode, implementedTaskAliases: taskTools.implementedAliases,
       configurationRevision: () => vault.revision, focusServices, onMemoryInvalidated: invalidateMemoryContexts,
-      memoryConfirmations, automaticMemory, topicSummaries, artifacts: r1Artifacts })
+      memoryConfirmations, automaticMemory, topicSummaries, artifacts: r1Artifacts, music: r1Music })
     powerMonitor.on('suspend', () => { nativeVoice?.close(); automaticMemory?.invalidate(); topicSummaries?.invalidate(); memoryConfirmations?.revokeAutomatic() })
     r1TaskRunner.start()
-    importLegacyJson(r1Database, join(app.getPath('appData'), 'lingli'), 'lingli-json')
-    importLegacyJson(r1Database, join(app.getPath('appData'), 'lingmo'), 'lingmo-json')
     registerR1Handlers(r1Database, undefined, r1SessionMode, invalidateMemoryContexts)
     registerCredentialHandlers(vault)
     r1Diagnostics = new R1ServiceDiagnostics(vault, r1PromptAssets, new R1PersonaStore(r1Database))
@@ -224,7 +235,7 @@ void app.whenReady().then(async () => {
   await getDefaultConfigStore().loadConfig()
   await getDefaultMusicStore().loadLibrary()
   if (r1Database) {
-    registerChatHandlers(undefined, undefined, undefined, r1Conversations ?? undefined,
+    chatController = registerChatHandlers(undefined, undefined, undefined, r1Conversations ?? undefined,
       new R1PersonaStore(r1Database), r1PromptAssets ?? undefined,
       new R1MemoryStore(r1Database), r1SessionMode, (sessionId, temporary) => {
         automaticMemory?.invalidate(); topicSummaries?.invalidate()
@@ -263,17 +274,24 @@ void app.whenReady().then(async () => {
   })
 })
 
-app.on('before-quit', () => {
+let shutdownStarted = false, shutdownFinished = false
+app.on('before-quit', event => {
+  if (shutdownFinished) return
+  event.preventDefault()
+  if (shutdownStarted) return
+  shutdownStarted = true
+  chatController?.close()
+  r1Music?.close()
   topicSummaries?.close()
   automaticMemory?.close()
   nativeVoice?.close()
   r1Tasks?.close()
-  void r1TaskRunner?.close()
   r1Diagnostics?.close()
   r1Focus?.close()
   reminderScheduler?.stop()
-  r1Database?.close()
-  r1Database = null
+  void Promise.allSettled([r1Music?.whenIdle(), r1TaskRunner?.close(), automaticMemory?.whenIdle(), topicSummaries?.whenIdle()]).then(() => {
+    r1Database?.close(); r1Database = null; shutdownFinished = true; app.quit()
+  })
 })
 
 app.on('window-all-closed', () => {

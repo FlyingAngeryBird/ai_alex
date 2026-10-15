@@ -201,20 +201,15 @@ export function registerMusicHandlers(
   ipc.handle('music.getLibrary', () => ok(library.getLibrary()))
 
   ipc.handle('music.toggleFavorite', async (_event, payload) => {
-    const payloadRecord = payload as Record<string, unknown> | null
-    console.log('[lingmo main] music.toggleFavorite handler called', payloadRecord?.id, payloadRecord?.title)
 
     if (!isFavoritePayload(payload)) {
-      console.log('[lingmo main] isFavoritePayload rejected', payload)
       return fail('MUSIC_INVALID_PAYLOAD', '收藏参数不正确')
     }
 
     try {
       const favorites = await library.toggleFavorite(payload)
-      console.log('[lingmo main] library.toggleFavorite ok, favorites len', favorites.length)
       return ok(favorites)
     } catch (error) {
-      console.log('[lingmo main] library.toggleFavorite error', error)
       return fail(
         'MUSIC_FAVORITE_FAILED',
         error instanceof Error ? error.message : '收藏操作失败'

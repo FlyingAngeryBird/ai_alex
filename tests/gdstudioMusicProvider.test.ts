@@ -67,6 +67,23 @@ function requestedIds(fetcher: ReturnType<typeof createFakeGdFetch>, type: strin
 }
 
 describe('GD Studio music provider', () => {
+  it('starts supported-source searches concurrently and bounds cover requests when a source ignores count', async () => {
+    let release!: () => void
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(input.toString()), type = url.searchParams.get('types'), source = url.searchParams.get('source')
+      if (type === 'search' && source === 'netease') { await new Promise<void>(resolve => { release = resolve }); return Response.json([]) }
+      if (type === 'search' && source === 'kuwo') return new Response('', { status: 400 })
+      if (type === 'search') return Response.json(Array.from({ length: 30 }, (_, index) => ({ id: `joox-${index}`, name: `合成曲${index}`, artist: ['合成歌手'], pic_id: `cover-${index}` })))
+      return Response.json({ url: 'https://example.org/cover.jpg' })
+    })
+    const provider = createGdStudioMusicProvider({ fetch: fetcher })
+    try {
+      const pending = provider.search({ query: '合成查询', sourcePreference: 'all' })
+      await vi.waitFor(() => expect(requestedSources(fetcher, 'search')).toEqual(['netease', 'kuwo', 'joox']))
+      release(); expect((await pending).tracks).toHaveLength(5)
+      expect(requestedSources(fetcher, 'pic')).toHaveLength(5)
+    } finally { provider.close?.() }
+  })
   it('continues to the next source when one GD Studio source returns 503', async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(input.toString())

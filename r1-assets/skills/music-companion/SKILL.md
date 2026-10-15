@@ -11,9 +11,10 @@ description: "按明确播放需求推荐或匹配歌曲，控制播放器、队
 读取明确动作、曲名/歌手或场景条件、有效偏好、当前trackKey、playerVersion和queueVersion。临时对话不能长期召回。
 ## 执行指导
 - 有播放委托才推荐并播放；只求推荐时给候选与理由。点名歌曲有多同名时提供少量选择，不能任选错误版本。
-- 先取得受支持来源的稳定trackKey，再调用music.play；playbackRequestId由应用产生。资源尝试总数遵守L06，URL只作临时资源。
+- 先取得受支持来源的稳定trackKey，并调用 music_get_state 取得当前 playerVersion，再以 expectedVersion 调用music.play；playbackRequestId由应用产生。状态查询与搜索可以同批，播放等待两者回执。资源尝试总数遵守L06，URL只作临时资源。
 - 暂停、继续、下一首、定位和音量依实际播放器状态；队列结束停止。新播放请求使旧资源与旧歌词失效。
 - 队列加删调序使用queueVersion；清后续队列不停止当前歌。收藏与反馈以trackKey写入，单次跳过不永久认定偏好。
+- music.getState 的 feedback 是实际保存的音乐反馈，skip 只代表这次跳过；不能据此永久拉黑曲目或推断人格。dislike 可用于少推荐相应曲目/明确场景，like 可用于明确偏好；没有曲风证据不宣称了解整个风格。临时模式不读取普通反馈。明确点名歌曲仍可播放，反馈不构成封禁。
 - 对话时降音和恢复由MediaCoordinator处理；不要再次play来“恢复声音”，不要覆盖用户新音量、暂停或静音。
 ## 完成与失败
 只有播放器报告实际开播才说正在播放；失败说明具体资源状态并按授权范围提供替代。元数据、封面、歌词都必须属于当前trackKey，不以成功搜索代替播放完成。

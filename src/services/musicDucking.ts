@@ -1,3 +1,4 @@
+import runtimeDefaults from '../../r1-assets/config/runtime.defaults.json'
 /** Speech attenuation is separate from the user's chosen base volume and playback state. */
 export class MusicDucking {
   private audio: Pick<HTMLAudioElement, 'volume'> | null = null
@@ -18,7 +19,7 @@ export class MusicDucking {
     if (this.speaking === active) return
     this.speaking = active
     if (this.timer) clearInterval(this.timer)
-    const from = this.factor, to = active ? 0.2 : 1, duration = active ? 100 : 300
+    const from = this.factor, to = active ? runtimeDefaults.limits.musicDuckRatio : 1, duration = active ? 100 : runtimeDefaults.limits.musicRestoreDelayMs
     const start = performance.now()
     this.timer = setInterval(() => {
       const progress = Math.min(1, (performance.now() - start) / duration)
