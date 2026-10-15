@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { useNativeConversation } from '../src/composables/useNativeConversation'
 afterEach(() => vi.unstubAllGlobals())
 
-function recoveryFixture(options: Pick<Parameters<typeof useNativeConversation>[0], 'inputConstraints' | 'configureOutput'> = {}) {
+function recoveryFixture(options: Pick<Parameters<typeof useNativeConversation>[0], 'inputConstraints' | 'configureOutput' | 'checkReady' | 'onConfigurationRequired'> = {}) {
   const subscriptions: Array<(event: Record<string, unknown>) => void> = [], trackStops: ReturnType<typeof vi.fn>[] = [], order: string[] = []
   class Context {
     destination = {}; audioWorklet = { addModule: async () => undefined }
@@ -38,6 +38,30 @@ function recoveryFixture(options: Pick<Parameters<typeof useNativeConversation>[
   const emit = (index: number, event: Record<string, unknown>) => subscriptions[index]({ connectionId: (starts()[index][1] as { connectionId: string }).connectionId, ...event })
   return { voice, starts, invoke, emit, onError, onText, onConnectionState, worklets, trackStops, order, startReplies, media }
 }
+
+it('reports missing configuration before permission, capture or native service startup', async () => {
+  const onConfigurationRequired = vi.fn(), checkReady = vi.fn(async () => { throw new Error('REALTIME_NOT_CONFIGURED') })
+  const s = recoveryFixture({ checkReady, onConfigurationRequired })
+  expect(await s.voice.start()).toBe(false)
+  expect(onConfigurationRequired).toHaveBeenCalledOnce()
+  expect(s.onError).toHaveBeenCalledWith(expect.stringContaining('原生实时对话 3.0 API Key'))
+  expect(s.invoke.mock.calls.some(([name]) => name === 'app.requestMicrophoneAccess')).toBe(false)
+  expect(s.media).not.toHaveBeenCalled(); expect(s.starts()).toHaveLength(0)
+  expect(s.voice.starting.value).toBe(false)
+})
+
+it('ignores a late configuration result after the user stops, and allows a fresh attempt', async () => {
+  let release!: () => void
+  const checkReady = vi.fn().mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve })).mockResolvedValue(undefined)
+  const s = recoveryFixture({ checkReady })
+  const first = s.voice.start()
+  expect(await s.voice.start()).toBe(false)
+  await s.voice.stop(); release()
+  expect(await first).toBe(false)
+  expect(s.media).not.toHaveBeenCalled(); expect(s.onError).not.toHaveBeenCalled()
+  try { expect(await s.voice.start()).toBe(true); expect(checkReady).toHaveBeenCalledTimes(2) }
+  finally { await s.voice.stop() }
+})
 
 it('binds native capture/output to selected devices and stops cleanly after the microphone is lost', async () => {
   const releaseOutput = vi.fn(), configureOutput = vi.fn(async () => releaseOutput), s = recoveryFixture({ inputConstraints: () => ({ deviceId: { exact: 'synthetic-mic' } }), configureOutput })

@@ -1,12 +1,15 @@
 import { ref } from 'vue'
 import type { NativeRealtimeEvent } from '../../electron/main/providers/nativeRealtimeSession'
 import runtimeDefaults from '../../r1-assets/config/runtime.defaults.json'
+import { voiceConfigurationMessage } from '../services/voiceReadiness'
 
 const needsContextRefresh = (code: string) => ['MEMORY_CONTEXT_REFRESH_REQUIRED', 'REALTIME_CONTEXT_REFRESH_REQUIRED'].includes(code)
 const retryableConnectionFailure = (code: string) => ['REALTIME_NETWORK_FAILED', 'REALTIME_CONNECTION_CLOSED',
   'REALTIME_START_TIMEOUT', 'REALTIME_UPGRADE_FAILED'].includes(code)
 function connectionMessage(code: string): string {
   if (/[\u3400-\u9fff]/.test(code)) return code
+  const configuration = voiceConfigurationMessage(code)
+  if (configuration) return configuration
   if (code === 'REALTIME_AUTH_FAILED') return '实时对话鉴权失败，请检查设置中的服务凭据。'
   if (code === 'REALTIME_QUOTA_LIMIT') return '实时对话服务额度不足，请检查服务额度后重新开启。'
   if (needsContextRefresh(code)) return '对话上下文刷新未完成，请重新开启连续语音。'
@@ -22,6 +25,8 @@ export function useNativeConversation(options: {
   onConnectionState?(state: 'rebuilding' | 'ready'): void;
   inputConstraints?: () => MediaTrackConstraints;
   configureOutput?: (context: AudioContext) => Promise<() => void>;
+  checkReady?: () => Promise<unknown>;
+  onConfigurationRequired?: (code: string) => void;
 }) {
   const userSpeaking = ref(false)
   const active = ref(false), starting = ref(false), speaking = ref(false)
@@ -102,6 +107,7 @@ export function useNativeConversation(options: {
           return active.value && wanted && intent === request
         }
         wanted = false
+        if (voiceConfigurationMessage(code)) options.onConfigurationRequired?.(code)
         options.onError(connectionMessage(code))
       }
       return false
@@ -150,6 +156,8 @@ export function useNativeConversation(options: {
     const matches = () => generation === epoch && connectionId === id
     const current = () => matches() && !closing && wanted && intent === request
     try {
+      await options.checkReady?.()
+      if (!current()) return false
       const permission = await window.lingli.invoke<{ granted: boolean }>('app.requestMicrophoneAccess')
       if (!current()) return false
       if (!permission.ok || !permission.data.granted) throw new Error('请在系统设置中允许麦克风访问。')

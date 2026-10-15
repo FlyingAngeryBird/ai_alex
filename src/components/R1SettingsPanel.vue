@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { nextTick, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { X } from 'lucide-vue-next'
 import type { AutomaticMemoryState } from '../../electron/main/r1/automaticMemory'
 import type { MemoryPolicy } from '../../electron/main/r1/memoryPolicy'
@@ -10,7 +10,18 @@ import { useAppPreferences } from '../composables/useAppPreferences'
 import type { createAudioDevices } from '../services/audioDevices'
 import R1DataSettings from './R1DataSettings.vue'
 
-const props = defineProps<{ persona: R1Persona | null; voicePreviewing: boolean; devices?: ReturnType<typeof createAudioDevices>; systemReducedMotion?: boolean; diagnosticTrace?: () => unknown }>()
+const props = defineProps<{ persona: R1Persona | null; voicePreviewing: boolean; devices?: ReturnType<typeof createAudioDevices>; systemReducedMotion?: boolean; diagnosticTrace?: () => unknown; showServiceConfiguration?: boolean; serviceConfigurationField?: CredentialField }>()
+const serviceConfiguration = ref<HTMLDetailsElement | null>(null)
+async function revealServiceConfiguration(): Promise<void> {
+  if (!props.showServiceConfiguration) return
+  await nextTick()
+  if (!serviceConfiguration.value) return
+  serviceConfiguration.value.open = true
+  await nextTick()
+  serviceConfiguration.value.querySelector<HTMLInputElement>(`#r1-${props.serviceConfigurationField ?? 'VOLCENGINE_ARK_API_KEY'}`)?.focus()
+}
+onMounted(revealServiceConfiguration)
+watch(() => props.showServiceConfiguration, revealServiceConfiguration)
 const preferences = useAppPreferences()
 const permissionBusy = ref(false)
 let permissionAbort: AbortController | null = null
@@ -310,14 +321,14 @@ async function clearCredential(field: CredentialField): Promise<void> {
       <section class="r1-settings-section">
         <h3>服务状态</h3>
         <p>对话模型：{{ credentialStatus?.VOLCENGINE_ARK_API_KEY && credentialStatus?.VOLCENGINE_ARK_MODEL ? '密钥与模型已填写，实际连接待请求验证' : '未配置' }}</p>
-        <p>原生实时对话 3.0：{{ credentialStatus?.VOLCENGINE_REALTIME_API_KEY ? '已填写密钥' : '未配置' }}</p>
+        <p>原生实时对话 3.0：{{ credentialStatus?.VOLCENGINE_REALTIME_API_KEY && (persona?.voiceId || credentialStatus.VOLCENGINE_REALTIME_VOICE) ? '密钥与音色已填写，实际连接待请求验证' : '未配置完整：需要密钥与音色' }}</p>
         <div class="r1-settings-check"><button type="button" :disabled="busy || !!checking" @click="checkService('ark')">{{ checking === 'ark' ? '检测中…' : '检测对话模型' }}</button><span role="status">{{ checkLabel(checks.ark) }}</span></div>
         <div class="r1-settings-check"><button type="button" :disabled="busy || !!checking" @click="checkService('realtime')">{{ checking === 'realtime' ? '检测中…' : '检测实时对话' }}</button><span role="status">{{ checkLabel(checks.realtime) }}</span></div>
         <button v-if="checking" type="button" @click="cancelCheck">取消检测</button>
         <p>检测使用已保存配置。实时检测只建立并关闭会话，不打开麦克风；连续交流和出声效果另行验证。</p>
         <p>联网搜索：{{ credentialStatus?.BRAVE_SEARCH_API_KEY ? '候选服务已填写密钥，G0 待验证' : 'G0 待验证候选，未配置' }}</p>
         <p>音乐音源：待 G0 真实播放验证</p>
-        <details><summary>模型与语音服务配置</summary>
+        <details ref="serviceConfiguration"><summary>模型与语音服务配置</summary>
           <p>密钥保存在本机加密存储中，这里不回显。留空不会覆盖原值。原生实时对话与 ASR、TTS 使用独立配置。</p>
           <div v-for="field in credentialFields" :key="field.key" class="r1-settings-field">
             <label :for="`r1-${field.key}`">{{ field.label }}</label>

@@ -31,13 +31,14 @@ import { createPushToTalkController, type PushToTalkSource } from '@/services/pu
 import type { VoiceActivityDiagnostics } from '@/services/voiceActivity'
 import type { AutoListenState, ParticleState, VoiceInputMode, VoiceLatencyTrace } from '@/types/app'
 import type { R1Persona } from '../electron/main/r1/persona'
-import type { CredentialStatus } from '../electron/main/r1/credentials'
+import type { CredentialField, CredentialStatus } from '../electron/main/r1/credentials'
 import { invokeWithTimeout } from './utils/invokeWithTimeout'
 import { useAppPreferences } from './composables/useAppPreferences'
 import { useSystemReducedMotion } from './composables/useSystemReducedMotion'
 import { createAudioDevices } from './services/audioDevices'
 import { createAssistantSpeech, type SpeechPurpose } from './services/assistantSpeech'
 import { withCaptureAbort } from './services/abortableCapture'
+import { checkVoiceReadiness, voiceConfigurationMessage, type VoiceMode } from './services/voiceReadiness'
 
 const conversation = useConversation()
 const preferences = useAppPreferences()
@@ -48,6 +49,7 @@ const audioDevices = createAudioDevices({ mediaDevices: () => navigator.mediaDev
   onOutputFailure: handleOutputDeviceFailure })
 const inputConstraints = () => audioDevices.inputConstraints({ channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true })
 const keyboardRecorder = useKeyboardRecorder({ inputConstraints, onDeviceLost: handleInputDeviceLost })
+const voicePreparing = ref(false)
 const music = useMusic({ configureOutput: audioDevices.bindOutput })
 watch(() => music.playback.value.status === 'playing' && music.playback.value.track
   ? `${music.playback.value.track.source ?? 'unknown'}:${music.playback.value.track.id}` : null, trackKey => {
@@ -106,6 +108,8 @@ let stopMemoryConfirmation: (() => void) | null = null
 let nativeResumeGeneration: number | null = null
 const nativeConversation = useNativeConversation({
   inputConstraints, configureOutput: audioDevices.bindOutput,
+  checkReady: () => checkVoiceConfiguration('native'),
+  onConfigurationRequired: code => openServiceSettings(code === 'REALTIME_VOICE_REQUIRED' ? 'VOLCENGINE_REALTIME_VOICE' : 'VOLCENGINE_REALTIME_API_KEY'),
   onSpeaking(value) { assistantAudioPlaying.value = value },
   onConnectionState(state) {
     if (!nativeAutoRequested.value) return
@@ -162,6 +166,8 @@ const autoListenSession = createAutoListenSession()
 const panelCollapsed = ref(false)
 const spaceHeld = ref(false)
 const settingsOpen = ref(false)
+const serviceConfigurationOpen = ref(false)
+const serviceConfigurationField = ref<CredentialField>('VOLCENGINE_ARK_API_KEY')
 const itemsOpen = ref(false)
 const taskState = useTasks(window.seamoR1.tasks)
 const taskOpen = ref(false)
@@ -177,13 +183,23 @@ const historyOpen = ref(false)
 const textBusy = ref(false)
 const composer = ref<InstanceType<typeof R1Composer> | null>(null)
 const credentialStatus = ref<CredentialStatus | null>(null)
+const credentialReadFailed = ref(false)
 const persona = ref<R1Persona | null>(null)
 const currentDate = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())
 const hasSidePanel = computed(() => settingsOpen.value || itemsOpen.value || memoryOpen.value || historyOpen.value)
-const serviceLabel = computed(() => credentialStatus.value?.VOLCENGINE_ARK_API_KEY &&
-  credentialStatus.value?.VOLCENGINE_ARK_MODEL ? '对话服务已配置 · 实际连接以请求结果为准' : '对话服务未配置')
+const microphoneCapturing = computed(() => nativeConversation.active.value || keyboardRecorder.isRecording.value || realtimeRecorder.isRecording.value)
+const serviceLabel = computed(() => {
+  if (voicePreparing.value) return '正在准备语音，松开可取消…'
+  const status = credentialStatus.value
+  if (!status) return credentialReadFailed.value ? '服务状态读取失败 · 前往设置' : '正在读取服务配置…'
+  const text = status.VOLCENGINE_ARK_API_KEY && status.VOLCENGINE_ARK_MODEL
+  const voice = status.VOLCENGINE_REALTIME_API_KEY && (persona.value?.voiceId || status.VOLCENGINE_REALTIME_VOICE)
+  return text && voice ? '文字与实时语音已配置 · 待实际连接' : text ? '文字已配置 · 实时语音待配置'
+    : voice ? '文字待配置 · 实时语音已配置' : '对话服务未配置 · 前往设置'
+})
 
 function openPanel(panel: 'settings' | 'items' | 'search' | 'memory' | 'history'): void {
+  serviceConfigurationOpen.value = false
   taskOpen.value = false
   settingsOpen.value = panel === 'settings'
   itemsOpen.value = panel === 'items'
@@ -191,6 +207,13 @@ function openPanel(panel: 'settings' | 'items' | 'search' | 'memory' | 'history'
   memoryOpen.value = panel === 'memory'
   historyOpen.value = panel === 'history'
   if (panel === 'search') searchEverOpened.value = true
+}
+function openServiceSettings(field: CredentialField = 'VOLCENGINE_ARK_API_KEY'): void {
+  openPanel('settings'); serviceConfigurationField.value = field; serviceConfigurationOpen.value = true
+}
+async function checkVoiceConfiguration(mode: VoiceMode): Promise<void> {
+  try { credentialStatus.value = await checkVoiceReadiness(window.seamoR1, mode); credentialReadFailed.value = false }
+  catch (error) { throw new Error(error instanceof Error && voiceConfigurationMessage(error.message) ? error.message : 'VOICE_CONFIGURATION_UNAVAILABLE') }
 }
 
 function closePanels(): void {
@@ -555,15 +578,24 @@ async function ensureMicrophoneAccess(signal?: AbortSignal): Promise<void> {
 }
 
 async function startVoiceCapture(signal?: AbortSignal): Promise<boolean> {
+  voicePreparing.value = true
+  try { return await openVoiceCapture(signal) }
+  finally { voicePreparing.value = false }
+}
+async function openVoiceCapture(signal?: AbortSignal): Promise<boolean> {
   releaseAssistantAudio()
-  conversation.startListening()
 
   try {
     if (!preferences.value.value && !await withCaptureAbort(preferences.load(), signal)) throw new Error('偏好暂时无法读取，请稍后重试；文字仍可使用。')
+    await withCaptureAbort(checkVoiceConfiguration('pushToTalk'), signal)
     await ensureMicrophoneAccess(signal)
+    if (signal?.aborted) return false
+    conversation.startListening()
   } catch (error) {
     if (signal?.aborted) { conversation.cancelVoiceInput('', { silent: true }); return false }
-    conversation.markVoiceError(getVoiceErrorMessage(error))
+    const configuration = error instanceof Error && voiceConfigurationMessage(error.message)
+    if (configuration) openServiceSettings('VOLCENGINE_STREAM_ASR_API_KEY')
+    conversation.markVoiceError(configuration || getVoiceErrorMessage(error))
     return false
   }
 
@@ -966,6 +998,7 @@ onMounted(() => {
   try { audioDevices.start() } catch { audioDevices.error.value = '设备列表暂时无法读取，请稍后在设置中重试。' }
   void Promise.all([window.seamoR1.credentials.status(), window.seamoR1.persona.get(), preferences.load()]).then(([credentials, currentPersona, preferencesReady]) => {
     if (credentials.ok) credentialStatus.value = credentials.data
+    else credentialReadFailed.value = true
     if (currentPersona.ok) persona.value = currentPersona.data
     else conversation.addSystemMessage('人格设置暂时无法读取，请重新启动应用。')
     if (!preferencesReady || !credentials.ok || !currentPersona.ok ||
@@ -979,7 +1012,7 @@ onMounted(() => {
         }
       })
     }, 900)
-  })
+  }).catch(() => { credentialReadFailed.value = true; conversation.addSystemMessage('启动配置暂时无法读取，可以在设置中重试；本地页面仍可使用。') })
   stopReminderNotice = window.seamoR1?.reminders.onDue((event) => {
     reminderNotice.value = event
   }) ?? null
@@ -1029,7 +1062,7 @@ onBeforeUnmount(() => {
       <button class="r1-brand" type="button" @click="music.closeImmersive(); closePanels()"
         aria-label="返回 Seamo 陪伴首页"><AudioLines :size="25" /><span>Seamo <em>AI</em></span></button>
       <time>{{ currentDate }}</time>
-      <div class="r1-header-right"><button v-if="taskState.tasks.value.length && !taskOpen" type="button" class="r1-header-task" @click="openTask">查看委托</button><span class="r1-mic-state"><Mic v-if="(conversation.isListening.value || nativeConversation.active.value)" :size="14" /><MicOff v-else :size="14" />{{ conversation.isListening.value || nativeConversation.active.value ? '正在收音' : '麦克风未开启' }}</span></div>
+      <div class="r1-header-right"><button v-if="taskState.tasks.value.length && !taskOpen" type="button" class="r1-header-task" @click="openTask">查看委托</button><span class="r1-mic-state"><Mic v-if="microphoneCapturing" :size="14" /><MicOff v-else :size="14" />{{ microphoneCapturing ? '正在收音' : '麦克风未开启' }}</span></div>
     </header>
     <nav class="r1-rail" aria-label="主导航">
       <button type="button" :aria-current="viewMode === 'conversation' && !hasSidePanel && !searchOpen ? 'page' : undefined"
@@ -1107,6 +1140,7 @@ onBeforeUnmount(() => {
         :service-label="serviceLabel" :music-active="viewMode === 'music'"
         @send="handleSendText" @voice-press-start="beginPushToTalk()" @voice-press-end="endPushToTalk()" @voice-press-cancel="cancelPushToTalk"
         @toggle-temporary="handleToggleTemporary" @toggle-auto-listen="toggleAutoListen"
+        @open-service-settings="openServiceSettings"
         @stop-speech="stopCurrentResponse" />
     </section>
 
@@ -1115,6 +1149,8 @@ onBeforeUnmount(() => {
       @close="closePanels" @select="(id) => { taskState.selectedId.value = id }"
       @control="taskState.control" @retry="taskState.refresh" />
     <R1SettingsPanel :devices="audioDevices" :system-reduced-motion="systemReducedMotion" :diagnostic-trace="getLastLatencyTrace" @open-history="openPanel('history')"
+      :show-service-configuration="serviceConfigurationOpen"
+      :service-configuration-field="serviceConfigurationField"
       v-if="settingsOpen"
       :persona="persona"
       :voice-previewing="voicePreviewing"

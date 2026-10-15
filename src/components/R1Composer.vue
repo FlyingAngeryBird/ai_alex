@@ -21,6 +21,7 @@ const emit = defineEmits<{
   toggleTemporary: []
   toggleAutoListen: []
   stopSpeech: []
+  openServiceSettings: []
 }>()
 const draft = ref('')
 const error = ref('')
@@ -118,7 +119,7 @@ onBeforeUnmount(() => {
       </button>
       <button type="button" class="r1-auto" :aria-pressed="autoListenState !== 'off'"
         @click="emit('toggleAutoListen')">{{ autoListenState === 'off' ? '开启自动会话' : '关闭自动会话' }}</button>
-      <span>{{ serviceLabel }}</span>
+      <button type="button" class="r1-service-status" @click="emit('openServiceSettings')">{{ serviceLabel }}</button>
     </div>
   </div>
 </template>

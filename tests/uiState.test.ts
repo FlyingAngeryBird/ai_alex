@@ -342,16 +342,17 @@ describe('UI prototype state', () => {
     expect(file).not.toContain('Math.abs(Math.sin(position * 1.7))')
   })
 
-  it('gives immediate local voice feedback before waiting for microphone or ASR setup', () => {
+  it('shows voice preparation before waiting and does not label it microphone capture', () => {
     const file = readFileSync('src/App.vue', 'utf8')
     const startCapture = file.slice(
       file.indexOf('async function startVoiceCapture'),
       file.indexOf('async function finishVoiceCapture')
     )
 
-    expect(startCapture.indexOf('conversation.startListening()')).toBeLessThan(
-      startCapture.indexOf('await ensureMicrophoneAccess(')
-    )
+    expect(startCapture.indexOf('voicePreparing.value = true')).toBeLessThan(startCapture.indexOf('await openVoiceCapture('))
+    expect(file).toContain('正在准备语音，松开可取消…')
+    expect(startCapture.indexOf('await ensureMicrophoneAccess(')).toBeLessThan(startCapture.indexOf('conversation.startListening()'))
+    expect(file).toContain("microphoneCapturing ? '正在收音' : '麦克风未开启'")
   })
 
   it('routes automatic listening through a turn session and grace window', () => {

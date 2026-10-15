@@ -25,7 +25,8 @@ export class NativeRealtimeSession {
 
   open(): Promise<void> {
     if (this.state !== 'new') return Promise.reject(new NativeRealtimeError('REALTIME_ALREADY_STARTED'))
-    if (!this.input.apiKey.trim() || /[\r\n\x00]/.test(this.input.apiKey)) {
+    if (!this.input.apiKey.trim()) return Promise.reject(new NativeRealtimeError('REALTIME_NOT_CONFIGURED'))
+    if (/[\r\n\x00]/.test(this.input.apiKey)) {
       return Promise.reject(new NativeRealtimeError('REALTIME_CONFIG_INVALID'))
     }
     const create = nativeSessionCreate(this.input.boundary, this.input.voice)
