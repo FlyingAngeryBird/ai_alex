@@ -23,3 +23,13 @@
 真实3.0配置及20轮/打断/延迟/设备听测；实际可用音源与播放；搜索真实资源及完整候选比较/失败步骤恢复；数据域选择/分类清理；全原型状态、全部A/V场景、Developer ID签名/公证/安装回退。仍无G0–G5完整通过或正式Release。源码回退使用父提交及隔离数据；不把旧快照覆盖到正式数据。
 
 最终全量回归：84文件508项通过（maxWorkers=4，15.79秒）；生产构建通过。日志：`/tmp/seamo-r1-critical-delivery-final-tests.log`、`/tmp/seamo-r1-critical-delivery-build.log`。开发包路径、源提交与本机启动验证在包生成后补充。此包只能作为本机开发预览，不宣称全功能可上线。
+
+## 实际应用包补证
+
+- 源码检查点：`51f50e20257304e5720fca1cd312a0b54e3c6c3a`，打包前工作树干净。构建时间2026-10-15 17:08（北京时间）。
+- 开发预览：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-15-51f50e2/Seamo AI R1.app`；位于仓库外，避免解析时借用开发依赖。
+- `codesign --verify --deep --strict`通过；仍仅本机临时签名，未Developer ID签名/公证。应用资源检查未发现`.env`或`.env.local`。
+- CUA直接启动上述.app成功，实际进程45300。资源URL指向该包内renderer，首页五类入口和服务缺配置状态正常，不是开发服务器。
+- 实际点击自动会话：不打开麦克风；反馈缺少3.0 Key，设置展开且焦点准确落到「原生实时对话3.0 API Key」。按钮回到关闭状态。
+- 该包使用正常R1数据目录，可由用户自行配置服务；原生Key、搜索及其他未填写配置依旧未配置。没有把旧`.env`或真实Key复制进应用。未发送语音、未执行完整服务和安装测试，不宣称正式上线。
+- 构建信息在应用内`Contents/Resources/app/build-info.json`；外部`preview-verification.json`保存关键构建文件哈希与实际启动核验范围。未创建正式Release或G阶段通过标签；GitHub推送仍无新成功证据。
