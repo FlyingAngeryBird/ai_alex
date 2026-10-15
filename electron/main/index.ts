@@ -50,6 +50,8 @@ import { registerArtifactContextHandlers } from './ipc/artifactContextHandlers.j
 import { R1Music } from './r1/music.js'
 import { R1Preferences } from './r1/preferences.js'
 import { registerPreferencesHandlers } from './ipc/preferencesHandlers.js'
+import { R1DataManagement } from './r1/dataManagement.js'
+import { registerDataHandlers } from './ipc/dataHandlers.js'
 import { registerR1MusicHandlers } from './ipc/musicR1Handlers.js'
 import { createConfiguredMusicProvider } from './ipc/musicHandlers.js'
 
@@ -70,6 +72,7 @@ let r1Conversations: R1Conversations | null = null
 let memoryConfirmations: R1MemoryConfirmations | null = null
 let topicSummaries: R1TopicSummaries | null = null
 let automaticMemory: R1AutomaticMemory | null = null
+let dataManagement: R1DataManagement | null = null
 const r1SessionMode: R1SessionMode = { temporary: false }
 function invalidateMemoryContexts(deletionEpoch: number): void {
   topicSummaries?.invalidate()
@@ -216,6 +219,9 @@ void app.whenReady().then(async () => {
     registerCredentialHandlers(vault)
     r1Diagnostics = new R1ServiceDiagnostics(vault, r1PromptAssets, new R1PersonaStore(r1Database))
     registerServiceHandlers(r1Diagnostics)
+    dataManagement = new R1DataManagement(r1Database, join(app.getPath('userData'), 'r1.sqlite'), app.getPath('userData'))
+    registerDataHandlers(dataManagement, r1Database, { vault, assetRelease: r1PromptAssets.releaseId, diagnostics: () => r1Diagnostics,
+      requestRestart: () => { setTimeout(() => app.quit(), 0) } })
     registerFocusHandlers(r1Focus, undefined, r1SessionMode)
     r1Focus.onChanged(event => {
       for (const window of BrowserWindow.getAllWindows()) window.webContents.send('r1.focusChanged', event)
@@ -284,6 +290,7 @@ app.on('before-quit', event => {
   event.preventDefault()
   if (shutdownStarted) return
   shutdownStarted = true
+  dataManagement?.close()
   chatController?.close()
   r1Music?.close()
   topicSummaries?.close()
@@ -293,8 +300,14 @@ app.on('before-quit', event => {
   r1Diagnostics?.close()
   r1Focus?.close()
   reminderScheduler?.stop()
-  void Promise.allSettled([r1Music?.whenIdle(), r1TaskRunner?.close(), automaticMemory?.whenIdle(), topicSummaries?.whenIdle()]).then(() => {
-    r1Database?.close(); r1Database = null; shutdownFinished = true; app.quit()
+  void Promise.allSettled([dataManagement?.whenIdle(), r1Music?.whenIdle(), r1TaskRunner?.close(), automaticMemory?.whenIdle(), topicSummaries?.whenIdle()]).then(() => {
+    r1Database?.close(); r1Database = null
+    try {
+      if (dataManagement?.hasPendingRestore()) {
+        dataManagement.runAfterDatabaseClosed()
+        app.relaunch()
+      }
+    } finally { shutdownFinished = true; app.quit() }
   })
 })
 

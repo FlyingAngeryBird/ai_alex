@@ -2,6 +2,7 @@ import { createRequire } from 'node:module'
 import type { R1Api, R1Result } from '../shared/r1Api.js'
 
 export const exposedChannels = [
+  'r1.data.summary', 'r1.data.exportBackup', 'r1.data.prepareRestore', 'r1.data.cancelRestore', 'r1.data.confirmRestore', 'r1.data.exportDiagnostics',
   'r1.preferences.get', 'r1.preferences.update',
   'r1.music.attach', 'r1.music.detach', 'r1.music.snapshot', 'r1.music.report', 'r1.music.search', 'r1.music.control', 'r1.music.clearHistory', 'r1.music.exit',
   'app.getRuntimeState',
@@ -170,6 +171,11 @@ function exposeLingliApi(
     return renderer.invoke(channel, payload) as Promise<R1Result<T>>
   }
   const r1Api: R1Api = {
+    data: {
+      summary: () => invokeR1('r1.data.summary'), exportBackup: () => invokeR1('r1.data.exportBackup'),
+      prepareRestore: () => invokeR1('r1.data.prepareRestore'), cancelRestore: () => invokeR1('r1.data.cancelRestore'),
+      confirmRestore: input => invokeR1('r1.data.confirmRestore', input), exportDiagnostics: input => invokeR1('r1.data.exportDiagnostics', input)
+    },
     preferences: {
       get: () => invokeR1('r1.preferences.get'), update: input => invokeR1('r1.preferences.update', input),
       onChanged: handler => { const listener = (...args: unknown[]) => handler(args[1] as Parameters<typeof handler>[0]); renderer.on('r1.preferencesChanged', listener); return () => renderer.removeListener('r1.preferencesChanged', listener) }

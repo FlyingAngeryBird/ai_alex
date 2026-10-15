@@ -15,6 +15,8 @@ export type ServiceCheckReport = {
 type CheckInput = { requestId: string; service: ServiceCheckTarget }
 export class R1ServiceDiagnostics {
   private active = new Map<number, { requestId: string; controller: AbortController }>()
+  private reports = new Map<ServiceCheckTarget, ServiceCheckReport>()
+  latestReports(): ServiceCheckReport[] { return [...this.reports.values()].map(value => ({ ...value })) }
   constructor(private readonly vault: CredentialVault, private readonly assets: R1PromptAssets,
     private readonly persona: R1PersonaStore, private readonly deps: {
       ark?: ReturnType<typeof createArkResponsesProvider>;
@@ -30,11 +32,12 @@ export class R1ServiceDiagnostics {
     const revision = this.vault.revision
     let personaVersion: number | undefined
     const start = performance.now()
-    const report = (status: ServiceCheckReport['status'], code: string): ServiceCheckReport => ({
-      service: input.service, status, code, checkedAt: new Date().toISOString(),
-      durationMs: Math.round(performance.now() - start), configurationRevision: revision,
-      scope: input.service === 'ark' ? 'responses' : 'session_create_close'
-    })
+    const report = (status: ServiceCheckReport['status'], code: string): ServiceCheckReport => {
+      const value: ServiceCheckReport = { service: input.service, status, code, checkedAt: new Date().toISOString(),
+        durationMs: Math.round(performance.now() - start), configurationRevision: revision,
+        scope: input.service === 'ark' ? 'responses' : 'session_create_close' }
+      this.reports.set(input.service, value); return value
+    }
     try {
       const context = { sessionId: randomUUID(), sessionGeneration: 1, turnId: randomUUID(),
         currentTime: new Date().toISOString(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,

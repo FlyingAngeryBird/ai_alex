@@ -8,8 +8,9 @@ import type { CredentialField, CredentialPatch, CredentialStatus } from '../../e
 import type { ServiceCheckReport, ServiceCheckTarget } from '../../electron/main/r1/serviceDiagnostics'
 import { useAppPreferences } from '../composables/useAppPreferences'
 import type { createAudioDevices } from '../services/audioDevices'
+import R1DataSettings from './R1DataSettings.vue'
 
-const props = defineProps<{ persona: R1Persona | null; voicePreviewing: boolean; devices?: ReturnType<typeof createAudioDevices>; systemReducedMotion?: boolean }>()
+const props = defineProps<{ persona: R1Persona | null; voicePreviewing: boolean; devices?: ReturnType<typeof createAudioDevices>; systemReducedMotion?: boolean; diagnosticTrace?: () => unknown }>()
 const preferences = useAppPreferences()
 const permissionBusy = ref(false)
 let permissionAbort: AbortController | null = null
@@ -44,6 +45,7 @@ const emit = defineEmits<{
   saved: [persona: R1Persona]
   previewVoice: [voiceId: string]
   credentialsChanged: [status: CredentialStatus]
+  openHistory: []
 }>()
 
 const assistantName = ref('Seamo AI')
@@ -331,6 +333,7 @@ async function clearCredential(field: CredentialField): Promise<void> {
         </details>
       </section>
       <p v-if="message" class="r1-settings-message" role="status">{{ message }}</p>
+      <R1DataSettings :diagnostic-trace="diagnosticTrace" @open-history="emit('openHistory')" />
     </div>
   </aside>
 </template>

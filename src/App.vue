@@ -1114,7 +1114,7 @@ onBeforeUnmount(() => {
       :busy="taskState.busy.value" :loading="taskState.loading.value" :error="taskState.error.value"
       @close="closePanels" @select="(id) => { taskState.selectedId.value = id }"
       @control="taskState.control" @retry="taskState.refresh" />
-    <R1SettingsPanel :devices="audioDevices" :system-reduced-motion="systemReducedMotion"
+    <R1SettingsPanel :devices="audioDevices" :system-reduced-motion="systemReducedMotion" :diagnostic-trace="getLastLatencyTrace" @open-history="openPanel('history')"
       v-if="settingsOpen"
       :persona="persona"
       :voice-previewing="voicePreviewing"

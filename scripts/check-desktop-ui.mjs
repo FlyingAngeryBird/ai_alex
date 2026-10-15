@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const reference = process.argv.includes('--prototype-reference')
+const keepData = process.argv.includes('--keep-data')
 if (!existsSync(join(project, 'dist-electron/main/index.js'))) throw new Error('BUILD_REQUIRED')
 const directory = mkdtempSync(join(tmpdir(), 'seamo-r1-ui-check-'))
 mkdirSync(join(directory, 'application-data', 'Seamo AI R1'), { recursive: true })
@@ -17,7 +18,7 @@ const child = spawn(join(project, 'node_modules/electron/dist/Electron.app/Conte
 console.log(JSON.stringify({ scope: reference ? 'prototype_reference_only' : 'production_entry_with_empty_isolated_data', userDataImported: false, servicesConfigured: false, directory, pid: child.pid }))
 child.on('exit', (code, signal) => {
   // Chromium may write until process exit; never remove its data in will-quit.
-  rmSync(directory, { recursive: true, force: true })
+  if (!keepData) rmSync(directory, { recursive: true, force: true })
   console.log(JSON.stringify({ phase: 'process-exited', code, signal, isolatedDirectoryRemoved: !existsSync(directory) }))
   process.exitCode = code ?? 1
 })

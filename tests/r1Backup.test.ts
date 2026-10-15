@@ -19,6 +19,21 @@ function directory(): string {
 afterEach(() => { for (const path of directories.splice(0)) rmSync(path, { recursive: true, force: true }) })
 
 describe('R1 offline backup and restore', () => {
+  it('restores committed WAL content instead of silently copying an older main database file', async () => {
+    const root = directory(), currentPath = join(root, 'r1.sqlite'), backupPath = join(root, 'wal-backup.sqlite')
+    const current = openR1Database(currentPath)
+    await createR1Backup(current, backupPath); current.close()
+    const source = openR1Database(backupPath), conversations = new R1Conversations(source), sessionId = conversations.start()
+    conversations.append({ sessionId, turnId: 'wal-turn', role: 'user', body: '合成 WAL 内容', status: 'final' })
+    const sourceMain = readFileSync(backupPath)
+    try {
+      restoreR1BackupOffline(currentPath, backupPath)
+      expect(readFileSync(backupPath)).toEqual(sourceMain)
+      const restored = openR1Database(currentPath)
+      try { expect(new R1Conversations(restored).messages(sessionId)).toMatchObject([{ body: '合成 WAL 内容' }]) }
+      finally { restored.close() }
+    } finally { source.close() }
+  })
   it.each(['correct', 'forget'] as const)('does not revive a Topic after %s when restoring its older backup', async action => {
     const root = directory(), currentPath = join(root, 'r1.sqlite'), backupPath = join(root, 'old-topic.sqlite')
     const db = openR1Database(currentPath), conversations = new R1Conversations(db), topics = new R1Topics(db), policy = new R1MemoryPolicy(db)

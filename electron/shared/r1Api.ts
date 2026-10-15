@@ -17,6 +17,7 @@ import type { ConfirmedMemory, MemoryConfirmation } from '../main/r1/memoryConfi
 import type { MusicCommand, MusicReport, MusicSnapshot } from '../main/r1/music.js'
 import type { MusicTrack, MusicSourcePreference } from '../main/music/gdstudioMusicProvider.js'
 import type { AppPreferences, PreferencesPatch } from '../main/r1/preferences.js'
+import type { R1DataManagement, FileAction, RestorePreview } from '../main/r1/dataManagement.js'
 
 export type R1Result<T> =
   | { ok: true; data: T }
@@ -26,6 +27,14 @@ type MethodInput<K extends keyof R1Items> = R1Items[K] extends (input: infer I) 
 type MethodOutput<K extends keyof R1Items> = R1Items[K] extends (...args: never[]) => infer O ? O : never
 
 export type R1Api = {
+  data: {
+    summary(): Promise<R1Result<ReturnType<R1DataManagement['summary']>>>
+    exportBackup(): Promise<R1Result<FileAction>>
+    prepareRestore(): Promise<R1Result<{ cancelled: true } | { cancelled: false; preview: RestorePreview }>>
+    cancelRestore(): Promise<R1Result<null>>
+    confirmRestore(input: { ticket: string; confirmed: true }): Promise<R1Result<{ operationId: string; restartRequired: true }>>
+    exportDiagnostics(input: { voiceTrace: unknown }): Promise<R1Result<FileAction>>
+  }
   preferences: {
     get(): Promise<R1Result<AppPreferences>>
     update(input: PreferencesPatch): Promise<R1Result<AppPreferences>>
