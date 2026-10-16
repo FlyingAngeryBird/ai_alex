@@ -28,32 +28,48 @@ type SecretStorage = {
 export class CredentialVault {
   private values: Partial<Record<CredentialField, string>> = {}
   private currentRevision = 0
+  private loadFailure: string | null = null
   get revision(): number { return this.currentRevision }
+  get needsReload(): boolean { return this.loadFailure !== null }
 
   constructor(private readonly path: string, private readonly storage: SecretStorage = safeStorage) {}
 
   load(): CredentialStatus {
-    if (existsSync(this.path)) {
-      if (!this.storage.isEncryptionAvailable()) throw new Error('SYSTEM_SECRET_STORAGE_UNAVAILABLE')
-      const decrypted = this.storage.decryptString(readFileSync(this.path))
-      const parsed: unknown = JSON.parse(decrypted)
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('CREDENTIAL_FILE_INVALID')
-      for (const field of CREDENTIAL_FIELDS) {
-        const value = (parsed as Record<string, unknown>)[field]
-        if (typeof value === 'string' && value.trim()) this.values[field] = value
+    try {
+      const next: Partial<Record<CredentialField, string>> = {}
+      if (existsSync(this.path)) {
+        if (!this.storage.isEncryptionAvailable()) throw new Error('SYSTEM_SECRET_STORAGE_UNAVAILABLE')
+        const decrypted = this.storage.decryptString(readFileSync(this.path))
+        const parsed: unknown = JSON.parse(decrypted)
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('CREDENTIAL_FILE_INVALID')
+        for (const field of CREDENTIAL_FIELDS) {
+          const value = (parsed as Record<string, unknown>)[field]
+          if (typeof value === 'string' && value.trim()) next[field] = value
+        }
       }
+      this.values = next; this.loadFailure = null
+      this.applyToRuntime()
+      this.currentRevision++
+      return this.status()
+    } catch (error) {
+      this.loadFailure = error instanceof Error && error.message === 'SYSTEM_SECRET_STORAGE_UNAVAILABLE'
+        ? 'SYSTEM_SECRET_STORAGE_UNAVAILABLE' : 'CREDENTIAL_LOAD_FAILED'
+      this.values = {}
+      for (const field of CREDENTIAL_FIELDS) delete process.env[field]
+      this.currentRevision++
+      throw new Error(this.loadFailure)
     }
-    this.applyToRuntime()
-    this.currentRevision++
-    return this.status()
   }
 
   status(): CredentialStatus {
+    if (this.loadFailure) throw new Error(this.loadFailure)
     return Object.fromEntries(CREDENTIAL_FIELDS.map((field) => [field,
       Boolean(this.values[field]?.trim() || process.env[field]?.trim())])) as CredentialStatus
   }
 
   save(patch: CredentialPatch): CredentialStatus {
+    // Never merge a patch with an unreadable vault or overwrite its remaining keys.
+    if (this.loadFailure) this.load()
     if (!this.storage.isEncryptionAvailable()) throw new Error('SYSTEM_SECRET_STORAGE_UNAVAILABLE')
     if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('INVALID_CREDENTIAL_PATCH')
     const next = { ...this.values }

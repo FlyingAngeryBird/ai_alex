@@ -3,9 +3,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('electron', () => ({ safeStorage: { isEncryptionAvailable: () => false } }))
+vi.mock('electron', () => ({ safeStorage: { isEncryptionAvailable: () => false }, ipcMain: {} }))
 
 import { CredentialVault, CREDENTIAL_FIELDS } from '../electron/main/r1/credentials'
+import { registerCredentialHandlers } from '../electron/main/ipc/credentialHandlers'
 
 const directories: string[] = []
 const originalEnv = Object.fromEntries(CREDENTIAL_FIELDS.map(field => [field, process.env[field]]))
@@ -67,5 +68,48 @@ describe('R1 encrypted credential vault', () => {
     expect(readFileSync(path, 'utf8')).not.toContain('native-secret')
     expect(() => reopened.save({ VOLCENGINE_REALTIME_API_KEY: 'key\r\nOther: value' })).toThrow('INVALID_CREDENTIAL_VALUE')
     expect(() => reopened.save({ VOLCENGINE_REALTIME_VOICE: 'not valid voice' })).toThrow('INVALID_REALTIME_VOICE')
+  })
+  it('preserves encrypted bytes and blocks partial overwrite while locked, then reloads all keys before saving', () => {
+    const path = makePath()
+    new CredentialVault(path, storage).save({ VOLCENGINE_REALTIME_API_KEY: 'test-native', VOLCENGINE_REALTIME_VOICE: 'test_voice' })
+    const bytes = readFileSync(path)
+    let unlocked = false
+    const vault = new CredentialVault(path, { ...storage, isEncryptionAvailable: () => unlocked })
+    expect(() => vault.load()).toThrow('SYSTEM_SECRET_STORAGE_UNAVAILABLE')
+    expect(vault.needsReload).toBe(true)
+    expect(() => vault.status()).toThrow('SYSTEM_SECRET_STORAGE_UNAVAILABLE')
+    expect(process.env.VOLCENGINE_REALTIME_API_KEY).toBeUndefined()
+    expect(() => vault.save({ VOLCENGINE_ARK_MODEL: 'test_model' })).toThrow('SYSTEM_SECRET_STORAGE_UNAVAILABLE')
+    expect(readFileSync(path)).toEqual(bytes)
+    unlocked = true
+    const status = vault.save({ VOLCENGINE_ARK_MODEL: 'test_model' })
+    expect(status.VOLCENGINE_REALTIME_API_KEY).toBe(true)
+    expect(status.VOLCENGINE_REALTIME_VOICE).toBe(true)
+    expect(status.VOLCENGINE_ARK_MODEL).toBe(true)
+    expect(vault.needsReload).toBe(false)
+    expect(process.env.VOLCENGINE_REALTIME_API_KEY).toBe('test-native')
+  })
+  it('does not overwrite or expose an undecryptable vault', () => {
+    const path = makePath()
+    new CredentialVault(path, storage).save({ VOLCENGINE_REALTIME_API_KEY: 'test-native' })
+    const bytes = readFileSync(path)
+    const vault = new CredentialVault(path, { ...storage, decryptString() { throw new Error('private provider key') } })
+    expect(() => vault.load()).toThrow('CREDENTIAL_LOAD_FAILED')
+    expect(() => vault.save({ VOLCENGINE_REALTIME_VOICE: 'test_voice' })).toThrow('CREDENTIAL_LOAD_FAILED')
+    expect(readFileSync(path)).toEqual(bytes)
+  })
+  it('returns an unavailable IPC result and retries the preserved vault after the system is unlocked', () => {
+    const path = makePath()
+    new CredentialVault(path, storage).save({ VOLCENGINE_REALTIME_API_KEY: 'test-native' })
+    let unlocked = false
+    const vault = new CredentialVault(path, { ...storage, isEncryptionAvailable: () => unlocked })
+    expect(() => vault.load()).toThrow()
+    const handlers = new Map<string, (event: unknown, payload?: unknown) => unknown>()
+    registerCredentialHandlers(vault, { handle: (name, handler) => { handlers.set(name, handler) } })
+    expect(handlers.get('r1.credentials.status')!({})).toMatchObject({ ok: false, error: { code: 'SYSTEM_SECRET_STORAGE_UNAVAILABLE' } })
+    unlocked = true
+    const result = handlers.get('r1.credentials.status')!({})
+    expect(result).toMatchObject({ ok: true, data: { VOLCENGINE_REALTIME_API_KEY: true } })
+    expect(JSON.stringify(result)).not.toContain('test-native')
   })
 })

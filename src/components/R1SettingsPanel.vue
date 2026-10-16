@@ -110,6 +110,7 @@ const credentialFields: { key: CredentialField; label: string; secret: boolean }
 ]
 const credentialInputs = reactive<Partial<Record<CredentialField, string>>>({})
 const credentialStatus = ref<CredentialStatus | null>(null)
+const credentialLoading = ref(false)
 const checks = reactive<Partial<Record<ServiceCheckTarget, ServiceCheckReport>>>({})
 const checking = ref<ServiceCheckTarget | null>(null)
 let checkRequestId: string | null = null
@@ -128,6 +129,7 @@ onBeforeUnmount(() => { disposed = true; invalidateChecks() })
 watch(() => props.persona?.version, (next, previous) => { if (previous !== undefined && next !== previous) invalidateChecks() })
 async function checkService(service: ServiceCheckTarget): Promise<void> {
   if (checking.value || busy.value) return
+  if (!credentialStatus.value) { message.value = '请先重新读取服务配置；凭据不可读时不发起云端检测。'; return }
   const generation = configurationGeneration
   const requestId = crypto.randomUUID()
   checkRequestId = requestId
@@ -161,15 +163,21 @@ watch(() => props.persona, (current) => {
   voiceId.value = current.voiceId
 }, { immediate: true })
 
-onMounted(async () => {
+async function refreshCredentials(): Promise<void> {
+  if (credentialLoading.value) return
+  credentialLoading.value = true
   try {
     const result = await window.seamoR1.credentials.status()
-    if (result.ok) credentialStatus.value = result.data
-    else message.value = '服务配置状态暂时无法读取。'
+    if (disposed) return
+    if (result.ok) { credentialStatus.value = result.data; emit('credentialsChanged', result.data); message.value = ''; invalidateChecks() }
+    else { credentialStatus.value = null; message.value = result.error.code === 'SYSTEM_SECRET_STORAGE_UNAVAILABLE'
+      ? '系统钥匙串暂时不可用。请手动解锁 login 钥匙串后重试；已保存的加密配置保留。'
+      : '服务配置暂时无法解密。加密文件保留，未覆盖；请检查系统安全存储后重试。' }
   } catch {
-    message.value = '服务配置状态暂时无法读取。'
-  }
-})
+    if (!disposed) message.value = '服务配置状态暂时无法读取。'
+  } finally { credentialLoading.value = false }
+}
+onMounted(refreshCredentials)
 
 async function savePersona(): Promise<void> {
   if (!props.persona || busy.value) return
@@ -321,14 +329,16 @@ async function clearCredential(field: CredentialField): Promise<void> {
       </section>
       <section class="r1-settings-section">
         <h3>服务状态</h3>
-        <p>对话模型：{{ credentialStatus?.VOLCENGINE_ARK_API_KEY && credentialStatus?.VOLCENGINE_ARK_MODEL ? '密钥与模型已填写，实际连接待请求验证' : '未配置' }}</p>
-        <p>原生实时对话 3.0：{{ credentialStatus?.VOLCENGINE_REALTIME_API_KEY && (persona?.voiceId || credentialStatus.VOLCENGINE_REALTIME_VOICE) ? '密钥与音色已填写，实际连接待请求验证' : '未配置完整：需要密钥与音色' }}</p>
+        <p v-if="!credentialStatus" role="status">服务配置{{ credentialLoading ? '读取中…' : '暂时不可读；已保存文件保留' }}</p>
+        <button v-if="!credentialStatus" type="button" :disabled="credentialLoading || busy" @click="refreshCredentials">{{ credentialLoading ? '读取中…' : '重新读取服务配置' }}</button>
+        <p v-if="credentialStatus">对话模型：{{ credentialStatus.VOLCENGINE_ARK_API_KEY && credentialStatus.VOLCENGINE_ARK_MODEL ? '密钥与模型已填写，实际连接待请求验证' : '未配置' }}</p>
+        <p v-if="credentialStatus">原生实时对话 3.0：{{ credentialStatus.VOLCENGINE_REALTIME_API_KEY && (persona?.voiceId || credentialStatus.VOLCENGINE_REALTIME_VOICE) ? '密钥与音色已填写，实际连接待请求验证' : '未配置完整：需要密钥与音色' }}</p>
         <div class="r1-settings-check"><button type="button" :disabled="busy || !!checking" @click="checkService('ark')">{{ checking === 'ark' ? '检测中…' : '检测对话模型' }}</button><span role="status">{{ checkLabel(checks.ark) }}</span></div>
         <div class="r1-settings-check"><button type="button" :disabled="busy || !!checking" @click="checkService('realtime')">{{ checking === 'realtime' ? '检测中…' : '检测实时对话' }}</button><span role="status">{{ checkLabel(checks.realtime) }}</span></div>
         <p v-if="checks.realtime?.details" role="status">{{ checks.realtime.details.phase === 'http_upgrade' ? '连接握手阶段' : '会话阶段' }}<template v-if="checks.realtime.details.httpStatus"> · HTTP {{ checks.realtime.details.httpStatus }}</template><template v-if="checks.realtime.details.providerCode"> · 服务码 {{ checks.realtime.details.providerCode }}</template><template v-if="checks.realtime.details.reason === 'resource_not_granted'"> · 服务返回资源未授权</template><template v-if="checks.realtime.details.reason === 'key_invalid'"> · 服务返回 Key 无效</template></p>
         <button v-if="checking" type="button" @click="cancelCheck">取消检测</button>
         <p>检测使用已保存配置。实时检测只建立并关闭会话，不打开麦克风；连续交流和出声效果另行验证。</p>
-        <p>联网搜索：{{ credentialStatus?.BRAVE_SEARCH_API_KEY ? '候选服务已填写密钥，G0 待验证' : 'G0 待验证候选，未配置' }}</p>
+        <p v-if="credentialStatus">联网搜索：{{ credentialStatus.BRAVE_SEARCH_API_KEY ? '候选服务已填写密钥，G0 待验证' : 'G0 待验证候选，未配置' }}</p>
         <p>音乐音源：待 G0 真实播放验证</p>
         <details ref="serviceConfiguration"><summary>模型与语音服务配置</summary>
           <p>密钥保存在本机加密存储中，这里不回显。留空不会覆盖原值。原生实时对话与 ASR、TTS 使用独立配置。</p>
@@ -338,12 +348,12 @@ async function clearCredential(field: CredentialField): Promise<void> {
             <div class="r1-settings-credential-row">
               <input :id="`r1-${field.key}`" v-model="credentialInputs[field.key]"
                 :type="field.secret ? 'password' : 'text'" autocomplete="off"
-                :placeholder="credentialStatus?.[field.key] ? '已配置；输入可替换' : '尚未配置'" />
+                :placeholder="!credentialStatus ? '状态不可读，原配置保留' : credentialStatus[field.key] ? '已配置；输入可替换' : '尚未配置'" />
               <button v-if="credentialStatus?.[field.key]" type="button" :disabled="busy"
                 :aria-label="`移除${field.label}`" @click="clearCredential(field.key)">移除</button>
             </div>
           </div>
-          <button type="button" class="r1-settings-save" :disabled="busy" @click="saveCredentials">保存服务配置</button>
+          <button type="button" class="r1-settings-save" :disabled="busy || !credentialStatus" @click="saveCredentials">保存服务配置</button>
         </details>
       </section>
       <p v-if="message" class="r1-settings-message" role="status">{{ message }}</p>

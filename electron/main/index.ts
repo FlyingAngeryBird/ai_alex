@@ -185,7 +185,10 @@ void app.whenReady().then(async () => {
       if (event.reason === 'completed') for (const artifact of event.task.result?.artifacts ?? []) artifactChanged(artifact)
     })
     const vault = new CredentialVault(join(app.getPath('userData'), 'credentials.bin'))
-    vault.load()
+    try { vault.load() } catch {
+      // Keep local pages usable. The vault retains its failure state, blocks saves
+      // that could overwrite unreadable secrets, and can retry through settings.
+    }
     automaticMemory = new R1AutomaticMemory(r1Database, r1PromptAssets, r1Conversations, createArkResponsesProvider(), {
       persona: () => new R1PersonaStore(r1Database!).get(), configurationRevision: () => vault.revision,
       onInvalidated: invalidateMemoryContexts,
