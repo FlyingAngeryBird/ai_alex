@@ -52,3 +52,5 @@ details只允许phase、HTTP数字、数字服务码、格式受限的服务关�
 关联5文件33项、后续钥匙串IPC6项及生产构建通过；覆盖原字节不变、解锁后先恢复全部键再合并、解密失败稳定错误、状态IPC重试且不回显Key。完整回归及真实本地页面启动待补证。此修复不代表钥匙串已经解锁或实时鉴权已通过。
 
 最终完整回归85文件528项通过，生产构建通过；日志`/tmp/seamo-r1-keychain-final-tests.log`、`/tmp/seamo-r1-keychain-recovery-build.log`。随后CUA明确报告Mac锁定且自动解锁失败，已请求用户手动解锁。真实新版页面启动与握手复测尚未完成；不得把锁定期间无法访问安全存储等同云服务Key无效。新包构建保留旧包及用户凭据，解锁后继续。
+
+开发预览已生成：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-16-39f8a6e/Seamo AI R1.app`。源提交`39f8a6e00f3feed22c17c5e8d4aa84c5886b4ec2`，包内build-info记录同一提交、55个生产依赖及资产2.5.1；本机`codesign --verify --deep --strict`通过。仍仅临时签名/未公证，Mac锁定期间未尝试绕过锁屏启动或填写凭据；实际窗口启动和原Key复测待用户解锁。
