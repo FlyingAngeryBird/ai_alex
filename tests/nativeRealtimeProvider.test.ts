@@ -77,4 +77,12 @@ describe('native Seeduplex 3.0 session diagnostic', () => {
     socket.emit('message', Buffer.from('binary'), true)
     await expect(promise).rejects.toMatchObject({ code: 'REALTIME_PROTOCOL_INVALID' })
   })
+  it.each([['401', 'REALTIME_AUTH_FAILED'], [403, 'REALTIME_AUTH_FAILED'], ['45000001', 'REALTIME_AUTH_FAILED'],
+    [429, 'REALTIME_QUOTA_LIMIT'], ['unrecognized', 'REALTIME_SERVER_REJECTED']])('sanitizes server event code %s', async (code, category) => {
+    const { socket, options } = fixture()
+    const promise = checkNativeRealtimeSession({ apiKey: 'key', voice: 'voice', boundary: boundary() }, options)
+    socket.event({ type: 'error', error: { code, message: 'key=private-secret' } })
+    await expect(promise).rejects.toMatchObject({ code: category, message: category })
+    expect(socket.terminate).toHaveBeenCalledOnce()
+  })
 })

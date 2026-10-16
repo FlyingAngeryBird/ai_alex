@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import WebSocket, { type ClientOptions } from 'ws'
 import type { R1ModelRequestBoundary } from '../r1/modelBoundary.js'
-import { NATIVE_REALTIME_ENDPOINT, NativeRealtimeError, nativeSessionCreate } from './nativeRealtimeProvider.js'
+import { NATIVE_REALTIME_ENDPOINT, NativeRealtimeError, nativeSessionCreate, nativeFailureCode } from './nativeRealtimeProvider.js'
 
 export type NativeRealtimeEvent = Record<string, unknown> & { type: string }
 export type NativeToolCall = { callId: string; name: string; arguments: unknown }
@@ -59,8 +59,7 @@ export class NativeRealtimeSession {
         })
         socket.on('unexpected-response', (_request, response) => {
           response.resume()
-          this.close(response.statusCode === 401 || response.statusCode === 403 ? 'REALTIME_AUTH_FAILED'
-            : response.statusCode === 429 ? 'REALTIME_QUOTA_LIMIT' : 'REALTIME_UPGRADE_FAILED')
+          this.close(nativeFailureCode(response.statusCode, 'http'))
         })
         socket.on('error', () => this.close('REALTIME_NETWORK_FAILED'))
         socket.on('close', () => this.close('REALTIME_CONNECTION_CLOSED'))
@@ -100,7 +99,10 @@ export class NativeRealtimeSession {
     this.pendingCalls.delete(callId); this.answeredCalls.add(callId)
   }
   private receive(event: NativeRealtimeEvent): void {
-    if (event.type === 'error') { this.close('REALTIME_SERVER_REJECTED'); return }
+    if (event.type === 'error') {
+      const error = event.error && typeof event.error === 'object' ? event.error as Record<string, unknown> : null
+      this.close(nativeFailureCode(error?.code ?? event.code, 'event')); return
+    }
     if (event.type === 'session.closed') { this.close('REALTIME_SESSION_CLOSED'); return }
     if (event.type === 'session.created') {
       const session = event.session as { id?: unknown } | undefined

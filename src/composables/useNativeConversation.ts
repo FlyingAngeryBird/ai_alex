@@ -10,7 +10,7 @@ function connectionMessage(code: string): string {
   if (/[\u3400-\u9fff]/.test(code)) return code
   const configuration = voiceConfigurationMessage(code)
   if (configuration) return configuration
-  if (code === 'REALTIME_AUTH_FAILED') return '实时对话鉴权失败，请检查设置中的服务凭据。'
+  if (code === 'REALTIME_AUTH_FAILED') return '实时对话鉴权未通过，请检查豆包语音 Key、所属项目及实时对话开通权限。'
   if (code === 'REALTIME_QUOTA_LIMIT') return '实时对话服务额度不足，请检查服务额度后重新开启。'
   if (needsContextRefresh(code)) return '对话上下文刷新未完成，请重新开启连续语音。'
   if (retryableConnectionFailure(code)) return '语音连接中断，自动重连未成功。请检查网络后重新开启。'

@@ -22,6 +22,24 @@ function fixture() {
     onEvent, onClosed, onToolCalls, connect: () => socket as unknown as WebSocket })
   return { socket, session, onEvent, onClosed, onToolCalls }
 }
+it.each([['401', 'REALTIME_AUTH_FAILED'], [403, 'REALTIME_AUTH_FAILED'], ['45000002', 'REALTIME_AUTH_FAILED'],
+  [429, 'REALTIME_QUOTA_LIMIT'], ['unknown', 'REALTIME_SERVER_REJECTED']])('uses the same safe event failure category for %s before and after session creation', async (code, category) => {
+  for (const ready of [false, true]) {
+    const { session, socket, onEvent, onClosed } = fixture()
+    const opened = session.open()
+    // Attach the rejection handler before delivering a synchronous fixture event.
+    const result = opened.then(() => 'ready', error => error.code)
+    socket.emit('open')
+    if (ready) { socket.event({ type: 'session.created', session: { id: 'test' } }); await result }
+    onEvent.mockClear()
+    socket.event({ type: 'error', error: { code, message: 'key=private-secret' } })
+    if (!ready) expect(await result).toBe(category)
+    expect(onClosed).toHaveBeenCalledWith(category)
+    expect(onClosed).toHaveBeenCalledOnce(); expect(socket.terminate).toHaveBeenCalledOnce()
+    expect(onEvent).not.toHaveBeenCalled()
+    expect(() => session.appendAudio(new Uint8Array([0, 0]))).toThrow('REALTIME_NOT_READY')
+  }
+})
 it('waits for session acknowledgement, streams PCM, and drops canceled response audio', async () => {
   const { session, socket, onEvent, onClosed } = fixture()
   const opened = session.open()

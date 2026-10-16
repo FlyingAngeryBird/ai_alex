@@ -8,6 +8,14 @@ export const NATIVE_REALTIME_MODEL = '1.2.6.1'
 export class NativeRealtimeError extends Error {
   constructor(readonly code: string) { super(code); this.name = 'NativeRealtimeError' }
 }
+/** Stable categories only; provider messages may contain private request data. */
+export function nativeFailureCode(code: unknown, phase: 'http' | 'event'): string {
+  if (typeof code !== 'string' && typeof code !== 'number') return 'REALTIME_SERVER_REJECTED'
+  const value = String(code)
+  if (['401', '403', '45000001', '45000002'].includes(value)) return 'REALTIME_AUTH_FAILED'
+  if (value === '429') return 'REALTIME_QUOTA_LIMIT'
+  return phase === 'http' ? 'REALTIME_UPGRADE_FAILED' : 'REALTIME_SERVER_REJECTED'
+}
 export function nativeSessionCreate(boundary: R1ModelRequestBoundary, voice: string): Record<string, unknown> {
   if (typeof voice !== 'string' || !/^[A-Za-z0-9_.-]{1,200}$/.test(voice)) throw new NativeRealtimeError('REALTIME_VOICE_REQUIRED')
   const prepared = boundary.finalize([])
@@ -63,8 +71,7 @@ export async function checkNativeRealtimeSession(input: { apiKey: string; voice:
       if (!event || typeof event.type !== 'string') { finish('REALTIME_PROTOCOL_INVALID'); return }
       if (event.type === 'error') {
         // Server messages can include private request data: return a stable category only.
-        const code = String(event.error?.code ?? event.code ?? '')
-        finish(['401', '403', '45000001', '45000002'].includes(code) ? 'REALTIME_AUTH_FAILED' : 'REALTIME_SERVER_REJECTED')
+        finish(nativeFailureCode(event.error?.code ?? event.code, 'event'))
       } else if (event.type === 'session.created') {
         if (created || typeof event.session?.id !== 'string' || !event.session.id) { finish('REALTIME_PROTOCOL_INVALID'); return }
         created = true
@@ -78,8 +85,7 @@ export async function checkNativeRealtimeSession(input: { apiKey: string; voice:
     })
     socket.on('unexpected-response', (_request, response) => {
       response.resume()
-      finish(response.statusCode === 401 || response.statusCode === 403 ? 'REALTIME_AUTH_FAILED'
-        : response.statusCode === 429 ? 'REALTIME_QUOTA_LIMIT' : 'REALTIME_UPGRADE_FAILED')
+      finish(nativeFailureCode(response.statusCode, 'http'))
     })
     socket.on('error', () => finish('REALTIME_NETWORK_FAILED'))
     socket.on('close', () => { if (!settled) finish('REALTIME_SESSION_CLOSED_EARLY') })

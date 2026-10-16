@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baselineCommit": "08554b7",
-  "date": "2026-10-14",
+  "date": "2026-10-16",
   "runtime": {
     "nodeOnHost": "24.14.0",
     "nodeInElectron": "24.17.0",
@@ -19,7 +19,7 @@
     { "id": "ark-task-runner-note", "status": "passed", "checkedAt": "2026-10-13T17:42:54.227Z", "evidence": "asset release 2.0.2; isolated in-memory SQLite and synthetic explicit save; 3 decisions, read_file and notes_create; 1 matching Item and 3 Receipt rows; 8214ms; accepted to succeeded; store:false; publishedInProduction:false; five failed checks and fixes retained in task-runner progress report", "modelProfile": "local-env", "protocolVersion": "responses-v3", "scope": "single bounded M02 note-commit chain; not natural semantic blind evaluation, production M01, all tools, framework recovery or G3 acceptance" },
     { "id": "tts-one-shot", "status": "passed", "evidence": "one real synthesis returned 8493 audio bytes; playback not verified", "modelProfile": "local-env" },
     { "id": "music-search", "status": "passed", "evidence": "one real GD Studio netease search returned five tracks; URL/playback not verified" },
-    { "id": "native-realtime-voice", "status": "not_run", "reason": "User confirmed service opened; independent encrypted API Key/voice fields and session-create/close diagnostic implemented. User will configure in settings later; microphone, playback, full duplex and tool return remain unverified." },
+    { "id": "native-realtime-voice", "status": "failed", "checkedDate": "2026-10-16", "evidence": "User saved native API Key and voice in packaged preview 51f50e2. Real settings session-create/close check returned REALTIME_AUTH_FAILED. Microphone stayed off; no session acknowledgement or audio acceptance. Exact HTTP status and provider body are not exposed by that preview, so key invalidity vs project/resource permission cannot be determined from the current evidence.", "modelProfile": "encrypted-vault", "protocolVersion": "seeduplex-json-3.0", "scope": "authentication diagnostic only, not full duplex or performance acceptance" },
     { "id": "realtime-tool-result", "status": "not_run", "reason": "Depends on native realtime resource" },
     { "id": "search-provider", "status": "not_run", "reason": "Search resource/permission not configured" },
     { "id": "music-playback", "status": "not_run", "reason": "Search result does not prove URL can play" },

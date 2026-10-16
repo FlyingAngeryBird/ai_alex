@@ -146,7 +146,8 @@ function checkLabel(report?: ServiceCheckReport): string {
   if (report.status === 'passed') return report.service === 'ark' ? '请求通过' : '会话建立与关闭通过'
   if (report.status === 'cancelled') return '已取消，请重新检测'
   if (report.status === 'not_configured') return report.service === 'ark' ? '请先保存密钥与模型' : '请先保存密钥与音色'
-  if (['REALTIME_AUTH_FAILED', 'ARK_HTTP_401', 'ARK_HTTP_403'].includes(report.code)) return '鉴权失败，请检查密钥与服务权限'
+  if (report.code === 'REALTIME_AUTH_FAILED') return '鉴权未通过：请检查豆包语音 Key、所属项目与实时对话开通权限'
+  if (['ARK_HTTP_401', 'ARK_HTTP_403'].includes(report.code)) return '鉴权失败，请检查密钥与服务权限'
   if (['REALTIME_QUOTA_LIMIT', 'ARK_HTTP_429'].includes(report.code)) return '服务限额，请稍后重试'
   if (report.code.includes('TIMEOUT')) return '连接超时，请重试'
   return '检测失败，请检查服务配置后重试'
@@ -330,6 +331,7 @@ async function clearCredential(field: CredentialField): Promise<void> {
         <p>音乐音源：待 G0 真实播放验证</p>
         <details ref="serviceConfiguration"><summary>模型与语音服务配置</summary>
           <p>密钥保存在本机加密存储中，这里不回显。留空不会覆盖原值。原生实时对话与 ASR、TTS 使用独立配置。</p>
+          <p>实时对话 Key 来自豆包语音新版控制台的「API Key 管理」。请确认该 Key 所属项目已开通实时对话；火山方舟 Key 和旧版 Access Token 不能直接填写到此项。保存后点击「检测实时对话」验证连接。</p>
           <div v-for="field in credentialFields" :key="field.key" class="r1-settings-field">
             <label :for="`r1-${field.key}`">{{ field.label }}</label>
             <div class="r1-settings-credential-row">
