@@ -5,12 +5,14 @@ import { R1ModelRequestBoundary } from './modelBoundary.js'
 import type { R1PromptAssets } from './promptAssets.js'
 import type { CredentialVault } from './credentials.js'
 import type { R1PersonaStore } from './persona.js'
+import { safeNativeFailureDetails, type NativeFailureDetails } from '../providers/nativeRealtimeDiagnostics.js'
 
 export type ServiceCheckTarget = 'ark' | 'realtime'
 export type ServiceCheckReport = {
   service: ServiceCheckTarget; status: 'passed' | 'not_configured' | 'failed' | 'cancelled';
   code: string; checkedAt: string; durationMs: number; configurationRevision: number;
   scope: 'responses' | 'session_create_close'
+  details?: NativeFailureDetails
 }
 type CheckInput = { requestId: string; service: ServiceCheckTarget }
 export class R1ServiceDiagnostics {
@@ -32,10 +34,12 @@ export class R1ServiceDiagnostics {
     const revision = this.vault.revision
     let personaVersion: number | undefined
     const start = performance.now()
-    const report = (status: ServiceCheckReport['status'], code: string): ServiceCheckReport => {
+    const report = (status: ServiceCheckReport['status'], code: string, details?: NativeFailureDetails): ServiceCheckReport => {
       const value: ServiceCheckReport = { service: input.service, status, code, checkedAt: new Date().toISOString(),
         durationMs: Math.round(performance.now() - start), configurationRevision: revision,
         scope: input.service === 'ark' ? 'responses' : 'session_create_close' }
+      const safe = safeNativeFailureDetails(details)
+      if (safe) value.details = safe
       this.reports.set(input.service, value); return value
     }
     try {
@@ -65,7 +69,7 @@ export class R1ServiceDiagnostics {
       const code = error instanceof ArkResponsesError || error instanceof NativeRealtimeError
         ? error.code : 'SERVICE_CHECK_FAILED'
       return report(['ARK_NOT_CONFIGURED', 'REALTIME_NOT_CONFIGURED', 'REALTIME_VOICE_REQUIRED'].includes(code)
-        ? 'not_configured' : 'failed', code)
+        ? 'not_configured' : 'failed', code, error instanceof NativeRealtimeError ? error.details : undefined)
     } finally { this.active.delete(owner) }
   }
   cancel(owner: number, requestId?: string): void {

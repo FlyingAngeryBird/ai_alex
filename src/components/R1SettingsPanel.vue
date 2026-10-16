@@ -325,6 +325,7 @@ async function clearCredential(field: CredentialField): Promise<void> {
         <p>原生实时对话 3.0：{{ credentialStatus?.VOLCENGINE_REALTIME_API_KEY && (persona?.voiceId || credentialStatus.VOLCENGINE_REALTIME_VOICE) ? '密钥与音色已填写，实际连接待请求验证' : '未配置完整：需要密钥与音色' }}</p>
         <div class="r1-settings-check"><button type="button" :disabled="busy || !!checking" @click="checkService('ark')">{{ checking === 'ark' ? '检测中…' : '检测对话模型' }}</button><span role="status">{{ checkLabel(checks.ark) }}</span></div>
         <div class="r1-settings-check"><button type="button" :disabled="busy || !!checking" @click="checkService('realtime')">{{ checking === 'realtime' ? '检测中…' : '检测实时对话' }}</button><span role="status">{{ checkLabel(checks.realtime) }}</span></div>
+        <p v-if="checks.realtime?.details" role="status">{{ checks.realtime.details.phase === 'http_upgrade' ? '连接握手阶段' : '会话阶段' }}<template v-if="checks.realtime.details.httpStatus"> · HTTP {{ checks.realtime.details.httpStatus }}</template><template v-if="checks.realtime.details.providerCode"> · 服务码 {{ checks.realtime.details.providerCode }}</template><template v-if="checks.realtime.details.reason === 'resource_not_granted'"> · 服务返回资源未授权</template><template v-if="checks.realtime.details.reason === 'key_invalid'"> · 服务返回 Key 无效</template></p>
         <button v-if="checking" type="button" @click="cancelCheck">取消检测</button>
         <p>检测使用已保存配置。实时检测只建立并关闭会话，不打开麦克风；连续交流和出声效果另行验证。</p>
         <p>联网搜索：{{ credentialStatus?.BRAVE_SEARCH_API_KEY ? '候选服务已填写密钥，G0 待验证' : 'G0 待验证候选，未配置' }}</p>

@@ -1,5 +1,6 @@
 import { R1_SCHEMA_VERSION, type R1Database } from './database.js'
 import type { ServiceCheckReport } from './serviceDiagnostics.js'
+import { safeNativeFailureDetails } from '../providers/nativeRealtimeDiagnostics.js'
 
 const voiceStages = ['space_up', 'asr_final', 'llm_request_start', 'llm_response_start', 'llm_first_raw_delta', 'llm_first_delta',
   'llm_done', 'tts_session_ready', 'tts_first_push', 'tts_first_audio', 'tts_play_invoked', 'tts_play_start', 'tts_play_end'] as const
@@ -21,7 +22,8 @@ export function buildDiagnosticExport(db: R1Database, metadata: { appVersion: st
     runtime: { appVersion: metadata.appVersion, assetRelease: metadata.assetRelease, platform: metadata.platform, osRelease: metadata.osRelease,
       electronVersion: metadata.electronVersion, nodeVersion: metadata.nodeVersion },
     configurationRevision: metadata.configurationRevision, configured: metadata.configured, serviceChecks: metadata.serviceChecks.map(check => ({ service: check.service, status: check.status,
-      code: check.code, checkedAt: check.checkedAt, durationMs: check.durationMs, scope: check.scope, configurationRevision: check.configurationRevision })),
+      code: check.code, checkedAt: check.checkedAt, durationMs: check.durationMs, scope: check.scope, configurationRevision: check.configurationRevision,
+      ...(safeNativeFailureDetails(check.details) ? { details: safeNativeFailureDetails(check.details) } : {}) })),
     trace: { clock: 'renderer_performance_now_ms', stages: trace, crossProcessLatencyCalculated: false }, events, receipts,
     privacy: { rawAudioIncluded: false, messageBodiesIncluded: false, credentialsIncluded: false, automaticallyUploaded: false } }
 }

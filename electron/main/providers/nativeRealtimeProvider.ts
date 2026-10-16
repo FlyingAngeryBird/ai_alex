@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import WebSocket, { type ClientOptions, type RawData } from 'ws'
 import type { R1ModelRequestBoundary } from '../r1/modelBoundary.js'
+import { readNativeUpgradeFailure, safeNativeFailureDetails, type NativeFailureDetails } from './nativeRealtimeDiagnostics.js'
 
 // Official Seeduplex 3.0 JSON protocol, distinct from legacy binary realtime/dialogue.
 export const NATIVE_REALTIME_ENDPOINT = 'wss://openspeech.bytedance.com/api/v3/duplex/realtime/dialogue'
 export const NATIVE_REALTIME_MODEL = '1.2.6.1'
 export class NativeRealtimeError extends Error {
-  constructor(readonly code: string) { super(code); this.name = 'NativeRealtimeError' }
+  constructor(readonly code: string, readonly details?: NativeFailureDetails) { super(code); this.name = 'NativeRealtimeError' }
 }
 /** Stable categories only; provider messages may contain private request data. */
 export function nativeFailureCode(code: unknown, phase: 'http' | 'event'): string {
@@ -40,18 +41,19 @@ export async function checkNativeRealtimeSession(input: { apiKey: string; voice:
   return new Promise((resolve, reject) => {
     let settled = false
     let created = false
+    let readingRejection = false
     const socket = (options.connect ?? ((url, options) => new WebSocket(url, options)))(NATIVE_REALTIME_ENDPOINT, {
       headers: { 'X-Api-Key': input.apiKey.trim() }, handshakeTimeout: options.timeoutMs ?? 10000,
       maxPayload: 1_048_576, followRedirects: false
     })
-    function finish(code?: string): void {
+    function finish(code?: string, details?: NativeFailureDetails): void {
       if (settled) return
       settled = true
       clearTimeout(timeout)
       input.signal?.removeEventListener('abort', abort)
       // Keep error listener until close: terminate during HTTP upgrade may emit another error.
       socket.terminate()
-      if (code) reject(new NativeRealtimeError(code))
+      if (code) reject(new NativeRealtimeError(code, details))
       else resolve({ scope: 'session_create_close', model: NATIVE_REALTIME_MODEL })
     }
     function abort(): void { finish('REALTIME_CHECK_CANCELLED') }
@@ -71,7 +73,8 @@ export async function checkNativeRealtimeSession(input: { apiKey: string; voice:
       if (!event || typeof event.type !== 'string') { finish('REALTIME_PROTOCOL_INVALID'); return }
       if (event.type === 'error') {
         // Server messages can include private request data: return a stable category only.
-        finish(nativeFailureCode(event.error?.code ?? event.code, 'event'))
+        const code = event.error?.code ?? event.code
+        finish(nativeFailureCode(code, 'event'), safeNativeFailureDetails({ phase: 'session_event', providerCode: typeof code === 'number' ? String(code) : code }))
       } else if (event.type === 'session.created') {
         if (created || typeof event.session?.id !== 'string' || !event.session.id) { finish('REALTIME_PROTOCOL_INVALID'); return }
         created = true
@@ -84,10 +87,10 @@ export async function checkNativeRealtimeSession(input: { apiKey: string; voice:
       }
     })
     socket.on('unexpected-response', (_request, response) => {
-      response.resume()
-      finish(nativeFailureCode(response.statusCode, 'http'))
+      readingRejection = true
+      void readNativeUpgradeFailure(response).then(details => finish(nativeFailureCode(response.statusCode, 'http'), details))
     })
-    socket.on('error', () => finish('REALTIME_NETWORK_FAILED'))
-    socket.on('close', () => { if (!settled) finish('REALTIME_SESSION_CLOSED_EARLY') })
+    socket.on('error', () => { if (!readingRejection) finish('REALTIME_NETWORK_FAILED') })
+    socket.on('close', () => { if (!settled && !readingRejection) finish('REALTIME_SESSION_CLOSED_EARLY') })
   })
 }

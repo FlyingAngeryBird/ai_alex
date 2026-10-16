@@ -57,8 +57,10 @@ describe('native Seeduplex 3.0 session diagnostic', () => {
   it('sanitizes HTTP auth failures and server errors, closes the socket on timeout', async () => {
     const auth = fixture()
     const promise = checkNativeRealtimeSession({ apiKey: 'key', voice: 'voice', boundary: boundary() }, auth.options)
-    auth.socket.emit('unexpected-response', {}, { statusCode: 403, resume: vi.fn() })
-    await expect(promise).rejects.toMatchObject({ code: 'REALTIME_AUTH_FAILED' })
+    const response = Object.assign(new EventEmitter(), { statusCode: 403, headers: {}, resume: vi.fn() })
+    auth.socket.emit('unexpected-response', {}, response)
+    response.emit('end')
+    await expect(promise).rejects.toMatchObject({ code: 'REALTIME_AUTH_FAILED', details: { phase: 'http_upgrade', httpStatus: 403 } })
     const timed = fixture(5)
     await expect(checkNativeRealtimeSession({ apiKey: 'key', voice: 'voice', boundary: boundary() }, timed.options))
       .rejects.toMatchObject({ code: 'REALTIME_CHECK_TIMEOUT' })

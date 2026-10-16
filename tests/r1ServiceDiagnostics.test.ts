@@ -38,6 +38,14 @@ describe('service diagnostics isolation and cancellation', () => {
       .toMatchObject({ status: 'not_configured', code: 'REALTIME_NOT_CONFIGURED' })
     expect(request).not.toHaveBeenCalled()
   })
+  it('reports only sanitized native failure details', async () => {
+    const { service, realtime } = fixture()
+    realtime.mockRejectedValueOnce(new NativeRealtimeError('REALTIME_AUTH_FAILED', Object.assign({ phase: 'http_upgrade' as const,
+      httpStatus: 403, providerCode: '45000001', reason: 'resource_not_granted' as const }, { message: 'private-secret' })))
+    const result = await service.check(1, { requestId: randomUUID(), service: 'realtime' })
+    expect(result).toMatchObject({ status: 'failed', details: { httpStatus: 403, reason: 'resource_not_granted' } })
+    expect(JSON.stringify(result)).not.toContain('private-secret')
+  })
   it('drops late success after owner-scoped cancellation, credential or persona changes', async () => {
     for (const reason of ['cancel', 'credential', 'persona']) {
       let release!: () => void
