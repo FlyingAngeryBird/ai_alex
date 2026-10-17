@@ -253,6 +253,15 @@ export class R1ConversationTools {
         } else {
           const current = this.permittedTask(args.taskId as string)
           if (alias === 'get_task') {
+            // Old app versions could publish web conclusions with no evidence.
+            // Do not feed such legacy results back to M01 as verified success.
+            if (current.status === 'succeeded' && current.result) {
+              const required = this.tasks.authority(current.taskId).authorizedAliases.filter(value => ['web_search', 'web_read_page'].includes(value))
+              if (required.some(value => !current.result!.entityReceipts.some(receipt =>
+                receipt.tool === this.assets.toolDefinition(value).name && receipt.status === 'succeeded'))) {
+                throw new Error('TASK_COMPLETION_WEB_EVIDENCE_MISSING')
+              }
+            }
             output = { kind: 'receipt', actionId: randomUUID(), tool: this.assets.toolDefinition(alias).name,
               status: 'succeeded', entityId: current.taskId, entityVersion: current.goalVersion, data: { task: taskView(current) },
               errorCode: null, retryable: false, runId: null }

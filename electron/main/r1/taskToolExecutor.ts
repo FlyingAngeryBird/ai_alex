@@ -54,8 +54,12 @@ export class R1TaskToolExecutor {
       if (!this.pages) throw new Error('TASK_TOOL_IMPLEMENTATION_UNAVAILABLE')
       const args = input as Parameters<NonNullable<typeof this.pages>['read']>[0]
       this.tasks.assertLease(lease); this.assets.validateToolInput(alias, input)
-      if (args.sourceRef) this.tasks.assertPageSource(lease, args.sourceRef, args.url)
-      return this.tasks.executeReadTool(lease, alias, input, () => this.pages!.read(args, signal), callId)
+      return this.tasks.executeReadTool(lease, alias, input, () => {
+        // A mismatched source stays forbidden, but is an actionable failed
+        // tool receipt rather than terminating the whole model loop.
+        if (args.sourceRef) this.tasks.assertPageSource(lease, args.sourceRef, args.url)
+        return this.pages!.read(args, signal)
+      }, callId)
     }
     if (alias !== 'web_search') return this.execute(lease, alias, input, callId)
     if (!this.search) throw new Error('TASK_TOOL_IMPLEMENTATION_UNAVAILABLE')

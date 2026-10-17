@@ -162,14 +162,17 @@ it('binds page reading to an existing source and exposes persisted search and pa
     const search = createBraveSearchProvider({ key: () => 'synthetic', fetcher: (async () => new Response(JSON.stringify({ web: { results: [
       { title: '介绍', url: 'https://example.org/park', description: '摘要' }
     ] } }))) as typeof fetch })
-    const pages = createPageReader({ read: async url => ({ url: url.href, bytes: Buffer.from('<title>介绍</title><main>实际页面正文</main>'), contentType: 'text/html', truncated: false }) })
+    let pageRequests = 0
+    const pages = createPageReader({ read: async url => { pageRequests++; return { url: url.href, bytes: Buffer.from('<title>介绍</title><main>实际页面正文</main>'), contentType: 'text/html', truncated: false } } })
     const task = tasks.accept({ requestKey: 'page', sourceMessageId: message.messageId, timezone: 'Asia/Shanghai', goal: '读取页面',
       constraints: [], authorizedAliases: ['read_file', 'web_search', 'web_read_page'], complexity: 'complex' })
     const active = tasks.claimNext()!, executor = new R1TaskToolExecutor(tasks, assets, undefined, search, pages)
     executor.execute(active.lease, 'read_file', { file_path: '/skills/web-qa/SKILL.md' })
     await executor.executeAsync(active.lease, 'web_search', { query: '介绍' }, 'search')
     const sourceRef = tasks.get(task.taskId).webResult!.sources[0].sourceRef
-    await expect(executor.executeAsync(active.lease, 'web_read_page', { url: 'https://example.org/other', sourceRef, fields: [] }, 'wrong')).rejects.toThrow('TASK_PAGE_SOURCE_INVALID')
+    await expect(executor.executeAsync(active.lease, 'web_read_page', { url: 'https://example.org/other', sourceRef, fields: [] }, 'wrong'))
+      .resolves.toMatchObject({ status: 'failed', errorCode: 'TASK_PAGE_SOURCE_INVALID' })
+    expect(pageRequests).toBe(0)
     const result = await executor.executeAsync(active.lease, 'web_read_page', { url: 'https://example.org/park', sourceRef, fields: ['title'] }, 'page')
     expect(result.status).toBe('succeeded')
     expect(tasks.get(task.taskId).webResult).toMatchObject({ sources: [{ sourceRef, readStatus: 'read', snippet: '实际页面正文' }], candidates: [{ label: '介绍' }] })

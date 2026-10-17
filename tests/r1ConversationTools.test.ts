@@ -30,6 +30,25 @@ describe('registered main-conversation tool execution', () => {
       expect(s.tasks.authorizedAliases(active.lease)).toEqual(['read_file', 'web_search', 'web_read_page'])
     } finally { s.tasks.close(); s.db.close() }
   })
+  it('refuses to return a legacy completed web conclusion with no actual web receipts', () => {
+    const s = setup()
+    let reopened: R1TaskSupervisor | undefined
+    try {
+      const task = s.tasks.accept({ requestKey: 'legacy', sourceMessageId: s.source.messageId, timezone: 'Asia/Shanghai',
+        goal: '联网查证', constraints: [], authorizedAliases: ['web_search', 'web_read_page'], complexity: 'complex' })
+      s.tasks.claimNext()
+      s.tasks.close()
+      const row = s.db.prepare('SELECT checkpoint_json FROM agent_tasks WHERE task_id=?').get(task.taskId) as { checkpoint_json: string }
+      const checkpoint = JSON.parse(row.checkpoint_json)
+      checkpoint.result = { resultId: 'legacy-result', goalVersion: 1, completionStatus: 'completed', replyBrief: '未经查证的结论',
+        sourceRefs: [s.source.messageId], artifacts: [], unresolved: [], candidateRefs: [], entityReceipts: [] }
+      s.db.prepare("UPDATE agent_tasks SET status='succeeded',checkpoint_json=? WHERE task_id=?").run(JSON.stringify(checkpoint), task.taskId)
+      reopened = new R1TaskSupervisor(s.db, assets, () => 0)
+      const tools = new R1ConversationTools(s.db, assets, reopened, s.scope, ['read_file', 'web_search', 'web_read_page'])
+      expect(tools.execute('get_task', { taskId: task.taskId }, 'get-legacy'))
+        .toMatchObject({ status: 'failed', errorCode: 'TASK_COMPLETION_WEB_EVIDENCE_MISSING' })
+    } finally { reopened?.close(); s.tasks.close(); s.db.close() }
+  })
   it('returns real accepted idempotently with program source binding and rejects invented/unsupported grants', () => {
     const s = setup()
     try {
