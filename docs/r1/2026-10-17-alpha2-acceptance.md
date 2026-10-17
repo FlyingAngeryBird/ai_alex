@@ -2,6 +2,16 @@
 
 本文件对应1.0.0-alpha.2开发预览，继续使用`codex/seamo-r1`，不合并main，不修改旧版目录。它是可交用户验收的开发候选，不是已通过全部41项、性能、签名和安装门槛的正式发布。
 
+## 源码与开发包
+
+- 源码提交：`6dae5ac8036459a8322f68526afa73a593d00001`，已推送GitHub的`codex/seamo-r1`，草稿[PR #1](https://github.com/FlyingAngeryBird/ai_alex/pull/1)。
+- 开发预览标签：`r1-preview-1.0.0-alpha.2`；仅标识这一批源码，不代表G阶段通过。
+- 本地包目录：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha2-6dae5ac/`，其中`.app`和`Seamo-AI-R1-1.0.0-alpha.2-mac-arm64.zip`对应同一源码。
+- ZIP SHA256：`1aa4aa562faf59f28255f14153e5c307f899d3be2a927d831bd7df92a96907bb`。
+- Apple Silicon arm64；codesign完整性验证通过，但只是本机临时签名，未公证、未完成安装验收。包内build-info记录源提交和资产2.5.1；包内未发现`.env`文件。
+- 对准确提交重新完整回归89文件553项通过（11:12运行）。包目录的`evidence/`保存测试、构建、打包和本次音源检查日志；`acceptance-manifest.json`明确区分代码检查与完整产品验收。
+- 用户目前运行的稳定性包`f3eab20`未被覆盖；打开本批包前先退出正在运行的R1，避免两个版本共用数据。首次升级自动保存schema10副本，回退规则见文末。
+
 ## 本批完成的实现
 
 DEC-R1-DATA-035（F11d/F04d）：
