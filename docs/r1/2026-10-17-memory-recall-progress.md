@@ -40,3 +40,7 @@
 - 新增实际M01未选中话题检索：领域服务种入合成Topic，读v1的macOS结论；领域更正v2后只答Windows新结论；忘记后不返回Topic、不重现旧平台，转为无法确定。3步通过，[话题证据](evidence/2026-10-17-topic-recall.json)。这是新检索路径，未重新假定PR06生成或UI更正步骤通过。
 - 组合Memory/Topic检索失败/超时后，未返回的内部候选不能授权后续memory_update；新增观察边界回归。整个批次**97文件633项通过**，生产构建、59文件资产校验及16项合同例通过。chunk体积警告保留。
 - 应用候选alpha.9、资产3.2.3，SQLite11不变。原alpha.7仍待系统钥匙串验证，未重启该包或冒称本批麦克风/扬声器/通知验收通过。整个R1仍缺音乐真实资源、全量A/V、性能/设备、正式签名公证/安装回退等。
+
+## 可追溯候选包
+
+源码`22a445020f2050c72043d50ab9651142f062fe72`已同步GitHub；alpha.9包与ZIP位于`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha9-memory-recall/`。ZIP大小148650887字节，SHA256 `8b74ed092fb12b8533d23500f4b82c6540383a34678ce6a6e0bc32d52ac9b66f`。签名完整性通过，目录内有manifest、SHA256SUMS和本批证据。未启动本包：原alpha.7进程最新采样仍停在SecItemCopyMatching，等待用户系统验证。没有覆盖旧包、重填Key、正式签名公证或全量验收声明。

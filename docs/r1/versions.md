@@ -18,11 +18,13 @@ R1 当前是开发预览：应用 ID `com.seamo.ai.r1`，数据目录 `~/Library
 
 | 版本 | 源码 | 资产 / SQLite | 验证范围 |
 | --- | --- | --- | --- |
+| alpha.9 | `22a4450` | 3.2.3 / 11 | 633项、构建通过；固定跨会话20题自动19/20、话题更正/忘记3步真实服务通过；尚未启动此包或验收实际语音 |
+| alpha.8 | `321df09` | 3.2.1 / 11 | 提醒创建→同ID改期→取消→一次回访→缺时刻不写入5步真实文字服务通过；627项与构建通过 |
 | alpha.7 | `25d277c` | 3.2.0 / 11 | 624项回归、构建、真实到期事件→Ark→TTS通过；实际窗口/出声待钥匙串确认后核验 |
 | alpha.6 | `9a1ffda` | 3.1.1 / 11 | 用户确认短任务完成简报声音正常，设备heard/14817ms；同工作稿v1→v2局部修改通过 |
 | alpha.4 | `1990b09`，标签`r1-preview-1.0.0-alpha.4` | 3.0.0 / 11 | 用户确认闲聊及天气＋RFC多问题实时检索提示、文字和声音测试无问题 |
 
-alpha.7源码已同步现有GitHub开发分支；没有合并main或宣称G阶段通过。预览包目录`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha7-reminder-delivery/`保存ZIP、SHA256SUMS、来源与验收manifest。包使用本机临时签名，未经公证；alpha.6保留原路径，不覆盖。回退alpha.7代码和资产至`6fd0efd`对应alpha.6报告状态，数据schema不变；不覆盖现有数据库或遗忘抑制。
+alpha.9源码22a4450已同步现有GitHub开发分支；alpha.8/9独立预览包均保留来源、校验及验收文件，尚无实际启动通过声明。alpha.7源码亦已同步；没有合并main或宣称G阶段通过。预览包目录`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha7-reminder-delivery/`保存ZIP、SHA256SUMS、来源与验收manifest。包使用本机临时签名，未经公证；alpha.6保留原路径，不覆盖。回退alpha.7代码和资产至`6fd0efd`对应alpha.6报告状态，数据schema不变；不覆盖现有数据库或遗忘抑制。
 
 以下为历史检查点，旧的推送/锁屏/未配置状态以当时记录为准，当前状态见[交付状态](2026-10-17-current-status.md)和[兼容检查](compatibility.json)。
 

@@ -176,8 +176,8 @@
     },
     {
       "id": "macos-permissions",
-      "status": "not_run",
-      "reason": "Requires installed app and microphone/notification manual test"
+      "status": "partial",
+      "reason": "User microphone/speaker sessions passed in prior previews. Full notification denial, device switching/unplug, sleep and installation permission acceptance remain open; alpha.7 currently waits at system Keychain authorization."
     },
     {
       "id": "voice-latency",
@@ -209,7 +209,42 @@
       "id": "alpha7-reminder-physical-playback",
       "status": "not_run",
       "reason": "Candidate startup blocked at SecItemCopyMatching. Actual due card, speaker sound and device receipt still require verification; no hearing claim."
+    },
+    {
+      "id": "alpha8-reminder-lifecycle",
+      "status": "passed",
+      "checkedDate": "2026-10-17",
+      "evidence": "Source 321df09, assets 3.2.1: real M01 create -> same-ID reschedule -> cancel -> one follow_up -> ambiguous time without write; five steps passed, no Item writes. Extra tools-free summary cannot execute actions.",
+      "scope": "isolated real text/domain service chain; no notification or speaker acceptance"
+    },
+    {
+      "id": "alpha9-memory-fixed-set",
+      "status": "passed",
+      "checkedDate": "2026-10-17",
+      "evidence": "Source 22a4450, assets 3.2.3: unchanged 20-case set after SQLite close/reopen; 19/20 automatic (95%), all 20 actual target sources read. M14 wording false negative retained. Baselines 0/5 and 14/20 retained in report. Evidence docs/r1/evidence/2026-10-17-memory-recall-20.json.",
+      "scope": "single fixed synthetic real-M01 text retrieval cohort; not all F04/V07 capture, voice, deletion or natural-language accuracy"
+    },
+    {
+      "id": "alpha9-topic-version-recall",
+      "status": "passed",
+      "checkedDate": "2026-10-17",
+      "evidence": "Source 22a4450: real unselected-topic query returns v1, domain correction returns v2 only, forgetting returns no topic or old platform; three actual M01 cases.",
+      "scope": "domain-seeded isolated Topic read/correction/forgetting; not PR06 generation or actual UI editing"
+    },
+    {
+      "id": "alpha9-code-regression",
+      "status": "passed",
+      "checkedDate": "2026-10-17",
+      "evidence": "97 files / 633 tests, production build, 59 hashed assets and 16 contract examples pass; no tool in final receipt summary, failed combined recall does not authorize a hidden target.",
+      "scope": "automated code/boundary verification only"
+    },
+    {
+      "id": "memory-local-retrieval-10000",
+      "status": "passed",
+      "checkedDate": "2026-10-17",
+      "evidence": "10000 synthetic records; 10 actual local recalls all return only exact named target, 68.1-90.2ms with 200ms budget; no network.",
+      "scope": "specific synthetic local capacity sample, not natural recall or end-to-end P95"
     }
   ],
-  "conclusion": "G0 and full R1 acceptance remain open. Current source 25d277c / alpha.7: speech and search smoke plus alpha.6 short task brief passed; alpha.7 reminder physical playback, music resources, complete A/V, measured latency and signed/notarized installation remain open. Historical failures remain in dated reports."
+  "conclusion": "Full R1 and G-stage acceptance remain open. Latest source 22a4450 / alpha.9: bounded reminder lifecycle and fixed-set memory retrieval passed in isolated real-service tests (19/20 automatic); current-topic correction/forgetting passed. Actual candidate UI/audio, music resources, full A/V, device/latency and signed/notarized installation remain open. Historical failures are preserved."
 }

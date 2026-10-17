@@ -24,3 +24,5 @@
 ## 版本与回退
 
 候选应用1.0.0-alpha.8，资产3.2.1、SK04 1.0.1；10 Prompt、6 Skill、38业务/3内部工具、schema3.0.0、SQLite11均保持原合同。代码和资产一起回退511fb5f，不覆盖用户数据、删除抑制或旧预览包。正式签名公证、音乐资源、全量A/V和安装回退仍未完成。
+
+候选包补录：源码321df09的alpha.8独立包位于`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha8-reminder-lifecycle/`，ZIP SHA256 `d1e1603f3cf6a50da2282a451b7bd4963cd405c9bfd9e61be4b7ff33bc08b81a`，148642320字节，签名完整性通过；未启动/未公证/未实际出声验收。后续alpha.9保留本批修复，不覆盖alpha.8。
