@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baselineCommit": "08554b7",
-  "date": "2026-10-16",
+  "date": "2026-10-17",
   "runtime": {
     "nodeOnHost": "24.14.0",
     "nodeInElectron": "24.17.0",
@@ -20,7 +20,7 @@
     { "id": "tts-one-shot", "status": "passed", "evidence": "one real synthesis returned 8493 audio bytes; playback not verified", "modelProfile": "local-env" },
     { "id": "music-search", "status": "passed", "evidence": "one real GD Studio netease search returned five tracks; URL/playback not verified" },
     { "id": "native-realtime-session-diagnostic", "status": "passed", "checkedDate": "2026-10-16", "evidence": "After user unlocked the Mac, preview 39f8a6e started from outside the checkout and restored saved encrypted configuration. Real settings check displayed session create/close passed; microphone stayed off, no audio or tool requests. Earlier 51f50e2 auth failure retained in native-auth-progress report; its cause was not proven.", "modelProfile": "encrypted-vault", "protocolVersion": "seeduplex-json-3.0", "scope": "session_create_close only; not actual conversation, playback, tools or performance acceptance" },
-    { "id": "native-realtime-voice", "status": "not_run", "reason": "Session create/close now passed with saved credentials; live microphone, response playback, 20 rounds and interruption remain to verify." },
+    { "id": "native-realtime-voice", "status": "failed", "reason": "User live microphone test in preview 39f8a6e returned text without audible reply; UI then reported uplink congestion. Four assistant messages were interrupted with played_until_ms=0. Silence root cause unproven; paced 20ms uplink and count-only diagnostics await updated-package retest." },
     { "id": "realtime-tool-result", "status": "not_run", "reason": "Depends on native realtime resource" },
     { "id": "search-provider", "status": "not_run", "reason": "Search resource/permission not configured" },
     { "id": "music-playback", "status": "not_run", "reason": "Search result does not prove URL can play" },

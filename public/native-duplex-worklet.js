@@ -5,7 +5,7 @@ class NativeDuplexProcessor extends AudioWorkletProcessor {
     this.ring = new Float32Array(24000 * 30)
     this.read = 0; this.write = 0; this.responseId = null; this.playing = false; this.finished = false
     this.cancelled = new Set(); this.capture = false; this.inputWeight = 0; this.inputSum = 0
-    this.pcm = new Int16Array(640); this.pcmIndex = 0; this.reportAt = 0; this.started = false
+    this.pcm = new Int16Array(320); this.pcmIndex = 0; this.reportAt = 0; this.started = false
     this.port.onmessage = ({ data }) => {
       if (data.type === 'capture') {
         this.capture = data.enabled

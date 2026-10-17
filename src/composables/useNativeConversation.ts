@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import type { NativeRealtimeEvent } from '../../electron/main/providers/nativeRealtimeSession'
 import runtimeDefaults from '../../r1-assets/config/runtime.defaults.json'
 import { voiceConfigurationMessage } from '../services/voiceReadiness'
+import { createNativeAudioUplink } from '../services/nativeAudioUplink'
 
 const needsContextRefresh = (code: string) => ['MEMORY_CONTEXT_REFRESH_REQUIRED', 'REALTIME_CONTEXT_REFRESH_REQUIRED'].includes(code)
 const retryableConnectionFailure = (code: string) => ['REALTIME_NETWORK_FAILED', 'REALTIME_CONNECTION_CLOSED',
@@ -34,7 +35,24 @@ export function useNativeConversation(options: {
   let context: AudioContext | null = null, stream: MediaStream | null = null
   let processor: AudioWorkletNode | null = null, source: MediaStreamAudioSourceNode | null = null
   let unsubscribe: (() => void) | null = null
-  let responseId: string | null = null, inflight = 0
+  let responseId: string | null = null
+  let uplink: ReturnType<typeof createNativeAudioUplink> | null = null
+  const freshDiagnostics = () => ({ capturedFrames: 0, sentFrames: 0, receivedAudioFrames: 0, receivedAudioBytes: 0,
+    rawAudioEvents: 0, audioMissingResponseId: 0, audioDiscardedCancelled: 0,
+    serverAudioFrames: 0, serverAudioBytes: 0, discardedCancelledAudio: 0, serverAsrDeltas: 0,
+    serverAsrCompleted: 0, serverAsrWithTranscript: 0, serverAsrWithItemId: 0,
+    audioPeak: 0, playbackStarts: 0, playbackUnderruns: 0, playbackCompletions: 0, playedUntilMs: 0,
+    asrCompleted: 0, asrWithTranscript: 0, asrWithItemId: 0, asrWithText: 0, asrWithResults: 0, lastError: '' })
+  let diagnostics = freshDiagnostics()
+  function adoptServerDiagnostics(value: unknown): void {
+    if (!value || typeof value !== 'object') return
+    for (const key of ['serverAudioFrames', 'serverAudioBytes', 'discardedCancelledAudio', 'serverAsrDeltas',
+      'serverAsrCompleted', 'serverAsrWithTranscript', 'serverAsrWithItemId'] as const) {
+      const number = (value as Record<string, unknown>)[key]
+      if (typeof number === 'number' && Number.isSafeInteger(number) && number >= 0) diagnostics[key] = number
+    }
+  }
+  const getDiagnostics = () => ({ ...diagnostics, audioContextState: context?.state ?? 'closed' })
   const cancelled = new Set<string>()
   const clearWaiters = new Map<string, () => void>()
   let stopping: Promise<void> | null = null
@@ -55,11 +73,17 @@ export function useNativeConversation(options: {
     })
   }
   function play(event: NativeRealtimeEvent): void {
+    diagnostics.rawAudioEvents++
+    if (typeof event.response_id !== 'string' || !event.response_id) diagnostics.audioMissingResponseId++
+    if (typeof event.response_id === 'string' && cancelled.has(event.response_id)) diagnostics.audioDiscardedCancelled++
     if (!processor || typeof event.response_id !== 'string' || typeof event.delta !== 'string' || cancelled.has(event.response_id)) return
     responseId = event.response_id
     const bytes = atob(event.delta)
     if (!bytes.length || bytes.length % 2 || bytes.length > 1_048_576) throw new Error('音频数据格式不正确。')
     const pcm = Uint8Array.from(bytes, byte => byte.charCodeAt(0))
+    diagnostics.receivedAudioFrames++; diagnostics.receivedAudioBytes += pcm.byteLength
+    const view = new DataView(pcm.buffer)
+    for (let index = 0; index < pcm.byteLength; index += 2) diagnostics.audioPeak = Math.max(diagnostics.audioPeak, Math.abs(view.getInt16(index, true)))
     processor.port.postMessage({ type: 'audio', responseId, pcm }, [pcm.buffer])
   }
   function stop(): Promise<void> {
@@ -73,6 +97,7 @@ export function useNativeConversation(options: {
   }
   async function stopNow(): Promise<void> {
     closing = true
+    uplink?.stop(); uplink = null
     userSpeaking.value = false
     active.value = false
     processor?.port.postMessage({ type: 'capture', enabled: false })
@@ -86,7 +111,10 @@ export function useNativeConversation(options: {
     setSpeaking(false); cancelled.clear(); responseId = null
     releaseOutput?.(); releaseOutput = null
     const old = context; context = null; if (old) void old.close()
-    if (id) await window.lingli.invoke('voice.nativeStop', { connectionId: id }).catch(() => undefined)
+    if (id) {
+      const stopped = await window.lingli.invoke<{ diagnostics?: unknown }>('voice.nativeStop', { connectionId: id }).catch(() => null)
+      if (stopped?.ok) adoptServerDiagnostics(stopped.data?.diagnostics)
+    }
     closing = false
   }
   async function interrupt(): Promise<void> {
@@ -97,11 +125,13 @@ export function useNativeConversation(options: {
   async function start(): Promise<boolean> {
     if (active.value || starting.value || stopping || recovery) return false
     wanted = true; networkRetries = 0
+    diagnostics = freshDiagnostics()
     const request = ++intent
     try { return await openConnection(request) }
     catch (error) {
       if (wanted && intent === request) {
         const code = error instanceof Error ? error.message : 'REALTIME_START_FAILED'
+        diagnostics.lastError = code
         if (needsContextRefresh(code) || retryableConnectionFailure(code)) {
           await recover(code)
           return active.value && wanted && intent === request
@@ -181,26 +211,35 @@ export function useNativeConversation(options: {
       if (!current()) return false
       processor = new AudioWorkletNode(context, 'seamo-native-duplex', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] })
       processor.connect(context.destination)
+      const connectionUplink = uplink = createNativeAudioUplink({
+        async send(pcm) {
+          if (!current()) return
+          const result = await window.lingli.invoke('voice.nativeAudio', { connectionId: id, pcm })
+          if (!result.ok) throw new Error('REALTIME_UPLINK_FAILED')
+        },
+        onSent() { if (current()) diagnostics.sentFrames++ },
+        onError() { if (current()) { diagnostics.lastError = 'REALTIME_UPLINK_STALLED'; void stop(); options.onError('语音传输持续拥塞，已停止收音。请重新开启。') } }
+      })
       processor.port.onmessage = ({ data }) => {
         if (data.type === 'cleared') { clearWaiters.get(data.requestId)?.(); return }
         if (!matches()) return
         if (data.type === 'playback') {
+          if (data.status === 'started') diagnostics.playbackStarts++
+          if (data.status === 'underrun') diagnostics.playbackUnderruns++
+          if (data.status === 'completed') diagnostics.playbackCompletions++
+          if (Number.isSafeInteger(data.playedUntilMs)) diagnostics.playedUntilMs = Math.max(diagnostics.playedUntilMs, data.playedUntilMs)
           setSpeaking(!closing && (data.status === 'started' || data.status === 'playing'))
           void window.lingli.invoke('voice.nativePlayback', { connectionId: id, ...data }).catch(() => undefined)
         } else if (data.type === 'error') { void stop(); options.onError('语音播放缓冲已满，请重新开启。') }
         else if (data.type === 'capture' && current() && active.value) {
-          if (inflight >= 4) { void stop(); options.onError('语音传输拥塞，已停止收音。'); return }
-          inflight++
-          void window.lingli.invoke('voice.nativeAudio', { connectionId: id, pcm: data.pcm }).then(result => {
-            if (current() && !result.ok) { void stop(); options.onError('语音连接中断，请重新开启。') }
-          }).catch(() => { if (current()) { void stop(); options.onError('语音连接中断，请重新开启。') } })
-            .finally(() => { inflight-- })
+          diagnostics.capturedFrames++; connectionUplink.enqueue(data.pcm)
         }
       }
       unsubscribe = window.lingli.on<NativeRealtimeEvent>('voice.nativeEvent', event => {
         if (!current() || event.connectionId !== id) return
         try {
           if (event.type === 'closed') {
+            adoptServerDiagnostics(event.diagnostics)
             const code = String(event.code)
             if (starting.value) { closedWhileStarting = code; return }
             if (needsContextRefresh(code) || retryableConnectionFailure(code)) void recover(code)
@@ -209,6 +248,13 @@ export function useNativeConversation(options: {
           }
           if (event.type === 'conversation.item.input_audio_transcription.started') userSpeaking.value = true
           if (event.type === 'conversation.item.input_audio_transcription.completed') networkRetries = 0
+          if (event.type === 'conversation.item.input_audio_transcription.completed') {
+            diagnostics.asrCompleted++
+            if (typeof event.transcript === 'string') diagnostics.asrWithTranscript++
+            if (typeof event.item_id === 'string') diagnostics.asrWithItemId++
+            if (typeof event.text === 'string') diagnostics.asrWithText++
+            if (Array.isArray(event.results)) diagnostics.asrWithResults++
+          }
           if (event.type === 'conversation.item.input_audio_transcription.completed' || event.type === 'conversation.item.input_audio_transcription.failed') userSpeaking.value = false
           if (event.type === 'conversation.item.input_audio_transcription.started' || event.type === 'response.canceled' && (!event.response_id || event.response_id === responseId)) {
             if (responseId) cancelled.add(responseId)
@@ -241,5 +287,5 @@ export function useNativeConversation(options: {
       return false
     }
   }
-  return { active, starting, speaking, userSpeaking, start, stop, interrupt }
+  return { active, starting, speaking, userSpeaking, start, stop, interrupt, getDiagnostics }
 }

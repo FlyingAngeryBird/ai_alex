@@ -3,6 +3,43 @@ import { runInNewContext } from 'node:vm'
 import { expect, it } from 'vitest'
 import { openR1Database } from '../electron/main/r1/database'
 import { R1Conversations } from '../electron/main/r1/conversations'
+it('frames 16k mono capture in 20ms packets, keeping capture and playback independent', () => {
+  const events: Array<{ type: string; pcm?: Uint8Array }> = []
+  let Processor: any
+  runInNewContext(readFileSync('public/native-duplex-worklet.js', 'utf8'), {
+    AudioWorkletProcessor: class { port = { postMessage: (event: typeof events[number]) => events.push(event), onmessage: null } },
+    sampleRate: 48000, Uint8Array, DataView, registerProcessor: (_name: string, value: unknown) => { Processor = value }
+  })
+  const node = new Processor()
+  node.port.onmessage({ data: { type: 'capture', enabled: true } })
+  for (let i = 0; i < 15; i++) node.process([[new Float32Array(128).fill(0.25)]], [[new Float32Array(128)]])
+  const frames = events.filter(event => event.type === 'capture')
+  expect(frames).toHaveLength(2)
+  for (const packet of frames) { expect(packet.pcm?.byteLength).toBe(640); expect(new DataView(packet.pcm!.buffer).getInt16(0, true)).toBe(8192) }
+})
+it('renders nonzero signed PCM16 through the output clock and becomes silent after clear', () => {
+  const events: Array<Record<string, unknown>> = []
+  let Processor: any
+  runInNewContext(readFileSync('public/native-duplex-worklet.js', 'utf8'), {
+    AudioWorkletProcessor: class { port = { postMessage: (event: Record<string, unknown>) => events.push(event), onmessage: null } },
+    sampleRate: 48000, Uint8Array, DataView, registerProcessor: (_name: string, value: unknown) => { Processor = value }
+  })
+  const node = new Processor(), pcm = new Uint8Array(7200), view = new DataView(pcm.buffer)
+  for (let i = 0; i < 3600; i++) view.setInt16(i * 2, i < 1800 ? 16384 : -16384, true)
+  node.port.onmessage({ data: { type: 'audio', responseId: 'audible-fixture', pcm } })
+  const first = new Float32Array(128)
+  node.process([], [[first]])
+  expect([...first].every(sample => sample === 0.5)).toBe(true)
+  for (let i = 0; i < 29; i++) node.process([], [[new Float32Array(128)]])
+  const negative = new Float32Array(128)
+  node.process([], [[negative]])
+  expect([...negative].every(sample => sample === -0.5)).toBe(true)
+  node.port.onmessage({ data: { type: 'clear', requestId: 'stop' } })
+  const silent = new Float32Array(128)
+  node.process([], [[silent]])
+  expect([...silent].every(sample => sample === 0)).toBe(true)
+  expect(events.find(event => event.status === 'interrupted')).toMatchObject({ responseId: 'audible-fixture', playedUntilMs: 82 })
+})
 it('renders continuous PCM under one clock and reports only consumed samples before interruption', () => {
   const events: Array<Record<string, unknown>> = []
   let Processor: any

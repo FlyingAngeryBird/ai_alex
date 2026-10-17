@@ -154,7 +154,7 @@ export function registerNativeVoiceHandlers(deps: {
         try { assertCurrent(); playback.interruptPending() } catch { /* Revoked or ended context cannot publish a late partial. */ }
         if (sessions.get(sender.id)?.id === id) sessions.delete(sender.id)
         sender.removeListener('destroyed', destroyed)
-        emit(sender, id, { type: 'closed', code })
+        emit(sender, id, { type: 'closed', code, diagnostics: connection.getDiagnostics() })
       }
     })
     sessions.set(sender.id, { id, session: connection, playback(input) {
@@ -178,7 +178,7 @@ export function registerNativeVoiceHandlers(deps: {
           if (typeof input.muted !== 'boolean') return fail('REALTIME_INPUT_INVALID')
           active.session.setMuted(input.muted)
         } else if (action === 'Cancel') active.session.cancelResponse()
-        else active.session.close()
+        else { active.session.close(); return { ok: true, data: { diagnostics: active.session.getDiagnostics() } } }
         return { ok: true, data: null }
       } catch { active.session.close('REALTIME_COMMAND_FAILED'); return fail('REALTIME_COMMAND_FAILED') }
     })

@@ -99,8 +99,10 @@ it('exports only diagnostic stages/statuses and numeric trace fields, never cont
     s.db.prepare('INSERT INTO event_log VALUES(?,?,?,?,?)').run('synthetic', new Date().toISOString(), 'tool_committed', 'private-owner', JSON.stringify({ body: 'SYNTHETIC_BODY', apiKey: 'SYNTHETIC_KEY', audio: 'SYNTHETIC_AUDIO' }))
     s.db.prepare('INSERT INTO event_log VALUES(?,?,?,?,?)').run('untrusted-kind', new Date().toISOString(), 'synthetic_private_secret', null, '{}')
     const report = buildDiagnosticExport(s.db, { appVersion: '1', assetRelease: '2.5.1', platform: 'darwin', osRelease: 'test', configurationRevision: 1, electronVersion: 'test', nodeVersion: 'test', configured: { VOLCENGINE_ARK_API_KEY: true }, serviceChecks: [] },
-      { space_up: 25, tts_play_start: 90, body: 'SYNTHETIC_BODY', apiKey: 'SYNTHETIC_KEY', tts_play_end: 'SYNTHETIC_AUDIO' })
+      { space_up: 25, tts_play_start: 90, body: 'SYNTHETIC_BODY', apiKey: 'SYNTHETIC_KEY', tts_play_end: 'SYNTHETIC_AUDIO',
+        nativeVoice: { receivedAudioBytes: 4800, audioPeak: 22, audioContextState: 'running', body: 'SYNTHETIC_BODY', rawAudio: 'SYNTHETIC_AUDIO', apiKey: 'SYNTHETIC_KEY', lastError: 'SYNTHETIC_KEY' } })
     expect(report.trace.stages).toEqual({ space_up: 25, tts_play_start: 90 })
+    expect(report.trace.nativeVoice).toEqual({ receivedAudioBytes: 4800, audioPeak: 22, audioContextState: 'running' })
     const serialized = JSON.stringify(report)
     for (const secret of ['SYNTHETIC_PRIVATE_BODY', 'SYNTHETIC_BODY', 'SYNTHETIC_KEY', 'SYNTHETIC_AUDIO', 'private-owner', 'synthetic_private_secret']) expect(serialized).not.toContain(secret)
     expect(report.events).toEqual([{ at: expect.any(String), stage: 'tool_committed' }])

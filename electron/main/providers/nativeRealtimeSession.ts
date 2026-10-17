@@ -7,6 +7,9 @@ export type NativeRealtimeEvent = Record<string, unknown> & { type: string }
 export type NativeToolCall = { callId: string; name: string; arguments: unknown }
 /** Live duplex transport. Domain actions and playback remain owned by the application. */
 export class NativeRealtimeSession {
+  private diagnostic = { serverAudioFrames: 0, serverAudioBytes: 0, discardedCancelledAudio: 0,
+    serverAsrDeltas: 0, serverAsrCompleted: 0, serverAsrWithTranscript: 0, serverAsrWithItemId: 0 }
+  getDiagnostics() { return { ...this.diagnostic } }
   private socket: WebSocket | null = null
   private state: 'new' | 'connecting' | 'ready' | 'closed' = 'new'
   private pendingCalls = new Map<string, NativeToolCall>()
@@ -99,6 +102,16 @@ export class NativeRealtimeSession {
     this.pendingCalls.delete(callId); this.answeredCalls.add(callId)
   }
   private receive(event: NativeRealtimeEvent): void {
+    if (event.type === 'response.output_audio.delta') {
+      this.diagnostic.serverAudioFrames++
+      if (typeof event.delta === 'string') this.diagnostic.serverAudioBytes += Math.floor(event.delta.length * 3 / 4) - (event.delta.endsWith('==') ? 2 : event.delta.endsWith('=') ? 1 : 0)
+    }
+    if (event.type === 'conversation.item.input_audio_transcription.delta') this.diagnostic.serverAsrDeltas++
+    if (event.type === 'conversation.item.input_audio_transcription.completed') {
+      this.diagnostic.serverAsrCompleted++
+      if (typeof event.transcript === 'string') this.diagnostic.serverAsrWithTranscript++
+      if (typeof event.item_id === 'string') this.diagnostic.serverAsrWithItemId++
+    }
     if (event.type === 'error') {
       const error = event.error && typeof event.error === 'object' ? event.error as Record<string, unknown> : null
       this.close(nativeFailureCode(error?.code ?? event.code, 'event')); return
@@ -119,7 +132,10 @@ export class NativeRealtimeSession {
       this.activeResponse = null
     }
     const responseId = typeof event.response_id === 'string' ? event.response_id : null
-    if (responseId && this.cancelledResponses.has(responseId)) return
+    if (responseId && this.cancelledResponses.has(responseId)) {
+      if (event.type === 'response.output_audio.delta') this.diagnostic.discardedCancelledAudio++
+      return
+    }
     if (responseId && event.type.startsWith('response.output_')) this.activeResponse = responseId
     if (event.type === 'response.function_call_arguments.done') {
       if (!Array.isArray(event.items) || !event.items.length || event.items.length > 6) throw new Error('calls')

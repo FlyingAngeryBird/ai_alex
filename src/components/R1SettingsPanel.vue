@@ -10,7 +10,9 @@ import { useAppPreferences } from '../composables/useAppPreferences'
 import type { createAudioDevices } from '../services/audioDevices'
 import R1DataSettings from './R1DataSettings.vue'
 
-const props = defineProps<{ persona: R1Persona | null; voicePreviewing: boolean; devices?: ReturnType<typeof createAudioDevices>; systemReducedMotion?: boolean; diagnosticTrace?: () => unknown; showServiceConfiguration?: boolean; serviceConfigurationField?: CredentialField }>()
+const props = defineProps<{ persona: R1Persona | null; voicePreviewing: boolean; devices?: ReturnType<typeof createAudioDevices>; systemReducedMotion?: boolean; diagnosticTrace?: () => unknown; showServiceConfiguration?: boolean; serviceConfigurationField?: CredentialField;
+  nativeDiagnostics?: () => ReturnType<ReturnType<typeof import('../composables/useNativeConversation').useNativeConversation>['getDiagnostics']> }>()
+const nativeSnapshot = ref<ReturnType<NonNullable<typeof props.nativeDiagnostics>> | null>(null)
 const serviceConfiguration = ref<HTMLDetailsElement | null>(null)
 async function revealServiceConfiguration(): Promise<void> {
   if (!props.showServiceConfiguration) return
@@ -338,6 +340,20 @@ async function clearCredential(field: CredentialField): Promise<void> {
         <p v-if="checks.realtime?.details" role="status">{{ checks.realtime.details.phase === 'http_upgrade' ? '连接握手阶段' : '会话阶段' }}<template v-if="checks.realtime.details.httpStatus"> · HTTP {{ checks.realtime.details.httpStatus }}</template><template v-if="checks.realtime.details.providerCode"> · 服务码 {{ checks.realtime.details.providerCode }}</template><template v-if="checks.realtime.details.reason === 'resource_not_granted'"> · 服务返回资源未授权</template><template v-if="checks.realtime.details.reason === 'key_invalid'"> · 服务返回 Key 无效</template></p>
         <button v-if="checking" type="button" @click="cancelCheck">取消检测</button>
         <p>检测使用已保存配置。实时检测只建立并关闭会话，不打开麦克风；连续交流和出声效果另行验证。</p>
+        <details v-if="nativeDiagnostics"><summary>本次连续语音诊断</summary>
+          <button type="button" @click="nativeSnapshot = nativeDiagnostics()">刷新语音诊断</button>
+          <template v-if="nativeSnapshot">
+            <p>采集 {{ nativeSnapshot.capturedFrames }} 包 · 已发送 {{ nativeSnapshot.sentFrames }} 包</p>
+            <p>音频事件 {{ nativeSnapshot.rawAudioEvents }} · 接收 {{ nativeSnapshot.receivedAudioBytes }} 字节 · 峰值 {{ nativeSnapshot.audioPeak }}</p>
+            <p>服务音频 {{ nativeSnapshot.serverAudioFrames }} 包 / {{ nativeSnapshot.serverAudioBytes }} 字节 · 服务端旧回复隔离 {{ nativeSnapshot.discardedCancelledAudio }} 包</p>
+            <p>开始播放 {{ nativeSnapshot.playbackStarts }} 次 · 完成 {{ nativeSnapshot.playbackCompletions }} 次 · 已播放 {{ nativeSnapshot.playedUntilMs }} ms · 缺帧 {{ nativeSnapshot.playbackUnderruns }} 次</p>
+            <p>音频上下文 {{ nativeSnapshot.audioContextState }} · 缺回复标识 {{ nativeSnapshot.audioMissingResponseId }} · 已取消音频 {{ nativeSnapshot.audioDiscardedCancelled }}</p>
+            <p>识别结束 {{ nativeSnapshot.asrCompleted }} · 含原文 {{ nativeSnapshot.asrWithTranscript }} · 含消息标识 {{ nativeSnapshot.asrWithItemId }} · 含text {{ nativeSnapshot.asrWithText }} · 含results {{ nativeSnapshot.asrWithResults }}</p>
+            <p>服务识别增量 {{ nativeSnapshot.serverAsrDeltas }} · 结束 {{ nativeSnapshot.serverAsrCompleted }} · 含原文 {{ nativeSnapshot.serverAsrWithTranscript }} · 含消息标识 {{ nativeSnapshot.serverAsrWithItemId }}</p>
+            <p v-if="nativeSnapshot.lastError">{{ nativeSnapshot.lastError }}</p>
+          </template>
+          <p>仅在本地显示计数与播放进度，不记录原始音频、识别正文或密钥。</p>
+        </details>
         <p v-if="credentialStatus">联网搜索：{{ credentialStatus.BRAVE_SEARCH_API_KEY ? '候选服务已填写密钥，G0 待验证' : 'G0 待验证候选，未配置' }}</p>
         <p>音乐音源：待 G0 真实播放验证</p>
         <details ref="serviceConfiguration"><summary>模型与语音服务配置</summary>

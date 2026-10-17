@@ -8,6 +8,21 @@ const eventKinds = new Set(['memory_context_invalidated', 'memory_forgotten', 't
 export function buildDiagnosticExport(db: R1Database, metadata: { appVersion: string; assetRelease: string; platform: string; osRelease: string; configurationRevision: number;
   electronVersion: string; nodeVersion: string; configured: Record<string, boolean>; serviceChecks: ServiceCheckReport[] }, voiceTrace: unknown) {
   const trace: Record<string, number> = {}
+  const nativeVoice: Record<string, number | string> = {}
+  if (voiceTrace && typeof voiceTrace === 'object' && 'nativeVoice' in voiceTrace) {
+    const native = voiceTrace.nativeVoice
+    if (native && typeof native === 'object') {
+      for (const key of ['capturedFrames', 'sentFrames', 'rawAudioEvents', 'audioMissingResponseId', 'audioDiscardedCancelled',
+        'receivedAudioFrames', 'receivedAudioBytes', 'audioPeak', 'playbackStarts', 'playbackUnderruns', 'playbackCompletions',
+        'playedUntilMs', 'asrCompleted', 'asrWithTranscript', 'asrWithItemId', 'asrWithText', 'asrWithResults',
+        'serverAudioFrames', 'serverAudioBytes', 'discardedCancelledAudio', 'serverAsrDeltas', 'serverAsrCompleted', 'serverAsrWithTranscript', 'serverAsrWithItemId']) {
+        const value = (native as Record<string, unknown>)[key]
+        if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= 1_000_000_000) nativeVoice[key] = value
+      }
+      const state = (native as Record<string, unknown>).audioContextState
+      if (typeof state === 'string' && ['running', 'suspended', 'closed', 'interrupted'].includes(state)) nativeVoice.audioContextState = state
+    }
+  }
   if (voiceTrace && typeof voiceTrace === 'object' && !Array.isArray(voiceTrace)) for (const stage of voiceStages) {
     const value = (voiceTrace as Record<string, unknown>)[stage]
     if (typeof value === 'number' && Number.isFinite(value) && value >= 0) trace[stage] = value
@@ -24,6 +39,6 @@ export function buildDiagnosticExport(db: R1Database, metadata: { appVersion: st
     configurationRevision: metadata.configurationRevision, configured: metadata.configured, serviceChecks: metadata.serviceChecks.map(check => ({ service: check.service, status: check.status,
       code: check.code, checkedAt: check.checkedAt, durationMs: check.durationMs, scope: check.scope, configurationRevision: check.configurationRevision,
       ...(safeNativeFailureDetails(check.details) ? { details: safeNativeFailureDetails(check.details) } : {}) })),
-    trace: { clock: 'renderer_performance_now_ms', stages: trace, crossProcessLatencyCalculated: false }, events, receipts,
+    trace: { clock: 'renderer_performance_now_ms', stages: trace, nativeVoice, crossProcessLatencyCalculated: false }, events, receipts,
     privacy: { rawAudioIncluded: false, messageBodiesIncluded: false, credentialsIncluded: false, automaticallyUploaded: false } }
 }
