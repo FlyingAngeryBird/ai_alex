@@ -14,6 +14,18 @@ R1 当前是开发预览：应用 ID `com.seamo.ai.r1`，数据目录 `~/Library
 
 2026-10-13 已在现有公开仓库建立远端 `main`（当前指向原 GitHub 旧版提交 `b85da0c`）、`codex/seamo-r1` 和两个旧版标签；原 `feature/lingli-mvp` 保留。R1 开发差异见草稿 PR [#1](https://github.com/FlyingAngeryBird/ai_alex/pull/1)。`main` 只接收后续已验收版本，开发提交不会自动合并。
 
+## 最新预览与验收范围（2026-10-17）
+
+| 版本 | 源码 | 资产 / SQLite | 验证范围 |
+| --- | --- | --- | --- |
+| alpha.7 | `25d277c` | 3.2.0 / 11 | 624项回归、构建、真实到期事件→Ark→TTS通过；实际窗口/出声待钥匙串确认后核验 |
+| alpha.6 | `9a1ffda` | 3.1.1 / 11 | 用户确认短任务完成简报声音正常，设备heard/14817ms；同工作稿v1→v2局部修改通过 |
+| alpha.4 | `1990b09`，标签`r1-preview-1.0.0-alpha.4` | 3.0.0 / 11 | 用户确认闲聊及天气＋RFC多问题实时检索提示、文字和声音测试无问题 |
+
+alpha.7源码已同步现有GitHub开发分支；没有合并main或宣称G阶段通过。预览包目录`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha7-reminder-delivery/`保存ZIP、SHA256SUMS、来源与验收manifest。包使用本机临时签名，未经公证；alpha.6保留原路径，不覆盖。回退alpha.7代码和资产至`6fd0efd`对应alpha.6报告状态，数据schema不变；不覆盖现有数据库或遗忘抑制。
+
+以下为历史检查点，旧的推送/锁屏/未配置状态以当时记录为准，当前状态见[交付状态](2026-10-17-current-status.md)和[兼容检查](compatibility.json)。
+
 ## 2026-10-17 开发检查点
 
 alpha.2最终开发预览标签`r1-preview-1.0.0-alpha.2-build2`指向`9017bf8`，已同步GitHub；功能检查点标签`r1-preview-1.0.0-alpha.2`仍指向`6dae5ac`。最终包/142MB ZIP与SHA256见验收说明。DEC-038修正macOS产品版本元数据，最终启动升级因锁屏未验证。alpha.2源码新增范围清理/单历史删除/引导/任务恢复提示/错过提醒，SQLite11，资产2.5.1。自动保存升级前副本；回退旧R1代码须隔离数据并使用schema10升级前副本，不能直接降级打开schema11。交付范围与未验收项见[alpha.2验收说明](2026-10-17-alpha2-acceptance.md)，未打G阶段通过标签或创建正式Release。
