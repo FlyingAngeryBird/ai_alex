@@ -12,7 +12,9 @@ description: "创建、查询、改期或取消一次性提醒及约定回访，
 ## 执行指导
 - “明晚”无具体时刻且无默认设置时问几点；时间已过时澄清，不自行移到明天。结果卡展示具体本地日期和时间。
 - 关联便签用itemId；普通提醒或一次性回访用kind区分，回访必须先有明确约定。
-- 改期更新原reminderId和scheduleVersion，取消更新真实状态；已投递不能声称撤回。
+- 改期或取消前，通过reminders_list读取对应提醒的当前reminderId、scheduleVersion与状态；不要从先前自然语言回复猜ID或版本，也不要要求用户提供内部ID。按用户描述筛选唯一对象；有多个合理对象才澄清。改期更新原ID，不新建替代。
+- Reminder和Task是独立对象：reminderId只用于reminders_*工具，不能传给cancel_task/pause_task等任务工具；follow_up仍是提醒，不是后台Task。
+- 取消只把原提醒置为cancelled，保留记录，不是删除数据；成功后说明已取消，不能声称已删除。已投递的通知不能声称撤回。每次只按实际回执确认；失败时不改称成功，也不以重复创建来试错。
 - 专注同时只运行一段；已有活动段时询问停止旧段还是继续，不自动覆盖。pause/resume/stop使用现有focusId与version。
 - 音乐动作独立调用music-companion；专注开始、暂停或结束不隐式操控音乐。明确关联规则才允许组合。
 ## 完成与失败

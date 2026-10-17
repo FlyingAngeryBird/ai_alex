@@ -30,17 +30,20 @@ export class R1ConversationDriver {
     const rounds: ArkResponseRound[] = []
     // The conversation only dispatches immediate actions/control; long work has its own frozen Task budget.
     let remainingTools = 6
-    for (let decision = 0; decision < 4; decision++) {
+    // Four action decisions plus one tools-free receipt summary. A committed action must
+    // still be reportable when the last action used the final decision slot.
+    for (let decision = 0; decision <= 4; decision++) {
       input.scope.assertCurrent()
       const activeTasks = this.tasks.list(input.scope.temporary ? input.scope.source.sessionId : null).slice(-50)
         .map(task => this.tasks.modelView(task.taskId))
         .map(({ taskId, goalVersion, status, goal }) => ({ taskId, goalVersion, status, goal }))
       const context = { ...input.context, activeTasks, loadedSkillIds: [...tools.loadedSkillIds] }
       const boundary = new R1ModelRequestBoundary(this.assets, this.persona(), context,
-        tools.aliases, 'textOnly', input.scope.assertCurrent, remainingTools === 0, this.implementedTaskAliases)
+        tools.aliases, 'textOnly', input.scope.assertCurrent, remainingTools === 0 || decision === 4, this.implementedTaskAliases)
       const response = await this.provider.request({ boundary, messages: input.messages, rounds, signal: input.scope.signal })
       input.scope.assertCurrent()
       if (response.calls.length) {
+        if (decision === 4) throw new Error('CONVERSATION_DECISION_BUDGET_EXHAUSTED')
         if (response.calls.length > remainingTools) throw new Error('CONVERSATION_TOOL_BUDGET_EXHAUSTED')
         for (const call of response.calls) boundary.validateToolCall(call.name, JSON.parse(call.arguments))
         const results: ArkResponseRound['results'] = []

@@ -1,5 +1,5 @@
 {
-  "releaseId": "seamo-ai-r1-agent-assets-3.2.0",
+  "releaseId": "seamo-ai-r1-agent-assets-3.2.1",
   "entries": [
     {
       "skillId": "SK01",
@@ -62,7 +62,7 @@
       "skillId": "SK04",
       "name": "reminder-focus",
       "legacyKey": "reminder_focus",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "description": "创建、查询、改期或取消一次性提醒及约定回访，并控制一段本地专注计时。适用于明确时间或时长的委托；不提供周期或退出后的云调度。",
       "path": "skills/reminder-focus/SKILL.md",
       "resourcePaths": [
