@@ -10,6 +10,14 @@
 
 该证据只覆盖本次短任务，不推定插话、勿扰、临时模式、长简报、全部PR07语义或全R1验收。当前转入同稿局部续改实测，未创建安装验证标签或正式Release。
 
+### 同包局部续改补证
+
+CUA由完成卡片打开「出门前检查清单」，正式对话入口要求只将手机一项改为“手机：确认手机已带好。”，其余逐字不变且不另建稿、不存事项、不建提醒。新任务 `931bdcc9-6cb9-4fee-89f1-5a6144cbafa5` succeeded；绑定原artifactId，发布同稿v2。实际界面显示v2和撤销入口，目标句已更新。
+
+只读核验：sameArtifactId=true、exactContentMatches=true、titleUnchanged=true；本次产物1个，回执工具仅harness.readSkill与artifacts.publish，没有事项或提醒写入回执。该任务简报记录为interrupted/11392ms，保留该差异，未询问也未推定用户主动插话，不标此次简报完整播完或打断听感通过。首次短任务heard/14817ms与用户确认保持有效。
+
+证据：`/tmp/seamo-alpha6-artifact-continuation-evidence.json`、`/tmp/seamo-alpha6-artifact-v2.png`。本次实际文字→后台同稿局部修改→界面版本更新场景通过；不等同语音局部修改、全部撤销/导出或完整F09验收。
+
 alpha.5 已在实际窗口完成后台受理→加载 SK06→发布可编辑工作稿→首页完成卡片；用户反馈“只看到卡片，没有声音”，故真实播报验收失败。原工作稿与实际任务保留，不重放旧完成事件。
 
 用相同公开验收摘要独立复现：PR07生成约130字说明，原生合成超过15秒PCM上限后返回 `ANNOUNCEMENT_AUDIO_LIMIT`，整段未播放。该复现揭示确定缺陷；旧包无逐阶段诊断，不能据此排除那次实际运行也受失焦取消等因素影响。
