@@ -23,3 +23,7 @@
 预览已生成：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-21e027f/Seamo AI R1.app`。build-info对应源提交`21e027f4d76d5ca89bdcc233e5afab095cca3d1d`、资产2.5.1及55个生产依赖；codesign完整性通过，仅本地临时签名/未公证。原旧包目录保留。
 
 退出旧包快捷键后窗口消失但旧PID70090仍在；确认精确旧包路径后发送SIGTERM正常结束，再通过CUA启动新包。新PID82599存在，但两次获取窗口均超时。只读1秒进程采样显示主线程停在系统Security的SecItemCopyMatching/SecKeychainItemCopyContent调用链；这不是云鉴权测试结果，也不能宣称新页面已打开。采样`/tmp/seamo-r1-21e027f-startup.sample`，打包日志`/tmp/seamo-r1-21e027f-package.log`。已请求用户检查并手动处理系统钥匙串提示，未读取、修改或删除钥匙串条目。
+
+## 用户允许钥匙串后
+
+用户确认系统提示已点击「允许」。CUA随后正常读取更新包21e027f的首页，资源URL来自该包内renderer，日期10月17日；顶部「麦克风未开启」，底部「文字待配置 · 实时语音已配置」。证明新窗口已打开、原加密语音配置状态可读取；不代表声音已通过。已请求用户主动开启自动会话、说短句并关闭，以核对听感及本次诊断；未代用户开启收音。
