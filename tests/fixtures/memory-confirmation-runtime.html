@@ -1,0 +1,40 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8" /><title>Seamo Memory Confirmation Check</title><link rel="icon" href="data:," /></head><body style="margin:0"><div id="app"></div>
+<script type="module">
+import { createApp, h, ref } from 'vue'
+import R1MemoryConfirmationDialog from '../../src/components/R1MemoryConfirmationDialog.vue'
+import '../../src/r1-shell.css'
+createApp({ setup() {
+  const pending = ref(null), busy = ref(false), error = ref(''), temporary = ref(false), status = ref(''), entries = ref([]), source = ref('')
+  window.seamoR1.memory.onConfirmation(value => { pending.value = value })
+  async function refresh() {
+    const result = await window.seamoR1.memory.list()
+    status.value = result.ok ? `普通模式 · 实际记忆 ${result.data.entries.length} 条` : result.error.code
+    entries.value = result.ok ? result.data.entries : []
+    if (entries.value.length) { const origins = await window.seamoR1.memory.sources(entries.value[0].memoryId); source.value = origins.ok ? origins.data.map(row => row.body).join(' / ') : origins.error.code }
+  }
+  async function request(temp, sensitive) {
+    error.value = ''; source.value = ''
+    const mode = await window.lingli.invoke('chat.setTemporary', { enabled: temp })
+    if (!mode.ok) { error.value = mode.error.code; return }
+    temporary.value = mode.data.temporary
+    const reply = await window.lingli.invoke('chat.sendMessage', { text: sensitive ? '记住，我对花生过敏。' : '记住，我喜欢无糖茶。' })
+    if (!reply.ok) error.value = reply.error.code
+    await refresh()
+  }
+  async function resolve(save) {
+    const current = pending.value; if (!current || busy.value) return
+    busy.value = true; error.value = ''
+    const result = save ? await window.seamoR1.memory.confirmSave(current.confirmationId) : await window.seamoR1.memory.cancelSave(current.confirmationId)
+    if (!result.ok) error.value = result.error.code
+    else if (save) temporary.value = result.data.temporary
+    await refresh(); busy.value = false
+  }
+  return () => h('main', { class: 'r1-shell', style: 'height:100vh;padding:40px;color:#edf0e7;box-sizing:border-box' }, [
+    h('h2', '独立记忆确认检查'), h('p', '合成内容、真实 IPC 与临时数据库；不连接服务、不启用麦克风。'),
+    h('button', { onClick: () => request(false, true) }, '普通敏感记忆'), h('button', { onClick: () => request(true, false) }, '临时记忆保存'),
+    h('p', `当前模式：${temporary.value ? '临时对话' : '普通对话'}`), h('p', status.value), h('p', source.value ? `实际来源：${source.value}` : ''),
+    ...entries.value.map(entry => h('p', `${entry.content} · v${entry.version}`)), h('p', error.value),
+    pending.value ? h(R1MemoryConfirmationDialog, { confirmation: pending.value, busy: busy.value, error: error.value, onConfirm: () => resolve(true), onCancel: () => resolve(false) }) : null
+  ])
+} }).mount('#app')
+</script></body></html>

@@ -1,0 +1,14 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><title>Seamo Artifact Runtime Check</title></head><body><div id="app"></div><script type="module">
+import { createApp, h, ref } from 'vue'
+import Editor from '../../src/components/R1ArtifactEditor.vue'
+import '../../src/r1-shell.css'
+createApp({ setup() {
+ const records = ref('尚未读取')
+ return () => h('main', { class: 'r1-shell', style: 'padding:32px;position:relative;min-height:100vh' }, [
+ h('p', '真实 IPC + 临时 SQLite：仅测试工作稿，不连接用户数据。'),
+ h(Editor, { artifactId: new URLSearchParams(location.search).get('id') }),
+ h('button', { onClick: async () => { const result = await window.seamoR1.items.list(); records.value = JSON.stringify(result) } }, '核对数据库记录'),
+ h('pre', { style: 'white-space:pre-wrap', 'aria-label': '数据库记录' }, records.value)
+ ])
+} }).mount('#app')
+</script></body></html>

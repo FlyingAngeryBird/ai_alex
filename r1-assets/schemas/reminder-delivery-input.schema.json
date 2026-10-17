@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ReminderDeliveryInput",
+  "type": "object",
+  "properties": {
+    "deliveryId": {
+      "type": "string",
+      "maxLength": 160
+    },
+    "reminderId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 160
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "focusId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 160
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "speakAllowed": {
+      "type": "boolean"
+    },
+    "deliveryKind": {
+      "type": "string",
+      "enum": [
+        "on_time",
+        "missed",
+        "follow_up",
+        "focus_completed"
+      ]
+    },
+    "content": {
+      "type": "string",
+      "maxLength": 1000
+    },
+    "dueAt": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 80
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "timezone": {
+      "type": "string",
+      "maxLength": 100
+    },
+    "actualFocusDurationSec": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "deliveryId",
+    "reminderId",
+    "focusId",
+    "speakAllowed",
+    "deliveryKind",
+    "content",
+    "dueAt",
+    "timezone",
+    "actualFocusDurationSec"
+  ],
+  "additionalProperties": false
+}

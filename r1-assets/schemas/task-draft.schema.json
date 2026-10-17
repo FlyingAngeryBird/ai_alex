@@ -1,0 +1,170 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TaskDraft",
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "partial",
+        "needs_input"
+      ]
+    },
+    "goalVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "replyBrief": {
+      "type": "string",
+      "description": "短结果或一个必要问题",
+      "maxLength": 1000
+    },
+    "sourceRefs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "实际已存在且有效的来源引用ID",
+        "maxLength": 160
+      },
+      "maxItems": 50
+    },
+    "receiptActionIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "使用输入或工具回执中实际存在的ID",
+        "maxLength": 160
+      },
+      "maxItems": 50
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "text",
+              "plan",
+              "comparison"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "description": "标题",
+            "maxLength": 80
+          },
+          "content": {
+            "type": "string",
+            "description": "正文",
+            "maxLength": 8000
+          },
+          "baseArtifactId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "使用输入或工具回执中实际存在的ID",
+                "maxLength": 160
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "baseArtifactVersion": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourceRefs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "实际已存在且有效的来源引用ID",
+              "maxLength": 160
+            },
+            "maxItems": 50
+          }
+        },
+        "required": [
+          "kind",
+          "title",
+          "content",
+          "baseArtifactId",
+          "baseArtifactVersion",
+          "sourceRefs"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 50
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "candidateId": {
+            "type": "string",
+            "description": "已在工具结果中存在的候选ID",
+            "maxLength": 160
+          },
+          "label": {
+            "type": "string",
+            "description": "候选名称",
+            "maxLength": 200
+          },
+          "summary": {
+            "type": "string",
+            "description": "已证实摘要",
+            "maxLength": 1000
+          },
+          "sourceRefs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "实际已存在且有效的来源引用ID",
+              "maxLength": 160
+            },
+            "maxItems": 50
+          }
+        },
+        "required": [
+          "candidateId",
+          "label",
+          "summary",
+          "sourceRefs"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 50
+    },
+    "unresolved": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "未解决字段或步骤",
+        "maxLength": 500
+      },
+      "maxItems": 50
+    }
+  },
+  "required": [
+    "status",
+    "goalVersion",
+    "replyBrief",
+    "sourceRefs",
+    "receiptActionIds",
+    "artifacts",
+    "candidates",
+    "unresolved"
+  ],
+  "additionalProperties": false
+}

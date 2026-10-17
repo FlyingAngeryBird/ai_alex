@@ -1,0 +1,144 @@
+import { describe, expect, it, vi } from 'vitest'
+import { openR1Database } from '../electron/main/r1/database'
+import { R1Items } from '../electron/main/r1/items'
+
+function setup() {
+  const db = openR1Database(':memory:')
+  return { db, items: new R1Items(db) }
+}
+
+function future(): string {
+  return new Date(Date.now() + 3_600_000).toISOString()
+}
+
+describe('R1 item and reminder transactions', () => {
+  it('edits the same item with a version check and permits a title-only note', () => {
+    const { db, items } = setup()
+    try {
+      const original = items.create({ actionId: 'create-title-only', kind: 'note',
+        title: '想到的事', body: '' }).item
+      const edited = items.update({ actionId: 'edit-title-only', itemId: original.itemId,
+        expectedVersion: original.version, kind: 'note', title: '更正后的事', body: '补充内容' })
+      expect(edited.item).toMatchObject({ itemId: original.itemId, version: 2,
+        title: '更正后的事', body: '补充内容' })
+      expect(items.update({ actionId: 'edit-title-only', itemId: original.itemId,
+        expectedVersion: original.version, kind: 'note', title: '更正后的事', body: '补充内容' }))
+        .toEqual(edited)
+      expect(() => items.update({ actionId: 'stale-edit', itemId: original.itemId,
+        expectedVersion: 1, kind: 'note', title: '旧版本', body: '' })).toThrow('VERSION_CONFLICT')
+    } finally { db.close() }
+  })
+
+  it('does not convert a todo with a due reminder into a note', () => {
+    const { db, items } = setup()
+    try {
+      const todo = items.create({ actionId: 'linked-todo', kind: 'todo', title: '交报告', body: '' }).item
+      items.createReminder({ actionId: 'linked-due', itemId: todo.itemId, linkPurpose: 'todo_due',
+        body: '交报告', dueAtUtc: future(), timezone: 'Asia/Shanghai' })
+      expect(() => items.update({ actionId: 'convert-linked', itemId: todo.itemId,
+        expectedVersion: todo.version, kind: 'note', title: '交报告', body: '' }))
+        .toThrow('ITEM_KIND_LINKED')
+      expect(items.list()[0].kind).toBe('todo')
+    } finally { db.close() }
+  })
+
+  it('completes a todo, cancels only its pending due reminder, and undoes only that cancellation', () => {
+    const { db, items } = setup()
+    try {
+      const item = items.create({ actionId: 'create', kind: 'todo', title: '报告', body: '完成报告' }).item
+      const due = items.createReminder({ actionId: 'due', itemId: item.itemId,
+        linkPurpose: 'todo_due', body: '交报告', dueAtUtc: future(), timezone: 'Asia/Shanghai' }).reminder
+      const independent = items.createReminder({ actionId: 'independent', itemId: item.itemId,
+        linkPurpose: 'independent', body: '复盘', dueAtUtc: future(), timezone: 'Asia/Shanghai' }).reminder
+      const complete = items.complete({ actionId: 'complete', itemId: item.itemId,
+        expectedVersion: 1, completed: true })
+      expect(complete.item.version).toBe(2)
+      expect(complete.reminderReceipts).toEqual([expect.objectContaining({
+        entityId: due.reminderId, detail: 'cancelled_with_todo' })])
+      expect(items.listReminders().find((r) => r.reminderId === independent.reminderId)?.status).toBe('scheduled')
+      expect(items.complete({ actionId: 'complete', itemId: item.itemId,
+        expectedVersion: 1, completed: true })).toEqual(complete)
+      expect(() => items.complete({ actionId: 'complete', itemId: item.itemId,
+        expectedVersion: 2, completed: true })).toThrow('ACTION_ID_REUSED')
+      const undo = items.complete({ actionId: 'undo', itemId: item.itemId,
+        expectedVersion: 2, completed: false })
+      expect(undo.reminderReceipts).toEqual([expect.objectContaining({
+        entityId: due.reminderId, detail: 'restored_after_undo' })])
+      expect(items.listReminders().find((r) => r.reminderId === due.reminderId)?.scheduleVersion).toBe(3)
+    } finally { db.close() }
+  })
+
+  it('keeps reminders by default after a confirmed deletion and refuses stale confirmation', () => {
+    const { db, items } = setup()
+    try {
+      const item = items.create({ actionId: 'create', kind: 'note', title: '记事', body: '内容' }).item
+      const stale = items.deletionPreview(item.itemId)
+      const reminder = items.createReminder({ actionId: 'remind', itemId: item.itemId,
+        linkPurpose: 'independent', body: '提醒', dueAtUtc: future(), timezone: 'Asia/Shanghai' }).reminder
+      expect(() => items.delete({ actionId: 'delete-stale', itemId: item.itemId,
+        expectedVersion: 1, reminderDisposition: 'keep', confirmedReminders: stale.reminders }))
+        .toThrow('REMINDER_CONFIRMATION_STALE')
+      expect(items.list()).toHaveLength(1)
+      const current = items.deletionPreview(item.itemId)
+      const result = items.delete({ actionId: 'delete', itemId: item.itemId,
+        expectedVersion: 1, reminderDisposition: 'keep', confirmedReminders: current.reminders })
+      expect(result.reminderReceipts[0].detail).toBe('reminder_kept')
+      expect(items.list()).toHaveLength(0)
+      expect(items.listReminders().find((r) => r.reminderId === reminder.reminderId))
+        .toMatchObject({ status: 'scheduled', itemId: null })
+    } finally { db.close() }
+  })
+
+  it('does not deliver a cancelled or obsolete schedule version and deduplicates delivery', () => {
+    const { db, items } = setup()
+    try {
+      const item = items.create({ actionId: 'create', kind: 'todo', title: '事', body: '事' }).item
+      const reminder = items.createReminder({ actionId: 'remind', itemId: item.itemId,
+        linkPurpose: 'todo_due', body: '提醒', dueAtUtc: new Date(Date.now() + 1000).toISOString(),
+        timezone: 'Asia/Shanghai' }).reminder
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date(Date.now() + 2000))
+      expect(items.deliver(reminder.reminderId, 1, 'in_app').delivered).toBe(true)
+      expect(items.deliver(reminder.reminderId, 1, 'in_app').delivered).toBe(false)
+      const complete = items.complete({ actionId: 'complete', itemId: item.itemId,
+        expectedVersion: 1, completed: true })
+      expect(complete.reminderReceipts).toHaveLength(0)
+      expect(items.listReminders()[0].status).toBe('due')
+    } finally { vi.useRealTimers(); db.close() }
+  })
+
+  it('rejects invalid reminder times and keeps the item committed for a separate retry', () => {
+    const { db, items } = setup()
+    try {
+      const item = items.create({ actionId: 'create', kind: 'note', title: '事', body: '内容' }).item
+      expect(() => items.createReminder({ actionId: 'bad-reminder', itemId: item.itemId,
+        linkPurpose: 'independent', body: '提醒', dueAtUtc: '明晚', timezone: 'Asia/Shanghai' }))
+        .toThrow('INVALID_DUE_TIME')
+      expect(() => items.createReminder({ actionId: 'past-reminder', itemId: item.itemId,
+        linkPurpose: 'independent', body: '提醒',
+        dueAtUtc: new Date(Date.now() - 1000).toISOString(), timezone: 'Asia/Shanghai' }))
+        .toThrow('INVALID_DUE_TIME')
+      expect(items.list()).toHaveLength(1)
+      expect(items.listReminders()).toHaveLength(0)
+    } finally { db.close() }
+  })
+
+  it('reschedules with a new version and cannot deliver the old schedule', () => {
+    const { db, items } = setup()
+    try {
+      const reminder = items.createReminder({ actionId: 'create', linkPurpose: 'independent',
+        body: '提醒', dueAtUtc: future(), timezone: 'Asia/Shanghai' }).reminder
+      const moved = items.reschedule({ actionId: 'move', reminderId: reminder.reminderId,
+        expectedScheduleVersion: 1, dueAtUtc: future(), timezone: 'Asia/Shanghai' })
+      expect(moved.reminder.scheduleVersion).toBe(2)
+      expect(items.deliver(reminder.reminderId, 1, 'in_app').delivered).toBe(false)
+      expect(() => items.reschedule({ actionId: 'move-again', reminderId: reminder.reminderId,
+        expectedScheduleVersion: 1, dueAtUtc: future(), timezone: 'Asia/Shanghai' }))
+        .toThrow('VERSION_CONFLICT')
+      const cancelled = items.cancelReminder({ actionId: 'cancel', reminderId: reminder.reminderId,
+        expectedScheduleVersion: 2 })
+      expect(cancelled.reminder).toMatchObject({ status: 'cancelled', scheduleVersion: 3 })
+      expect(items.deliver(reminder.reminderId, 2, 'in_app').delivered).toBe(false)
+    } finally { db.close() }
+  })
+})

@@ -1,0 +1,758 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>lingmo 音乐 · 歌单迭代方案</title>
+<style>
+  :root {
+    --bg: #07080d;
+    --bg-soft: #0a0b11;
+    --text: #f8f4ea;
+    --text-soft: #cfd6d0;
+    --text-dim: rgba(232, 229, 216, 0.5);
+    --text-faint: rgba(232, 229, 216, 0.32);
+    --yellow: #ffe16f;
+    --yellow-soft: rgba(255, 225, 111, 0.09);
+    --yellow-border: rgba(255, 225, 111, 0.31);
+    --cyan: #00d5c8;
+    --cyan-soft: rgba(0, 213, 200, 0.064);
+    --cyan-border: rgba(143, 222, 213, 0.23);
+    --glass-bg: rgba(7, 8, 12, 0.18);
+    --glass-border: rgba(255, 255, 255, 0.082);
+    --field-bg: rgba(255, 255, 255, 0.034);
+    --field-border: rgba(255, 255, 255, 0.06);
+    --radius: 14px;
+    --font-body: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --font-serif: "Songti SC", "Noto Serif SC", Georgia, serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    color: var(--text);
+    background:
+      radial-gradient(120% 80% at 50% 0%, rgba(255, 225, 111, 0.06), transparent 60%),
+      radial-gradient(100% 60% at 80% 100%, rgba(0, 213, 200, 0.05), transparent 70%),
+      var(--bg);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .app {
+    width: 100%;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 30px 40px 40px;
+  }
+
+  /* ===== music-topbar ===== */
+  .music-topbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 22px;
+  }
+
+  .top-left {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    height: 42px;
+  }
+
+  .round-button {
+    display: grid;
+    flex: 0 0 40px;
+    width: 40px;
+    height: 40px;
+    place-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 999px;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.06);
+    cursor: pointer;
+    font-size: 1rem;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 70px;
+    height: 28px;
+    padding: 0 10px;
+    justify-content: center;
+    border: 1px solid var(--yellow-border);
+    border-radius: 999px;
+    color: #f8eed4;
+    background: rgba(255, 225, 111, 0.08);
+    font-size: 0.74rem;
+  }
+
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--yellow);
+    box-shadow: 0 0 14px rgba(255, 225, 111, 0.9);
+  }
+
+  .exit-button {
+    height: 34px;
+    padding: 0 12px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    color: var(--text);
+    background: rgba(255, 143, 100, 0.12);
+    cursor: pointer;
+    font-size: 0.78rem;
+  }
+
+  /* ===== search-glass（复用原玻璃风格） ===== */
+  .search-glass {
+    width: min(520px, 42vw);
+    padding: 8px;
+    border: 1px solid var(--glass-border);
+    border-radius: 22px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.018)),
+      rgba(7, 13, 15, 0.62);
+    box-shadow:
+      0 24px 80px rgba(0, 0, 0, 0.32),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(24px) saturate(1.18);
+  }
+
+  /* ===== 新增：music-tabs（搜索/收藏切换，复用 source-chip 药丸语言） ===== */
+  .music-tabs {
+    display: flex;
+    gap: 6px;
+    padding: 2px 4px 8px;
+  }
+
+  .music-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 64px;
+    height: 30px;
+    padding: 0 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    color: rgba(220, 215, 202, 0.7);
+    background: rgba(255, 255, 255, 0.032);
+    cursor: pointer;
+    font-size: 0.78rem;
+    transition: border-color 180ms ease, color 180ms ease, background 180ms ease;
+  }
+
+  .music-tab[data-active="true"] {
+    border-color: var(--yellow-border);
+    color: #fff4d4;
+    background: var(--yellow-soft);
+  }
+
+  .music-tab .tab-count {
+    font-size: 0.66rem;
+    opacity: 0.6;
+  }
+
+  /* ===== 搜索区 ===== */
+  .search-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 32px;
+    gap: 7px;
+    align-items: center;
+  }
+
+  .search-field {
+    min-width: 0;
+    height: 31px;
+    padding: 0 10px;
+    border: 1px solid var(--field-border);
+    border-radius: 10px;
+    color: var(--text);
+    background: var(--field-bg);
+    outline: none;
+    font: inherit;
+    font-size: 0.82rem;
+  }
+
+  .search-button {
+    display: grid;
+    width: 32px;
+    height: 31px;
+    place-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 10px;
+    color: #07100f;
+    background: rgba(169, 240, 223, 0.68);
+    cursor: pointer;
+    font-weight: 700;
+  }
+
+  /* ===== 新增：search-history（搜索关键词历史，药丸 + ×清除） ===== */
+  .search-history {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    padding: 8px 4px 4px;
+  }
+
+  .history-label {
+    color: var(--text-faint);
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-right: 2px;
+  }
+
+  .history-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 24px;
+    padding: 0 8px 0 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    color: rgba(220, 215, 202, 0.7);
+    background: rgba(255, 255, 255, 0.032);
+    cursor: pointer;
+    font-size: 0.7rem;
+  }
+
+  .history-chip:hover {
+    border-color: var(--cyan-border);
+    color: #e6fff8;
+  }
+
+  .history-chip .x {
+    opacity: 0.5;
+    font-size: 0.64rem;
+  }
+
+  .history-chip .x:hover {
+    opacity: 1;
+    color: var(--yellow);
+  }
+
+  .source-row {
+    display: flex;
+    gap: 5px;
+    margin-top: 7px;
+  }
+
+  .source-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 54px;
+    height: 23px;
+    padding: 0 8px;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 999px;
+    color: rgba(220, 215, 202, 0.7);
+    background: rgba(255, 255, 255, 0.032);
+    cursor: pointer;
+    font-size: 0.68rem;
+  }
+
+  .source-chip[data-active="true"] {
+    border-color: var(--yellow-border);
+    color: #fff4d4;
+    background: var(--yellow-soft);
+  }
+
+  /* ===== 结果/收藏列表（复用 search-result-item） ===== */
+  .result-list {
+    display: grid;
+    gap: 6px;
+    max-height: min(330px, 38vh);
+    overflow-y: auto;
+    padding: 8px 4px 4px;
+  }
+
+  .search-result-item {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 12px;
+    min-height: 58px;
+    padding: 8px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 14px;
+    color: inherit;
+    background: rgba(255, 255, 255, 0.032);
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+  }
+
+  .search-result-item:hover {
+    border-color: var(--yellow-border);
+  }
+
+  .search-result-thumb {
+    display: block;
+    width: 42px;
+    aspect-ratio: 1;
+    border-radius: 8px;
+    background:
+      linear-gradient(140deg, rgba(255, 225, 111, 0.82), rgba(233, 160, 188, 0.7) 52%, rgba(33, 212, 199, 0.8)),
+      #171719;
+  }
+
+  .search-result-copy {
+    display: grid;
+    min-width: 0;
+  }
+
+  .search-result-title {
+    color: rgba(255, 248, 230, 0.92);
+    font-size: 0.82rem;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .search-result-meta {
+    color: rgba(247, 240, 220, 0.44);
+    font-size: 0.68rem;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .search-result-source {
+    color: rgba(143, 222, 213, 0.76);
+    font-size: 0.68rem;
+  }
+
+  /* ===== 新增：favorite-toggle（♡/♥ 收藏按钮） ===== */
+  .favorite-toggle {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(232, 229, 216, 0.5);
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: color 180ms ease, border-color 180ms ease, background 180ms ease;
+  }
+
+  .favorite-toggle:hover {
+    border-color: var(--yellow-border);
+    color: var(--yellow);
+  }
+
+  .favorite-toggle[data-favorited="true"] {
+    border-color: var(--yellow-border);
+    background: var(--yellow-soft);
+    color: var(--yellow);
+  }
+
+  .search-empty {
+    color: rgba(247, 240, 220, 0.44);
+    font-size: 0.72rem;
+    margin: 16px 8px 8px;
+  }
+
+  /* ===== 播放页 control-row + 收藏按钮 ===== */
+  .music-copy {
+    width: min(460px, 36vw);
+    margin-top: 60px;
+  }
+
+  .eyebrow {
+    margin: 0 0 8px;
+    color: rgba(150, 222, 213, 0.72);
+    font-size: 0.64rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .track-head {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+
+  .track-title {
+    margin: 0;
+    color: #fff5dc;
+    font-family: var(--font-serif);
+    font-size: clamp(2rem, 3vw, 2.6rem);
+    font-weight: 560;
+    line-height: 1.05;
+  }
+
+  .artist {
+    margin: 0;
+    color: rgba(247, 240, 220, 0.6);
+    font-size: 1rem;
+  }
+
+  .control-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 20px;
+  }
+
+  .icon-play-button {
+    width: 38px;
+    height: 38px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 999px;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.06);
+    cursor: pointer;
+    font-size: 0.9rem;
+  }
+
+  .track-skip-button {
+    width: 31px;
+    height: 31px;
+    color: rgba(255, 248, 230, 0.66);
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 1.18rem;
+    line-height: 1;
+  }
+
+  .source-note {
+    color: var(--text-faint);
+    font-size: 0.7rem;
+    margin-left: 4px;
+  }
+
+  /* ===== "听你想听"空状态 ===== */
+  .empty-state {
+    margin-top: 22vh;
+    text-align: center;
+  }
+
+  .empty-state .eyebrow {
+    text-align: center;
+  }
+
+  .empty-title {
+    margin: 6px 0 10px;
+    color: #fff5dc;
+    font-family: var(--font-serif);
+    font-size: clamp(2rem, 3.4vw, 2.8rem);
+    font-weight: 560;
+  }
+
+  .empty-subtitle {
+    margin: 0;
+    color: var(--text-dim);
+    font-size: 0.92rem;
+  }
+
+  .empty-hint {
+    margin-top: 18px;
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+    color: var(--text-faint);
+    font-size: 0.74rem;
+  }
+
+  /* ===== mockup 切换控件（仅评估用） ===== */
+  .mockup-switch {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px;
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    background: rgba(7, 8, 12, 0.7);
+    backdrop-filter: blur(18px);
+    font-size: 0.72rem;
+  }
+
+  .mockup-switch button {
+    padding: 6px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-soft);
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+  }
+
+  .mockup-switch button[data-on="true"] {
+    border-color: var(--yellow-border);
+    color: #fff4d4;
+    background: var(--yellow-soft);
+  }
+
+  .panel { display: none; }
+  .panel[data-show="true"] { display: block; }
+
+  .tab-pane { display: none; }
+  .tab-pane[data-show="true"] { display: block; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ============ 面板1：搜索 tab（有结果 + 收藏按钮 + 搜索历史） ============ -->
+  <section class="panel" data-show="true" id="p-search">
+    <header class="music-topbar">
+      <div class="top-left">
+        <button class="round-button">←</button>
+        <div class="status-pill"><span class="status-dot"></span>Paused</div>
+        <button class="exit-button">退出</button>
+      </div>
+      <form class="search-glass">
+        <!-- tab 行 -->
+        <div class="music-tabs">
+          <button type="button" class="music-tab" data-active="true">搜索</button>
+          <button type="button" class="music-tab">收藏 <span class="tab-count">12</span></button>
+        </div>
+        <!-- 搜索框 -->
+        <div class="search-row">
+          <input class="search-field" placeholder="搜索歌曲、歌手或专辑" value="周杰伦" />
+          <button class="search-button">╕</button>
+        </div>
+        <div class="source-row">
+          <button class="source-chip" data-active="true">全部</button>
+          <button class="source-chip">netease</button>
+          <button class="source-chip">kuwo</button>
+          <button class="source-chip">joox</button>
+        </div>
+        <div class="result-list">
+          <button class="search-result-item">
+            <span class="search-result-thumb"></span>
+            <span class="search-result-copy">
+              <span class="search-result-title">晴天</span>
+              <span class="search-result-meta">周杰伦 · 叶惠美</span>
+            </span>
+            <span class="search-result-source">netease</span>
+            <span class="favorite-toggle" data-favorited="false" title="收藏">♡</span>
+          </button>
+          <button class="search-result-item">
+            <span class="search-result-thumb"></span>
+            <span class="search-result-copy">
+              <span class="search-result-title">七里香</span>
+              <span class="search-result-meta">周杰伦 · 七里香</span>
+            </span>
+            <span class="search-result-source">netease</span>
+            <span class="favorite-toggle" data-favorited="true" title="取消收藏">♥</span>
+          </button>
+          <button class="search-result-item">
+            <span class="search-result-thumb"></span>
+            <span class="search-result-copy">
+              <span class="search-result-title">夜曲</span>
+              <span class="search-result-meta">周杰伦 · 十一月的萧邦</span>
+            </span>
+            <span class="search-result-source">kuwo</span>
+            <span class="favorite-toggle" data-favorited="false">♡</span>
+          </button>
+          <button class="search-result-item">
+            <span class="search-result-thumb"></span>
+            <span class="search-result-copy">
+              <span class="search-result-title">稻香</span>
+              <span class="search-result-meta">周杰伦 · 魔杰座</span>
+            </span>
+            <span class="search-result-source">joox</span>
+            <span class="favorite-toggle" data-favorited="false">♡</span>
+          </button>
+        </div>
+      </form>
+    </header>
+  </section>
+
+  <!-- ============ 面板2：收藏 tab（收藏列表 + 移除） ============ -->
+  <section class="panel" id="p-favorite">
+    <header class="music-topbar">
+      <div class="top-left">
+        <button class="round-button">←</button>
+        <div class="status-pill"><span class="status-dot"></span>Paused</div>
+        <button class="exit-button">退出</button>
+      </div>
+      <form class="search-glass">
+        <div class="music-tabs">
+          <button type="button" class="music-tab">搜索</button>
+          <button type="button" class="music-tab" data-active="true">收藏 <span class="tab-count">12</span></button>
+        </div>
+        <!-- 收藏列表头 -->
+        <div class="search-history">
+          <span class="history-label">我喜欢的 · 12 首</span>
+          <button type="button" class="history-chip" style="margin-left:auto">播放全部</button>
+        </div>
+        <div class="result-list">
+          <button class="search-result-item">
+            <span class="search-result-thumb"></span>
+            <span class="search-result-copy">
+              <span class="search-result-title">七里香</span>
+              <span class="search-result-meta">周杰伦 · 七里香</span>
+            </span>
+            <span class="search-result-source">netease</span>
+            <span class="favorite-toggle" data-favorited="true" title="移除收藏">♥</span>
+          </button>
+          <button class="search-result-item">
+            <span class="search-result-thumb"></span>
+            <span class="search-result-copy">
+              <span class="search-result-title">喜歡你</span>
+              <span class="search-result-meta">邓紫棋</span>
+            </span>
+            <span class="search-result-source">joox</span>
+            <span class="favorite-toggle" data-favorited="true">♥</span>
+          </button>
+          <button class="search-result-item">
+            <span class="search-result-thumb"></span>
+            <span class="search-result-copy">
+              <span class="search-result-title">爱情海</span>
+              <span class="search-result-meta">周杰伦</span>
+            </span>
+            <span class="search-result-source">joox</span>
+            <span class="favorite-toggle" data-favorited="true">♥</span>
+          </button>
+          <button class="search-result-item">
+            <span class="search-result-thumb"></span>
+            <span class="search-result-copy">
+              <span class="search-result-title">珊瑚海</span>
+              <span class="search-result-meta">周杰伦</span>
+            </span>
+            <span class="search-result-source">netease</span>
+            <span class="favorite-toggle" data-favorited="true">♥</span>
+          </button>
+        </div>
+      </form>
+    </header>
+  </section>
+
+  <!-- ============ 面板3：播放页 + 收藏按钮（control-row 内 ♡） ============ -->
+  <section class="panel" id="p-playing">
+    <header class="music-topbar">
+      <div class="top-left">
+        <button class="round-button">←</button>
+        <div class="status-pill"><span class="status-dot"></span>Playing</div>
+        <button class="exit-button">退出</button>
+      </div>
+      <form class="search-glass">
+        <div class="music-tabs">
+          <button type="button" class="music-tab" data-active="true">搜索</button>
+          <button type="button" class="music-tab">收藏 <span class="tab-count">12</span></button>
+        </div>
+        <div class="search-row">
+          <input class="search-field" placeholder="搜索歌曲、歌手或专辑" />
+          <button class="search-button">╕</button>
+        </div>
+      </form>
+    </header>
+    <section class="music-copy">
+      <p class="eyebrow">GD Studio · netease</p>
+      <div class="track-head">
+        <h2 class="track-title">晴天</h2>
+        <p class="artist">周杰伦</p>
+      </div>
+      <div class="control-row">
+        <button class="icon-play-button track-skip-button">‹</button>
+        <button class="icon-play-button">▶</button>
+        <button class="icon-play-button track-skip-button">›</button>
+        <!-- 播放页收藏按钮 -->
+        <button class="favorite-toggle" data-favorited="true" title="取消收藏">♥</button>
+        <span class="source-note">旋律流动中</span>
+      </div>
+    </section>
+  </section>
+
+  <!-- ============ 面板4：空状态"听你想听"（点播放音乐默认进入，不自动播） ============ -->
+  <section class="panel" id="p-empty">
+    <header class="music-topbar">
+      <div class="top-left">
+        <button class="round-button">←</button>
+        <div class="status-pill"><span class="status-dot"></span>Idle</div>
+        <button class="exit-button">退出</button>
+      </div>
+      <form class="search-glass">
+        <div class="music-tabs">
+          <button type="button" class="music-tab" data-active="true">搜索</button>
+          <button type="button" class="music-tab">收藏 <span class="tab-count">0</span></button>
+        </div>
+        <div class="search-row">
+          <input class="search-field" placeholder="搜索歌曲、歌手或专辑" />
+          <button class="search-button">╕</button>
+        </div>
+      </form>
+    </header>
+    <div class="empty-state">
+      <p class="eyebrow">GD Studio</p>
+      <h2 class="empty-title">听你想听</h2>
+    </div>
+  </section>
+
+  <!-- ============ 面板5：搜索无结果 + 历史（8条上限，有结果时隐藏历史） ============ -->
+  <section class="panel" id="p-history">
+    <header class="music-topbar">
+      <div class="top-left">
+        <button class="round-button">←</button>
+        <div class="status-pill"><span class="status-dot"></span>Idle</div>
+        <button class="exit-button">退出</button>
+      </div>
+      <form class="search-glass">
+        <div class="music-tabs">
+          <button type="button" class="music-tab" data-active="true">搜索</button>
+          <button type="button" class="music-tab">收藏 <span class="tab-count">12</span></button>
+        </div>
+        <div class="search-row">
+          <input class="search-field" placeholder="搜索歌曲、歌手或专辑" />
+          <button class="search-button">╕</button>
+        </div>
+        <!-- 无结果时显示历史，上限 8 条 -->
+        <div class="search-history">
+          <span class="history-label">最近搜索</span>
+          <button type="button" class="history-chip">周杰伦 <span class="x">×</span></button>
+          <button type="button" class="history-chip">晴天 <span class="x">×</span></button>
+          <button type="button" class="history-chip">邓紫棋 <span class="x">×</span></button>
+          <button type="button" class="history-chip">夜曲 <span class="x">×</span></button>
+          <button type="button" class="history-chip">稻香 <span class="x">×</span></button>
+          <button type="button" class="history-chip">爱情海 <span class="x">×</span></button>
+          <button type="button" class="history-chip">七里香 <span class="x">×</span></button>
+          <button type="button" class="history-chip">简单爱 <span class="x">×</span></button>
+        </div>
+        <p class="search-empty">输入关键词搜索，或点历史快速重搜</p>
+      </form>
+    </header>
+  </section>
+
+</div>
+
+<!-- mockup 切换（仅评估用） -->
+<div class="mockup-switch">
+  <button data-target="p-search" data-on="true">① 搜索 tab（有结果，历史隐藏）</button>
+  <button data-target="p-favorite">② 收藏 tab（列表+移除♥）</button>
+  <button data-target="p-playing">③ 播放页（control-row 收藏♥）</button>
+  <button data-target="p-empty">④ 空状态"听你想听"</button>
+  <button data-target="p-history">⑤ 搜索无结果（历史 8 条）</button>
+</div>
+
+<script>
+  const panels = document.querySelectorAll('.panel');
+  const btns = document.querySelectorAll('.mockup-switch button');
+  btns.forEach(b => b.addEventListener('click', () => {
+    panels.forEach(p => p.dataset.show = String(p.id === b.dataset.target));
+    btns.forEach(x => x.dataset.on = String(x === b));
+  }));
+</script>
+</body>
+</html>

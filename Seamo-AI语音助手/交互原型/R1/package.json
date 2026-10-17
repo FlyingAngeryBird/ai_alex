@@ -1,0 +1,14 @@
+{
+  "name": "seamo-r1-interaction-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --config vite.config.mjs --configLoader runner",
+    "build": "vite build --config vite.config.mjs --configLoader runner"
+  },
+  "dependencies": {
+    "lucide-vue-next": "0.468.0",
+    "vite-plugin-singlefile": "^2.3.0"
+  }
+}

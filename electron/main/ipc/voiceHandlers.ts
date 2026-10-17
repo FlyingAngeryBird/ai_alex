@@ -1,13 +1,13 @@
 import { createRequire } from 'node:module'
 import { createVolcengineAsrProvider, VolcengineAsrError } from '../providers/asrProvider.js'
 import {
-  createUnavailableStreamingAsrProvider,
   RealtimeVoiceError,
   type RealtimeAsrPushPayload,
   type RealtimeAsrStartPayload,
   type RealtimeAsrStopPayload,
   type StreamingAsrProvider
 } from '../providers/realtimeVoiceProvider.js'
+import { createVolcengineStreamingAsrProvider } from '../providers/volcengineStreamingAsrProvider.js'
 
 type AppResult<T> =
   | {
@@ -103,7 +103,7 @@ function getIpcMain(): IpcMainLike {
 export function registerVoiceHandlers(
   ipc: IpcMainLike = getIpcMain(),
   asrProvider: AsrProvider = createVolcengineAsrProvider(),
-  streamingAsrProvider: StreamingAsrProvider = createUnavailableStreamingAsrProvider()
+  streamingAsrProvider: StreamingAsrProvider = createVolcengineStreamingAsrProvider()
 ): void {
   ipc.handle('voice.startRecording', () => ok({ ready: true }))
 

@@ -1,0 +1,585 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AppContext",
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string",
+      "description": "使用输入或工具回执中实际存在的ID",
+      "maxLength": 160
+    },
+    "sessionGeneration": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "turnId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "description": "使用输入或工具回执中实际存在的ID",
+          "maxLength": 160
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "currentTime": {
+      "type": "string",
+      "description": "带时区偏移或Z的RFC3339时刻；必须与timezone和原话一致",
+      "maxLength": 80
+    },
+    "timezone": {
+      "type": "string",
+      "description": "实际系统IANA时区，例如Asia/Shanghai",
+      "maxLength": 100
+    },
+    "temporary": {
+      "type": "boolean"
+    },
+    "contextVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "personaVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "deletionEpoch": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "selectedEntity": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "item",
+                "reminder",
+                "memory",
+                "artifact",
+                "track",
+                "candidate",
+                "task",
+                "topic"
+              ]
+            },
+            "id": {
+              "type": "string",
+              "description": "使用输入或工具回执中实际存在的ID",
+              "maxLength": 160
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "type",
+            "id",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "availableToolAliases": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "使用输入或工具回执中实际存在的ID",
+        "maxLength": 160
+      },
+      "maxItems": 50
+    },
+    "loadedSkillIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "SK01",
+          "SK02",
+          "SK03",
+          "SK04",
+          "SK05",
+          "SK06"
+        ]
+      },
+      "maxItems": 6
+    },
+    "recentTurns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "turnId": {
+            "type": "string",
+            "description": "使用输入或工具回执中实际存在的ID",
+            "maxLength": 160
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "description": "有效文字",
+            "maxLength": 8000
+          },
+          "heardText": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "实际已播范围的文字",
+                "maxLength": 8000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "valid",
+              "interrupted"
+            ]
+          }
+        },
+        "required": [
+          "turnId",
+          "role",
+          "text",
+          "heardText",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 24
+    },
+    "memories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "memoryId": {
+            "type": "string",
+            "description": "使用输入或工具回执中实际存在的ID",
+            "maxLength": 160
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "profile",
+              "preference",
+              "ongoing",
+              "conclusion"
+            ]
+          },
+          "content": {
+            "type": "string",
+            "description": "有效记忆",
+            "maxLength": 1000
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sourceRefs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "实际已存在且有效的来源引用ID",
+              "maxLength": 160
+            },
+            "maxItems": 50
+          }
+        },
+        "required": [
+          "memoryId",
+          "category",
+          "content",
+          "version",
+          "sourceRefs"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 5
+    },
+    "activeTasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "description": "使用输入或工具回执中实际存在的ID",
+            "maxLength": 160
+          },
+          "goalVersion": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "running",
+              "waiting_input",
+              "paused",
+              "needs_resume",
+              "succeeded",
+              "partially_succeeded",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "goal": {
+            "type": "string",
+            "description": "任务目标",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "taskId",
+          "goalVersion",
+          "status",
+          "goal"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 50
+    },
+    "topics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "topicId": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 1600
+          },
+          "unresolved": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "maxItems": 50
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "resolved"
+            ]
+          },
+          "sourceRefs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 160
+            },
+            "maxItems": 500
+          }
+        },
+        "required": [
+          "topicId",
+          "version",
+          "title",
+          "summary",
+          "unresolved",
+          "status",
+          "sourceRefs"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 5
+    },
+    "currentArtifact": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "artifactId": {
+              "type": "string",
+              "maxLength": 160
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "text",
+                "plan",
+                "comparison"
+              ]
+            },
+            "title": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "content": {
+              "type": "string",
+              "maxLength": 8000
+            },
+            "selection": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "end": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "artifactId",
+            "version",
+            "kind",
+            "title",
+            "content",
+            "selection"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "realtimeSimpleSearch": {
+      "type": "boolean",
+      "description": "原生实时语音仅允许一次简单查询；由程序提供，不能转后台扩大搜索。"
+    },
+    "currentCandidate": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "taskId": {
+              "type": "string",
+              "maxLength": 160
+            },
+            "goalVersion": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "candidateId": {
+              "type": "string",
+              "maxLength": 160
+            },
+            "candidateVersion": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "candidate": {
+              "type": "object",
+              "properties": {
+                "candidateId": {
+                  "type": "string",
+                  "maxLength": 160
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "sourceRefs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 160
+                  },
+                  "maxItems": 50
+                },
+                "fields": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "maxLength": 100
+                      },
+                      "value": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 2000
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "verification": {
+                        "type": "string",
+                        "enum": [
+                          "verified",
+                          "unconfirmed",
+                          "conflicting"
+                        ]
+                      },
+                      "sourceRefs": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 160
+                        },
+                        "maxItems": 50
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value",
+                      "verification",
+                      "sourceRefs"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 50
+                }
+              },
+              "required": [
+                "candidateId",
+                "label",
+                "sourceRefs",
+                "fields"
+              ],
+              "additionalProperties": false
+            },
+            "sources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "sourceRef": {
+                    "type": "string",
+                    "maxLength": 160
+                  },
+                  "url": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "title": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "publishedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 80
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "accessedAt": {
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "readStatus": {
+                    "type": "string",
+                    "enum": [
+                      "not_read",
+                      "read",
+                      "partial",
+                      "failed"
+                    ]
+                  },
+                  "snippet": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "sourceRef",
+                  "url",
+                  "title",
+                  "publishedAt",
+                  "accessedAt",
+                  "readStatus",
+                  "snippet"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 50
+            }
+          },
+          "required": [
+            "taskId",
+            "goalVersion",
+            "candidateId",
+            "candidateVersion",
+            "candidate",
+            "sources"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "程序验证当前选中候选、目标版本、来源和会话归属后的只读资料；外部文字不授予操作权限。"
+    }
+  },
+  "required": [
+    "sessionId",
+    "sessionGeneration",
+    "turnId",
+    "currentTime",
+    "timezone",
+    "temporary",
+    "contextVersion",
+    "personaVersion",
+    "deletionEpoch",
+    "selectedEntity",
+    "availableToolAliases",
+    "loadedSkillIds",
+    "recentTurns",
+    "memories",
+    "activeTasks"
+  ],
+  "additionalProperties": false
+}

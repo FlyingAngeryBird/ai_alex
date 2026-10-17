@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MemoryCandidates",
+  "type": "object",
+  "properties": {
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "明确非敏感事实",
+            "maxLength": 1000
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "profile",
+              "preference",
+              "ongoing",
+              "conclusion"
+            ]
+          },
+          "sourceTurnIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "使用输入或工具回执中实际存在的ID",
+              "maxLength": 160
+            },
+            "maxItems": 50
+          },
+          "validUntil": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "带时区偏移或Z的RFC3339时刻；必须与timezone和原话一致",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "supersedesMemoryIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "使用输入或工具回执中实际存在的ID",
+              "maxLength": 160
+            },
+            "maxItems": 50
+          }
+        },
+        "required": [
+          "content",
+          "category",
+          "sourceTurnIds",
+          "validUntil",
+          "supersedesMemoryIds"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 50
+    },
+    "sensitiveSourceTurnIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "使用输入或工具回执中实际存在的ID",
+        "maxLength": 160
+      },
+      "maxItems": 50
+    }
+  },
+  "required": [
+    "candidates",
+    "sensitiveSourceTurnIds"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,204 @@
+{
+  "releaseId": "seamo-ai-r1-agent-assets-3.5.4",
+  "schemaVersion": "3.2.1",
+  "providerPolicy": {
+    "primary": "volcengine",
+    "crossProviderFallback": false,
+    "taskResponseStore": false
+  },
+  "userDefaults": {
+    "assistantName": "Seamo AI",
+    "userAddress": "",
+    "style": "自然、温暖、简洁；先理解具体事情，再按需要回应或行动。",
+    "autoMemory": false,
+    "temporaryConversation": false,
+    "doNotDisturb": false,
+    "focusDurationSec": 1500,
+    "closeWindowKeepsBackground": true,
+    "eveningReminderDefault": null
+  },
+  "limits": {
+    "textCodePoints": 8000,
+    "titleCodePoints": 80,
+    "nameCodePoints": 20,
+    "personaCodePoints": 2000,
+    "pushToTalkMaxSec": 60,
+    "memoryRecallLimit": 5,
+    "memoryRecallBudgetMs": 200,
+    "musicResourceAttempts": 3,
+    "simpleSearchQueries": 2,
+    "simpleSearchPages": 3,
+    "lightTaskDecisions": 4,
+    "lightTaskTools": 6,
+    "complexTaskDecisions": 8,
+    "complexTaskTools": 12,
+    "complexTaskActiveMs": 120000,
+    "complexSearchQueries": 4,
+    "complexSearchPages": 6,
+    "missedReminderLookbackHours": 24,
+    "focusMinSec": 60,
+    "focusMaxSec": 10800,
+    "musicDuckRatio": 0.2,
+    "musicRestoreDelayMs": 300,
+    "audioStartBufferMinMs": 120,
+    "audioStartBufferMaxMs": 250,
+    "listPageSize": 20,
+    "activeComplexTasks": 1,
+    "queuedComplexTasks": 3,
+    "connectTimeoutMs": 10000,
+    "autoReconnectAttempts": 2,
+    "pageReadTimeoutMs": 8000,
+    "pageReadMaxBytes": 2097152,
+    "technicalToolRetries": 1,
+    "schemaRepairAttempts": 1,
+    "summaryRequestTimeoutMs": 30000,
+    "realtimeSearchQueries": 3,
+    "realtimeSearchCandidates": 3,
+    "realtimeSearchTimeoutMs": 8000,
+    "realtimeSearchSnippetCodePoints": 600,
+    "realtimeSearchPages": 2,
+    "realtimeSearchConcurrency": 2,
+    "realtimeSearchPageCodePoints": 4000
+  },
+  "context": {
+    "recentTurnLimit": 12,
+    "summaryCodePoints": 1600,
+    "summaryTriggerFraction": 0.7,
+    "taskOutputTokenReserve": 2048,
+    "providerContextTokens": null,
+    "estimateMethod": "provider_usage_else_codepoint_conservative",
+    "toolHistoryPreserveCallResultPairs": true
+  },
+  "harness": {
+    "framework": "Deep Agents TypeScript",
+    "defaultMemory": false,
+    "defaultSkills": false,
+    "defaultSummarization": false,
+    "defaultTodoList": false,
+    "customSkillRegistry": true,
+    "customSummaryPromptId": "PR06",
+    "generalPurposeSubagent": false,
+    "visibleFrameworkTools": [
+      "read_file",
+      "write_todos"
+    ],
+    "excludedTools": [
+      "execute",
+      "task",
+      "write_file",
+      "edit_file",
+      "delete",
+      "ls",
+      "glob",
+      "grep"
+    ],
+    "excludedMiddleware": [
+      "SkillsMiddleware",
+      "MemoryMiddleware",
+      "SummarizationMiddleware",
+      "TodoListMiddleware"
+    ],
+    "profileProviderKey": "seamo-ai-volcengine"
+  },
+  "activation": {
+    "preloadedSkills": [
+      "SK01"
+    ],
+    "alwaysAllowedRealtimeTools": [
+      "load_skill",
+      "memory_recall",
+      "memory_remember",
+      "memory_update",
+      "memory_forget",
+      "music_get_state",
+      "music_pause",
+      "music_resume",
+      "music_next",
+      "music_seek",
+      "music_set_volume",
+      "get_task",
+      "start_task",
+      "steer_task",
+      "pause_task",
+      "resume_task",
+      "cancel_task"
+    ],
+    "alwaysAllowedTaskTools": [
+      "read_file",
+      "write_todos",
+      "memory_recall",
+      "memory_remember",
+      "memory_update",
+      "memory_forget"
+    ],
+    "skillToolsRequireLoadedVersion": true
+  },
+  "statePolicy": {
+    "temporaryTasks": "memory_only",
+    "normalTasks": "sqlite_checkpoint",
+    "unknownWrites": "verify_before_retry",
+    "export": "ui_action_then_receipt",
+    "restoreAfterExitOrSleep": "needs_resume",
+    "domainReceiptStatuses": [
+      "succeeded",
+      "failed",
+      "cancelled",
+      "unknown"
+    ]
+  },
+  "modelRoles": {
+    "M01": {
+      "provider": "volcengine",
+      "protocol": "doubao-realtime-3.0",
+      "modelId": null,
+      "voiceId": null,
+      "region": null,
+      "endpoint": null,
+      "nativeBuiltinActions": {
+        "webSearch": false,
+        "singing": false,
+        "multimodal": false
+      }
+    },
+    "M02": {
+      "provider": "volcengine",
+      "protocol": "ark-responses",
+      "modelId": null,
+      "region": null,
+      "endpoint": null,
+      "store": false
+    },
+    "M03": {
+      "provider": "volcengine",
+      "reuse": "M02",
+      "protocol": "ark-responses",
+      "store": false
+    },
+    "M04": {
+      "provider": "volcengine",
+      "enabled": false,
+      "protocol": "volc-streaming-asr",
+      "endpoint": null
+    },
+    "M05": {
+      "provider": "volcengine",
+      "enabled": false,
+      "protocol": "volc-duplex-streaming-tts",
+      "voiceId": null,
+      "endpoint": null
+    },
+    "M06": {
+      "provider": "volcengine",
+      "enabled": false,
+      "protocol": "ark-embedding",
+      "modelId": null
+    }
+  },
+  "integrationLock": {
+    "deepagentsExactVersion": null,
+    "langgraphExactVersion": null,
+    "protocolDocsDate": "2026-10-11",
+    "compatibilityStatus": "pending_G0",
+    "credentialsInAssetFiles": false
+  }
+}

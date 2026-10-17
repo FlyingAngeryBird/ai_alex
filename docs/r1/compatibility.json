@@ -1,0 +1,250 @@
+{
+  "schemaVersion": 1,
+  "baselineCommit": "08554b7",
+  "date": "2026-10-17",
+  "runtime": {
+    "nodeOnHost": "24.14.0",
+    "nodeInElectron": "24.17.0",
+    "electronPackage": "42.5.0"
+  },
+  "checks": [
+    {
+      "id": "alpha2-isolated-onboarding-and-cleanup-ui",
+      "status": "passed",
+      "checkedDate": "2026-10-17",
+      "evidence": "Production entry with empty isolated data; first-use dialog and skip observed with mic off and memory disabled. One synthetic conversation and independent note seeded only in isolated DB. UI preview/cancel kept history; confirm stopped/relaunched production main, cleanup-outcome succeeded; history empty, note retained and cleanup-backup export entry visible. Music-only range preview/cancel also observed.",
+      "scope": "local isolated UI and real SQLite mutation/relaunch, not user production deletion, model workflow or all A/V acceptance"
+    },
+    {
+      "id": "alpha2-code-regression",
+      "status": "passed",
+      "checkedDate": "2026-10-17",
+      "evidence": "89 files / 553 tests, build and registered-asset checks passed. SQLite11 migration keeps message identity/order and non-reusing sequence; cleanup guards before confirmation and after service drain; older-backup forgetting suppression retained.",
+      "scope": "automated code verification, not complete product acceptance"
+    },
+    {
+      "id": "developer-id-signing",
+      "status": "not_run",
+      "reason": "Local keychain inspection found zero valid codesigning identities. notarytool installed, but no Developer ID/notarization credentials verified; preview remains ad-hoc only."
+    },
+    {
+      "id": "baseline-build",
+      "status": "passed",
+      "evidence": "npm run build; R1 snapshot worktree"
+    },
+    {
+      "id": "baseline-unit",
+      "status": "passed",
+      "evidence": "npm test; 31 files / 203 tests"
+    },
+    {
+      "id": "asset-static",
+      "status": "passed",
+      "evidence": "validate_assets.py and check_contract_examples.py; fixture only"
+    },
+    {
+      "id": "ark-chat",
+      "status": "passed",
+      "evidence": "one real chat completion; response contained two Chinese characters",
+      "modelProfile": "local-env",
+      "protocolVersion": "chat-completions-v3"
+    },
+    {
+      "id": "ark-tool-call",
+      "status": "passed",
+      "evidence": "one real call returned HTTP 200 with one structured tool call",
+      "modelProfile": "local-env",
+      "protocolVersion": "chat-completions-v3"
+    },
+    {
+      "id": "ark-responses-tool-result",
+      "status": "passed",
+      "checkedAt": "2026-10-13T14:55:54.770Z",
+      "evidence": "registered memory_recall called once; isolated in-memory SQLite returned no_match; original call_id paired in local history; final text 21 codepoints; 3542ms for two requests; store:false",
+      "modelProfile": "local-env",
+      "protocolVersion": "responses-v3",
+      "scope": "protocol smoke, not Task Harness acceptance"
+    },
+    {
+      "id": "ark-task-boundary-schema",
+      "status": "passed",
+      "checkedAt": "2026-10-13T15:27:16.736Z",
+      "evidence": "registered PR01/PR02/PR04 and synthetic temporary TaskInput; actual Responses strict TaskDraft schema request; 3633ms; local schema validator accepted draft; no tools, no publication, store:false",
+      "modelProfile": "local-env",
+      "protocolVersion": "responses-v3",
+      "scope": "M02 role/schema smoke, not execution or Supervisor acceptance"
+    },
+    {
+      "id": "ark-task-internal-publication",
+      "status": "passed",
+      "checkedAt": "2026-10-13T16:26:54.290Z",
+      "evidence": "isolated in-memory SQLite; synthetic explicit Skill-read request; 2 decisions, read_file once, 7114ms; accepted to succeeded; 1 Artifact and 2 real Receipt rows; store:false; publishedInProduction:false",
+      "modelProfile": "local-env",
+      "protocolVersion": "responses-v3",
+      "scope": "M02 internal tools and artifact publication only; no production conversation, domain tools, UI or semantic blind evaluation"
+    },
+    {
+      "id": "ark-task-runner-note",
+      "status": "passed",
+      "checkedAt": "2026-10-13T17:42:54.227Z",
+      "evidence": "asset release 2.0.2; isolated in-memory SQLite and synthetic explicit save; 3 decisions, read_file and notes_create; 1 matching Item and 3 Receipt rows; 8214ms; accepted to succeeded; store:false; publishedInProduction:false; five failed checks and fixes retained in task-runner progress report",
+      "modelProfile": "local-env",
+      "protocolVersion": "responses-v3",
+      "scope": "single bounded M02 note-commit chain; not natural semantic blind evaluation, production M01, all tools, framework recovery or G3 acceptance"
+    },
+    {
+      "id": "tts-one-shot",
+      "status": "passed",
+      "evidence": "one real synthesis returned 8493 audio bytes; playback not verified",
+      "modelProfile": "local-env"
+    },
+    {
+      "id": "music-search",
+      "status": "passed",
+      "evidence": "one real GD Studio netease search returned five tracks; URL/playback not verified"
+    },
+    {
+      "id": "native-realtime-session-diagnostic",
+      "status": "passed",
+      "checkedDate": "2026-10-16",
+      "evidence": "After user unlocked the Mac, preview 39f8a6e started from outside the checkout and restored saved encrypted configuration. Real settings check displayed session create/close passed; microphone stayed off, no audio or tool requests. Earlier 51f50e2 auth failure retained in native-auth-progress report; its cause was not proven.",
+      "modelProfile": "encrypted-vault",
+      "protocolVersion": "seeduplex-json-3.0",
+      "scope": "session_create_close only; not actual conversation, playback, tools or performance acceptance"
+    },
+    {
+      "id": "native-realtime-audible-short-session",
+      "status": "passed",
+      "checkedDate": "2026-10-17",
+      "modelProfile": "encrypted-vault",
+      "protocolVersion": "seeduplex-json-3.0",
+      "evidence": "User confirms preview 8fbc6d6 no longer repeats their subtitles and audible replies work. Actual stopped-session diagnostics: 3157 captured/sent frames; 78 server/renderer audio frames, 1467572 bytes; no missing response IDs; 3 ASR completions and 3 playback completions, 1 underrun. Read-only metadata shows user final and assistant heard with played ranges. Prior failures retained in native-audio-progress report.",
+      "scope": "one real short conversation and audible playback, not V03/V05/30-minute or performance acceptance"
+    },
+    {
+      "id": "native-realtime-17-round-session",
+      "status": "passed",
+      "checkedDate": "2026-10-17",
+      "evidence": "In f3eab20 user reports about 34 turns without dropped/repeated speech, audible stutter, old voice continuing or disconnects. Actual history/SQLite metadata show 34 messages = 17 user turns, 11 heard replies, 6 interrupted replies. Last connection: 360 audio frames/6747322 bytes received, missing IDs 0, ASR completed 17, rebuilds 0, queue clear 18/18 acknowledged (max 9ms), 2 buffer depletions followed by refill. Raw subjective and objective differences retained in voice-stability report.",
+      "scope": "17 real turns over about five minutes; not 34 full exchanges, 20-turn V03, 30-minute listening, natural-noise V05 or physical stop-latency acceptance"
+    },
+    {
+      "id": "native-deliberate-barge-in-listening",
+      "status": "passed",
+      "checkedDate": "2026-10-17",
+      "evidence": "User explicitly confirms at least three deliberate interruptions during assistant playback in f3eab20, with old speech stopping promptly and no reported old-audio continuation. Same session metadata contains six interrupted reply receipts, not all assumed deliberate.",
+      "scope": "user-observed deliberate barge-in only; no physical stop-latency P95, environmental/music noise false-trigger rate or complete V05 acceptance"
+    },
+    {
+      "id": "native-realtime-voice",
+      "status": "partial",
+      "reason": "f3eab20 passed a 17-turn real session without user-reported anomalies and at least three deliberate barge-ins stopped old speech promptly. Continuous 20 rounds, noise false-interruption, long listening, devices, temporary mode and measured latency remain open. Two confirmed buffer refills observed. Prior preview failures retained."
+    },
+    {
+      "id": "native-cancel-resume-transport",
+      "status": "passed",
+      "checkedDate": "2026-10-17",
+      "evidence": "Synthetic isolated speech_text_buffer requests: first segment 6 audio frames/completed; cancel second after first frame; real response.canceled acknowledgement; resumed segment 6 frames/completed; no forwarded frame without identity. Registered assets and encrypted-vault credentials; no user history, microphone, audio saved or played.",
+      "scope": "real cancellation acknowledgement and synthesis resumption only; not natural barge-in, speaker stop latency, noise or V05 acceptance"
+    },
+    {
+      "id": "native-playback-sample-clock-stability",
+      "status": "passed",
+      "checkedDate": "2026-10-17",
+      "evidence": "Automated 20 synthetic segments with alternating playback/interruption and stale PCM rejection; 43,200,000 ordered PCM samples at 24k across ring wraps with no sample mismatch. Full regression 87 files / 544 tests.",
+      "scope": "simulated sample clock, 30 minutes advanced in about 19 seconds; no real 30-minute microphone/network/device listening or performance claim"
+    },
+    {
+      "id": "realtime-tool-result",
+      "status": "passed",
+      "checkedDate": "2026-10-17",
+      "evidence": "alpha.4 real native multi-question weather/RFC search returned brief text and audio; user reports no problem. Actual Custom retrieval probes and bound tool receipts retained in realtime-search report.",
+      "scope": "voice search smoke only; not all tools, read-page recovery or latency acceptance"
+    },
+    {
+      "id": "search-provider",
+      "status": "passed",
+      "checkedDate": "2026-10-17",
+      "evidence": "Independent Doubao Custom search configured and verified; alpha.4 user microphone/speaker search smoke passed. Bound retrieval budget: max 3 searches, top 3 results each, max 2 page reads, 8-second external retrieval window.",
+      "scope": "configured provider and bounded retrieval; no universal correctness or cost/performance claim"
+    },
+    {
+      "id": "music-playback",
+      "status": "blocked",
+      "checkedDate": "2026-10-17",
+      "reason": "Existing sources did not return a playable resource in latest probes: netease 503, kuwo 400; Joox matching track has empty URL. No actual playback proved. See current-status and music progress reports."
+    },
+    {
+      "id": "macos-permissions",
+      "status": "partial",
+      "reason": "User microphone/speaker sessions passed in prior previews. Full notification denial, device switching/unplug, sleep and installation permission acceptance remain open; alpha.7 currently waits at system Keychain authorization."
+    },
+    {
+      "id": "voice-latency",
+      "status": "not_run",
+      "reason": "Requires repeated microphone-to-speaker measurements on a real device"
+    },
+    {
+      "id": "alpha6-task-brief-audible",
+      "status": "passed",
+      "checkedDate": "2026-10-17",
+      "evidence": "Source 9a1ffda; actual checklist task completed with result card and 14817ms heard device receipt. User explicitly confirmed hearing normal sound.",
+      "scope": "one short task brief; not DND, temporary mode, interruptions or all task acceptance"
+    },
+    {
+      "id": "alpha6-same-artifact-revision",
+      "status": "passed",
+      "checkedDate": "2026-10-17",
+      "evidence": "Same published artifact ID advanced v1 to v2; only the requested phone line changed, keys/lights unchanged; actual database identity and content verified. See task-delivery progress report.",
+      "scope": "one actual targeted revision, not complete editor or voice-edit acceptance"
+    },
+    {
+      "id": "alpha7-reminder-pr09-service",
+      "status": "passed",
+      "checkedDate": "2026-10-17",
+      "evidence": "Source 25d277c; isolated real production scheduler due event to real Ark and native TTS in 3524ms, one model/one synthesis, 306204 WAV bytes; duplicate suppressed. 96 files / 624 regression tests pass.",
+      "scope": "isolated actual clock/model/synthesis; no microphone or physical playback; user profile business data unchanged"
+    },
+    {
+      "id": "alpha7-reminder-physical-playback",
+      "status": "not_run",
+      "reason": "Candidate startup blocked at SecItemCopyMatching. Actual due card, speaker sound and device receipt still require verification; no hearing claim."
+    },
+    {
+      "id": "alpha8-reminder-lifecycle",
+      "status": "passed",
+      "checkedDate": "2026-10-17",
+      "evidence": "Source 321df09, assets 3.2.1: real M01 create -> same-ID reschedule -> cancel -> one follow_up -> ambiguous time without write; five steps passed, no Item writes. Extra tools-free summary cannot execute actions.",
+      "scope": "isolated real text/domain service chain; no notification or speaker acceptance"
+    },
+    {
+      "id": "alpha9-memory-fixed-set",
+      "status": "passed",
+      "checkedDate": "2026-10-17",
+      "evidence": "Source 22a4450, assets 3.2.3: unchanged 20-case set after SQLite close/reopen; 19/20 automatic (95%), all 20 actual target sources read. M14 wording false negative retained. Baselines 0/5 and 14/20 retained in report. Evidence docs/r1/evidence/2026-10-17-memory-recall-20.json.",
+      "scope": "single fixed synthetic real-M01 text retrieval cohort; not all F04/V07 capture, voice, deletion or natural-language accuracy"
+    },
+    {
+      "id": "alpha9-topic-version-recall",
+      "status": "passed",
+      "checkedDate": "2026-10-17",
+      "evidence": "Source 22a4450: real unselected-topic query returns v1, domain correction returns v2 only, forgetting returns no topic or old platform; three actual M01 cases.",
+      "scope": "domain-seeded isolated Topic read/correction/forgetting; not PR06 generation or actual UI editing"
+    },
+    {
+      "id": "alpha9-code-regression",
+      "status": "passed",
+      "checkedDate": "2026-10-17",
+      "evidence": "97 files / 633 tests, production build, 59 hashed assets and 16 contract examples pass; no tool in final receipt summary, failed combined recall does not authorize a hidden target.",
+      "scope": "automated code/boundary verification only"
+    },
+    {
+      "id": "memory-local-retrieval-10000",
+      "status": "passed",
+      "checkedDate": "2026-10-17",
+      "evidence": "10000 synthetic records; 10 actual local recalls all return only exact named target, 68.1-90.2ms with 200ms budget; no network.",
+      "scope": "specific synthetic local capacity sample, not natural recall or end-to-end P95"
+    }
+  ],
+  "conclusion": "Full R1 and G-stage acceptance remain open. Latest source 22a4450 / alpha.9: bounded reminder lifecycle and fixed-set memory retrieval passed in isolated real-service tests (19/20 automatic); current-topic correction/forgetting passed. Actual candidate UI/audio, music resources, full A/V, device/latency and signed/notarized installation remain open. Historical failures are preserved."
+}

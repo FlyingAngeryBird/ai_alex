@@ -82,4 +82,56 @@ describe('keyboard recorder', () => {
     expect(recorder.isRecording.value).toBe(false)
     expect(fakeTrack.stop).toHaveBeenCalledTimes(1)
   })
+
+  it('does not request the microphone when the desktop voice bridge is unavailable', async () => {
+    const getUserMedia = vi.fn()
+    const recorder = useKeyboardRecorder({
+      createMediaRecorder: (stream) => new FakeMediaRecorder(stream) as unknown as MediaRecorder,
+      mediaDevices: {
+        getUserMedia
+      }
+    })
+
+    await expect(recorder.start()).rejects.toThrow('语音通道不可用')
+
+    expect(recorder.isRecording.value).toBe(false)
+    expect(recorder.errorMessage.value).toBe('语音通道不可用')
+    expect(getUserMedia).not.toHaveBeenCalled()
+  })
+  it('discards a cancelled recording and releases the microphone without ASR submission', async () => {
+    const track = { stop: vi.fn() }
+    const stream = { getTracks: () => [track] } as unknown as MediaStream
+    const invoke = vi.fn()
+    const recorder = useKeyboardRecorder({ createMediaRecorder: () => new FakeMediaRecorder() as unknown as MediaRecorder,
+      lingli: { invoke }, mediaDevices: { getUserMedia: vi.fn(async () => stream) } })
+    await recorder.start()
+    recorder.cancel()
+    expect(recorder.isRecording.value).toBe(false)
+    expect(track.stop).toHaveBeenCalledTimes(1)
+    expect(invoke).not.toHaveBeenCalled()
+    await expect(recorder.stopAndTranscribe()).rejects.toThrow('当前没有正在录制的语音')
+  })
+  it('cancels a pending permission acquisition and releases a microphone that arrives after cancellation', async () => {
+    let release!: (stream: MediaStream) => void
+    const track = { stop: vi.fn() }, invoke = vi.fn()
+    const recorder = useKeyboardRecorder({ createMediaRecorder: () => new FakeMediaRecorder() as unknown as MediaRecorder,
+      lingli: { invoke }, mediaDevices: { getUserMedia: () => new Promise(resolve => { release = resolve }) } })
+    const pending = recorder.start(), rejected = expect(pending).rejects.toThrow('VOICE_CAPTURE_CANCELLED')
+    recorder.cancel(); await rejected
+    release({ getTracks: () => [track] } as unknown as MediaStream); await Promise.resolve(); await Promise.resolve()
+    expect(track.stop).toHaveBeenCalledTimes(1); expect(FakeMediaRecorder.instance).toBeNull(); expect(invoke).not.toHaveBeenCalled()
+  })
+  it('uses the selected device and releases capture before waiting for ASR, dropping a cancelled late result', async () => {
+    let release!: (value: AppResult<{ text: string }>) => void
+    const track = { stop: vi.fn() }, getUserMedia = vi.fn(async () => ({ getTracks: () => [track] }) as unknown as MediaStream)
+    const invoke = vi.fn(() => new Promise<AppResult<{ text: string }>>(resolve => { release = resolve }))
+    const recorder = useKeyboardRecorder({ createMediaRecorder: () => new FakeMediaRecorder() as unknown as MediaRecorder,
+      lingli: { invoke: invoke as never }, mediaDevices: { getUserMedia }, inputConstraints: () => ({ deviceId: { exact: 'selected-mic' } }) })
+    await recorder.start(); const transcription = recorder.stopAndTranscribe(), rejected = expect(transcription).rejects.toThrow('VOICE_CAPTURE_CANCELLED')
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(1))
+    expect(getUserMedia).toHaveBeenCalledWith({ audio: { deviceId: { exact: 'selected-mic' } } })
+    expect(track.stop).toHaveBeenCalledTimes(1); expect(recorder.isRecording.value).toBe(false); expect(recorder.userSpeaking.value).toBe(false)
+    recorder.cancel(); await rejected
+    release({ ok: true, data: { text: '不得提交的迟到转写' } }); await Promise.resolve()
+  })
 })

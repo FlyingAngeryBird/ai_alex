@@ -1,0 +1,247 @@
+import { randomUUID } from 'node:crypto'
+import WebSocket, { type ClientOptions } from 'ws'
+import type { R1ModelRequestBoundary } from '../r1/modelBoundary.js'
+import { NATIVE_REALTIME_ENDPOINT, NativeRealtimeError, nativeSessionCreate, nativeFailureCode } from './nativeRealtimeProvider.js'
+
+export type NativeRealtimeEvent = Record<string, unknown> & { type: string }
+export type NativeToolCall = { callId: string; name: string; arguments: unknown }
+/** Live duplex transport. Domain actions and playback remain owned by the application. */
+export class NativeRealtimeSession {
+  private diagnostic = { serverAudioFrames: 0, serverAudioBytes: 0, discardedCancelledAudio: 0,
+    serverAsrDeltas: 0, serverAsrCompleted: 0, serverAsrWithTranscript: 0, serverAsrWithItemId: 0 }
+  getDiagnostics() { return { ...this.diagnostic } }
+  private socket: WebSocket | null = null
+  private state: 'new' | 'connecting' | 'ready' | 'closed' = 'new'
+  private pendingCalls = new Map<string, NativeToolCall>()
+  private answeredCalls = new Set<string>()
+  private cancelledResponses = new Set<string>()
+  private activeResponse: string | null = null
+  private questionResponses = new Map<string, string>()
+  private transcriptions = new Map<string, string>()
+  private audioSegment: string | null = null
+  private finishOpening: ((error?: string) => void) | null = null
+  private timeout: ReturnType<typeof setTimeout> | null = null
+  constructor(private readonly input: {
+    apiKey: string; voice: string; boundary: R1ModelRequestBoundary;
+    onEvent: (event: NativeRealtimeEvent) => void;
+    onToolCalls: (calls: NativeToolCall[]) => void;
+    onClosed: (code: string) => void;
+    connect?: (url: string, options: ClientOptions) => WebSocket;
+  }) {}
+
+  open(): Promise<void> {
+    if (this.state !== 'new') return Promise.reject(new NativeRealtimeError('REALTIME_ALREADY_STARTED'))
+    if (!this.input.apiKey.trim()) return Promise.reject(new NativeRealtimeError('REALTIME_NOT_CONFIGURED'))
+    if (/[\r\n\x00]/.test(this.input.apiKey)) {
+      return Promise.reject(new NativeRealtimeError('REALTIME_CONFIG_INVALID'))
+    }
+    const create = nativeSessionCreate(this.input.boundary, this.input.voice)
+    this.state = 'connecting'
+    return new Promise((resolve, reject) => {
+      this.finishOpening = code => {
+        if (this.timeout) clearTimeout(this.timeout)
+        this.timeout = null; this.finishOpening = null
+        if (code) reject(new NativeRealtimeError(code)); else resolve()
+      }
+      this.timeout = setTimeout(() => this.close('REALTIME_START_TIMEOUT'), 10000)
+      try {
+        const socket = this.socket = (this.input.connect ?? ((url, options) => new WebSocket(url, options)))(
+          NATIVE_REALTIME_ENDPOINT, { headers: { 'X-Api-Key': this.input.apiKey.trim() },
+            handshakeTimeout: 10000, maxPayload: 1_048_576, followRedirects: false })
+        socket.on('open', () => {
+          if (this.state !== 'connecting') return
+          try { this.input.boundary.assertCurrent(); socket.send(JSON.stringify(create)) }
+          catch { this.close('REALTIME_CONTEXT_INVALIDATED') }
+        })
+        socket.on('message', (data, binary) => {
+          if (this.state === 'closed') return
+          try {
+            this.input.boundary.assertCurrent()
+            if (binary) throw new Error('binary')
+            const event: unknown = JSON.parse(data.toString())
+            if (!event || typeof event !== 'object' || typeof (event as NativeRealtimeEvent).type !== 'string') throw new Error('event')
+            this.receive(event as NativeRealtimeEvent)
+          } catch { this.close('REALTIME_PROTOCOL_OR_CONTEXT_INVALID') }
+        })
+        socket.on('unexpected-response', (_request, response) => {
+          response.resume()
+          this.close(nativeFailureCode(response.statusCode, 'http'))
+        })
+        socket.on('error', () => this.close('REALTIME_NETWORK_FAILED'))
+        socket.on('close', () => this.close('REALTIME_CONNECTION_CLOSED'))
+      } catch { this.close('REALTIME_NETWORK_FAILED') }
+    })
+  }
+  private send(event: NativeRealtimeEvent): void {
+    if (this.state !== 'ready' || !this.socket) throw new NativeRealtimeError('REALTIME_NOT_READY')
+    this.input.boundary.assertCurrent()
+    if (this.socket.bufferedAmount > 262144) { this.close('REALTIME_UPLINK_CONGESTED'); throw new NativeRealtimeError('REALTIME_UPLINK_CONGESTED') }
+    this.socket.send(JSON.stringify({ event_id: randomUUID(), ...event }))
+  }
+  updateBoundary(boundary: R1ModelRequestBoundary, synchronizeContext = true): void {
+    const create = nativeSessionCreate(boundary, this.input.voice)
+    const { instructions, tools } = create.session as Record<string, unknown>
+    // Updating the tool/prompt boundary must not reconfigure the active audio
+    // stream or resend the model/extension initialization during an FC turn.
+    const previous = this.input.boundary.finalize([]).tools
+    if (synchronizeContext || JSON.stringify(previous) !== JSON.stringify(boundary.finalize([]).tools)) {
+      this.send({ type: 'session.update', session: { instructions, tools } })
+    }
+    this.input.boundary = boundary
+  }
+  appendAudio(pcm: Uint8Array): void {
+    // 16 kHz mono signed PCM16; no unbounded queue when disconnected.
+    if (!pcm.byteLength || pcm.byteLength > 32000 || pcm.byteLength % 2) throw new NativeRealtimeError('REALTIME_AUDIO_INVALID')
+    this.send({ type: 'input_audio_buffer.append', audio: Buffer.from(pcm).toString('base64') })
+  }
+  setMuted(muted: boolean): void { this.send({ type: muted ? 'input_audio_mute.commit' : 'input_audio_unmute.commit' }) }
+  commitAudio(): void { this.send({ type: 'input_audio_buffer.commit' }) }
+  cancelResponse(): string | null {
+    const id = this.activeResponse
+    if (id) this.cancelledResponses.add(id)
+    if (id) this.send({ type: 'response.cancel' })
+    this.activeResponse = null
+    return id
+  }
+  returnToolResult(callId: string, result: unknown): void {
+    this.returnToolResults([{ callId, result }])
+  }
+  returnToolResults(results: Array<{ callId: string; result: unknown }>): void {
+    const seen = new Set<string>()
+    const items = results.map(({ callId, result }) => {
+      if (!this.pendingCalls.has(callId) || seen.has(callId)) throw new NativeRealtimeError('REALTIME_TOOL_CALL_UNKNOWN')
+      seen.add(callId)
+      const text = JSON.stringify(result)
+      if (typeof text !== 'string' || text.length > 65536) throw new NativeRealtimeError('REALTIME_TOOL_RESULT_INVALID')
+      return { type: 'message', role: 'tool', call_id: callId, content: [{ type: 'input_text', text }] }
+    })
+    if (!items.length || items.length > 6) throw new NativeRealtimeError('REALTIME_TOOL_RESULT_INVALID')
+    this.send({ type: 'conversation.item.create', items })
+    for (const { callId } of results) { this.pendingCalls.delete(callId); this.answeredCalls.add(callId) }
+  }
+  abandonToolCalls(callIds: string[]): void {
+    for (const id of callIds) { this.pendingCalls.delete(id); this.answeredCalls.add(id) }
+  }
+  speakSearchHint(): void {
+    // This is the same native TTS-only event verified by the existing audio
+    // probe. It does not inject a user question or request another LLM turn.
+    this.speakText('我查一下。')
+  }
+  /** TTS only. Call on a dedicated, tool-free session, never an active M01 turn. */
+  speakText(text: string): void {
+    if (this.input.boundary.diagnostic.toolAliases.length || !text.trim() || [...text].length > 500) {
+      throw new NativeRealtimeError('REALTIME_TTS_TEXT_INVALID')
+    }
+    this.send({ type: 'speech_text_buffer.commit', text })
+  }
+  private receive(event: NativeRealtimeEvent): void {
+    if (event.type === 'response.output_audio.delta') {
+      this.diagnostic.serverAudioFrames++
+      if (typeof event.delta === 'string') this.diagnostic.serverAudioBytes += Math.floor(event.delta.length * 3 / 4) - (event.delta.endsWith('==') ? 2 : event.delta.endsWith('=') ? 1 : 0)
+    }
+    if (event.type === 'conversation.item.input_audio_transcription.delta') this.diagnostic.serverAsrDeltas++
+    if (event.type === 'conversation.item.input_audio_transcription.completed') {
+      this.diagnostic.serverAsrCompleted++
+      if (typeof event.transcript === 'string') this.diagnostic.serverAsrWithTranscript++
+      if (typeof event.item_id === 'string') this.diagnostic.serverAsrWithItemId++
+    }
+    if (event.type === 'error') {
+      const error = event.error && typeof event.error === 'object' ? event.error as Record<string, unknown> : null
+      this.close(nativeFailureCode(error?.code ?? event.code, 'event')); return
+    }
+    if (event.type === 'session.closed') { this.close('REALTIME_SESSION_CLOSED'); return }
+    if (event.type === 'session.created') {
+      const session = event.session as { id?: unknown } | undefined
+      if (this.state !== 'connecting' || typeof session?.id !== 'string' || !session.id) throw new Error('session')
+      this.state = 'ready'
+      // Audio capture explicitly unmutes after it has acquired the microphone.
+      this.setMuted(true)
+      this.finishOpening?.()
+      this.input.onEvent(event); return
+    }
+    if (this.state !== 'ready') throw new Error('session not ready')
+    // Some live service events omit response_id or the final transcript. Bind
+    // only through explicit question/item IDs, never whichever reply was latest.
+    if (event.type.startsWith('response.output_') && typeof event.question_id === 'string' && event.question_id) {
+      const question = event.question_id
+      const explicit = typeof event.response_id === 'string' && event.response_id ? event.response_id : null
+      let id = this.questionResponses.get(question)
+      if (!id) {
+        id = explicit ?? `question:${question}`
+        if (this.questionResponses.size >= 256) throw new Error('response limit')
+        this.questionResponses.set(question, id)
+      } else if (explicit && !id.startsWith('question:')) {
+        id = explicit; this.questionResponses.set(question, id)
+      }
+      event = { ...event, response_id: id }
+    }
+    if (event.type === 'response.output_audio.started') {
+      this.audioSegment = typeof event.response_id === 'string' && event.response_id
+        ? event.response_id : `audio:${randomUUID()}`
+      event = { ...event, response_id: this.audioSegment }
+    } else if (event.type === 'response.output_audio.delta' || event.type === 'response.output_audio.done') {
+      // Real service delta frames contain only type/event_id/delta. Their owner
+      // is the explicit started/done audio interval, never the latest text reply.
+      if ((!event.response_id || typeof event.response_id !== 'string') && this.audioSegment) {
+        event = { ...event, response_id: this.audioSegment }
+      }
+      if (event.type === 'response.output_audio.done') this.audioSegment = null
+    }
+    if (typeof event.item_id === 'string' && event.item_id) {
+      const id = event.item_id
+      if (event.type === 'conversation.item.input_audio_transcription.delta' && typeof event.delta === 'string') {
+        // The live Volc service sends the current recognition hypothesis here,
+        // including corrections. It is a snapshot, not an append-only fragment.
+        const text = typeof event.text === 'string' ? event.text : event.delta
+        if (text.length > 16000 || this.transcriptions.size >= 256 && !this.transcriptions.has(id)) throw new Error('transcription limit')
+        this.transcriptions.set(id, text)
+      }
+      if (event.type === 'conversation.item.input_audio_transcription.completed') {
+        if (typeof event.transcript !== 'string') event = { ...event,
+          transcript: typeof event.text === 'string' ? event.text : this.transcriptions.get(id) ?? '' }
+        this.transcriptions.delete(id)
+      }
+      if (event.type === 'conversation.item.input_audio_transcription.failed') this.transcriptions.delete(id)
+    }
+    if (event.type === 'conversation.item.input_audio_transcription.started' && this.activeResponse) {
+      this.cancelledResponses.add(this.activeResponse)
+      this.activeResponse = null
+    }
+    const responseId = typeof event.response_id === 'string' ? event.response_id : null
+    if (responseId && this.cancelledResponses.has(responseId)) {
+      if (event.type === 'response.output_audio.delta') this.diagnostic.discardedCancelledAudio++
+      return
+    }
+    if (responseId && event.type.startsWith('response.output_')) this.activeResponse = responseId
+    if (event.type === 'response.function_call_arguments.done') {
+      if (!Array.isArray(event.items) || !event.items.length || event.items.length > 6) throw new Error('calls')
+      const batch = new Set<string>()
+      const calls: NativeToolCall[] = event.items.map((item: Record<string, unknown>) => {
+        if (!item || typeof item.call_id !== 'string' || !item.call_id || item.call_id.length > 160 ||
+          typeof item.name !== 'string' || typeof item.arguments !== 'string' || item.arguments.length > 65536 ||
+          batch.has(item.call_id) || this.pendingCalls.has(item.call_id) || this.answeredCalls.has(item.call_id)) throw new Error('call')
+        const args: unknown = JSON.parse(item.arguments)
+        this.input.boundary.validateToolCall(item.name, args)
+        batch.add(item.call_id)
+        return { callId: item.call_id, name: item.name, arguments: args }
+      })
+      // Validate the entire batch before any domain action may begin.
+      for (const call of calls) this.pendingCalls.set(call.callId, call)
+      this.input.onToolCalls(calls); return
+    }
+    if ((event.type === 'response.done' || event.type === 'response.canceled') &&
+      (!responseId || responseId === this.activeResponse)) this.activeResponse = null
+    this.input.onEvent(event)
+  }
+  close(code = 'REALTIME_STOPPED'): void {
+    if (this.state === 'closed') return
+    this.state = 'closed'
+    this.finishOpening?.(code)
+    this.pendingCalls.clear(); this.answeredCalls.clear(); this.cancelledResponses.clear(); this.activeResponse = null
+    this.questionResponses.clear(); this.transcriptions.clear()
+    this.audioSegment = null
+    // Keep error listener installed: terminating an unfinished upgrade can emit error.
+    this.socket?.terminate(); this.socket = null
+    this.input.onClosed(code)
+  }
+}

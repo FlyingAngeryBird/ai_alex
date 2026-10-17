@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lingmo Music Aura Engine v2</title>
+    <style>
+      :root {
+        --bg: #05070b;
+        --ink: #0a0d13;
+        --milk: #fff7df;
+        --soft: rgba(255, 247, 223, 0.68);
+        --dim: rgba(255, 247, 223, 0.32);
+        --hair: rgba(255, 255, 255, 0.1);
+        --gold: #ffe06d;
+        --teal: #4ee6db;
+        --rose: #f3a6bc;
+        --quiet: #9fc7ff;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+      }
+
+      * { box-sizing: border-box; }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        color: var(--milk);
+        background:
+          radial-gradient(circle at 52% 38%, rgba(78, 230, 219, 0.08), transparent 36%),
+          radial-gradient(circle at 28% 68%, rgba(255, 224, 109, 0.055), transparent 32%),
+          linear-gradient(180deg, #090b11 0%, #05070b 56%, #06050a 100%);
+      }
+
+      button {
+        color: inherit;
+        font: inherit;
+        border: 0;
+        background: none;
+        cursor: pointer;
+      }
+
+      .stage {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        min-width: 1000px;
+        min-height: 680px;
+      }
+
+      canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+
+      .grain {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.18;
+        background-image:
+          linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+        background-size: 72px 72px;
+        mask-image: radial-gradient(circle at center, black, transparent 72%);
+      }
+
+      .topbar {
+        position: absolute;
+        top: 28px;
+        left: 34px;
+        right: 34px;
+        z-index: 3;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+      }
+
+      .brand {
+        display: grid;
+        gap: 6px;
+      }
+
+      .eyebrow {
+        color: var(--teal);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        font-family: "Songti SC", "Noto Serif SC", serif;
+        font-size: 34px;
+        font-weight: 500;
+        letter-spacing: 0;
+      }
+
+      .sub {
+        max-width: 480px;
+        color: var(--soft);
+        font-size: 14px;
+        line-height: 1.7;
+      }
+
+      .modes {
+        display: flex;
+        gap: 8px;
+        padding: 8px;
+        border: 1px solid var(--hair);
+        border-radius: 999px;
+        background: rgba(8, 10, 16, 0.52);
+        backdrop-filter: blur(18px);
+      }
+
+      .mode {
+        height: 34px;
+        padding: 0 16px;
+        border-radius: 999px;
+        color: rgba(255,247,223,0.62);
+        border: 1px solid transparent;
+      }
+
+      .mode.active {
+        color: var(--milk);
+        border-color: rgba(255,224,109,0.34);
+        background: rgba(255,224,109,0.12);
+      }
+
+      .readout {
+        position: absolute;
+        right: 42px;
+        bottom: 42px;
+        z-index: 3;
+        width: 360px;
+        display: grid;
+        gap: 14px;
+        color: var(--soft);
+        font-size: 13px;
+        line-height: 1.7;
+      }
+
+      .metric {
+        display: grid;
+        grid-template-columns: 74px 1fr;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .meter {
+        height: 2px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.12);
+      }
+
+      .bar {
+        width: 20%;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--teal), var(--gold));
+        transform-origin: left;
+      }
+
+      .caption {
+        position: absolute;
+        left: 42px;
+        bottom: 42px;
+        z-index: 3;
+        max-width: 430px;
+      }
+
+      .caption strong {
+        display: block;
+        margin-bottom: 10px;
+        font-family: "Songti SC", "Noto Serif SC", serif;
+        font-size: 30px;
+        font-weight: 500;
+      }
+
+      .caption span {
+        display: block;
+        color: var(--soft);
+        font-size: 14px;
+        line-height: 1.8;
+      }
+
+      .pulse-word {
+        color: var(--gold);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="stage">
+      <canvas id="aura"></canvas>
+      <div class="grain"></div>
+
+      <header class="topbar">
+        <section class="brand">
+          <div class="eyebrow">Music Aura Engine v2</div>
+          <h1>音乐在球体内部生长</h1>
+          <div class="sub">节拍不推动整颗球乱跳，而是在内部生成星火、流向和余辉。中心光只做底光，真正的主角是被音乐唤醒的粒子群。</div>
+        </section>
+        <nav class="modes" aria-label="音乐气质">
+          <button class="mode active" data-mode="pop">流行节拍</button>
+          <button class="mode" data-mode="ballad">安静民谣</button>
+          <button class="mode" data-mode="electronic">电子快歌</button>
+        </nav>
+      </header>
+
+      <section class="caption">
+        <strong>不是光源闪烁，而是<span class="pulse-word">节奏穿过粒子</span></strong>
+        <span>每一拍选择不同的内部星座，快速点亮、缓慢熄灭；旋律生成一条柔和的流，音色改变整颗球的色温。</span>
+      </section>
+
+      <aside class="readout">
+        <div class="metric"><span>Beat</span><div class="meter"><div class="bar" id="beatBar"></div></div></div>
+        <div class="metric"><span>Melody</span><div class="meter"><div class="bar" id="melodyBar"></div></div></div>
+        <div class="metric"><span>Sparks</span><div class="meter"><div class="bar" id="sparkBar"></div></div></div>
+        <div>算法结构：Beat Pulse 负责身体感，Spark Constellation 负责可看性，Melody Current 负责艺术流动，Mood Field 负责歌曲气质。</div>
+      </aside>
+    </main>
+
+    <script>
+      const canvas = document.getElementById('aura')
+      const ctx = canvas.getContext('2d')
+      const beatBar = document.getElementById('beatBar')
+      const melodyBar = document.getElementById('melodyBar')
+      const sparkBar = document.getElementById('sparkBar')
+      const modeButtons = [...document.querySelectorAll('.mode')]
+
+      const TAU = Math.PI * 2
+      const PARTICLES = 1850
+      const particles = []
+      const pulses = []
+      let modeName = 'pop'
+      let dpr = 1
+      let width = 0
+      let height = 0
+      let last = performance.now()
+      let time = 0
+      let beatCursor = 0
+      let lastBeatStep = -1
+      let rotation = 0
+
+      const modes = {
+        pop: {
+          bpm: 98,
+          bass: 0.76,
+          melody: 0.62,
+          treble: 0.42,
+          warmth: 0.72,
+          density: 0.72,
+          pulseSize: 0.9
+        },
+        ballad: {
+          bpm: 72,
+          bass: 0.34,
+          melody: 0.76,
+          treble: 0.26,
+          warmth: 0.54,
+          density: 0.46,
+          pulseSize: 0.58
+        },
+        electronic: {
+          bpm: 126,
+          bass: 0.86,
+          melody: 0.52,
+          treble: 0.78,
+          warmth: 0.84,
+          density: 0.84,
+          pulseSize: 1
+        }
+      }
+
+      function resize() {
+        dpr = Math.min(window.devicePixelRatio || 1, 2)
+        width = window.innerWidth
+        height = window.innerHeight
+        canvas.width = Math.floor(width * dpr)
+        canvas.height = Math.floor(height * dpr)
+        canvas.style.width = `${width}px`
+        canvas.style.height = `${height}px`
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      }
+
+      function seedParticles() {
+        particles.length = 0
+        const golden = Math.PI * (3 - Math.sqrt(5))
+        for (let i = 0; i < PARTICLES; i += 1) {
+          const y = 1 - (i / (PARTICLES - 1)) * 2
+          const r = Math.sqrt(1 - y * y)
+          const theta = golden * i
+          const roll = hash(i * 9.17)
+          const layer = roll > 0.91 ? 'core' : roll > 0.58 ? 'cloud' : 'shell'
+          const radius = layer === 'core'
+            ? 0.16 + hash(i * 2.3) * 0.34
+            : layer === 'cloud'
+              ? 0.42 + hash(i * 4.7) * 0.32
+              : 0.84 + hash(i * 5.9) * 0.18
+
+          particles.push({
+            x: Math.cos(theta) * r,
+            y,
+            z: Math.sin(theta) * r,
+            radius,
+            layer,
+            group: Math.floor(hash(i * 11.31) * 16),
+            phase: hash(i * 13.71) * TAU,
+            seed: hash(i * 19.49),
+            warmth: hash(i * 29.03)
+          })
+        }
+      }
+
+      function hash(value) {
+        return Math.sin(value * 127.1) * 43758.5453123 % 1 + (Math.sin(value * 127.1) * 43758.5453123 % 1 < 0 ? 1 : 0)
+      }
+
+      function clamp(value, min = 0, max = 1) {
+        return Math.max(min, Math.min(max, value))
+      }
+
+      function smoothstep(edge0, edge1, value) {
+        const x = clamp((value - edge0) / (edge1 - edge0))
+        return x * x * (3 - 2 * x)
+      }
+
+      function triggerBeat(mode, strength) {
+        const group = beatCursor % 16
+        const angle = (beatCursor * 2.399963 + mode.melody * 0.8) % TAU
+        pulses.push({
+          age: 0,
+          angle,
+          group,
+          strength,
+          type: beatCursor % 4 === 0 ? 'downbeat' : 'beat'
+        })
+        if (pulses.length > 14) pulses.shift()
+        beatCursor += 1
+      }
+
+      function simulateAudio(mode, t) {
+        const period = 60 / mode.bpm
+        const step = Math.floor(t / period)
+        if (step !== lastBeatStep) {
+          lastBeatStep = step
+          const accent = step % 4 === 0 ? 1 : step % 2 === 0 ? 0.82 : 0.68
+          triggerBeat(mode, accent * mode.pulseSize)
+        }
+
+        const beatPhase = (t % period) / period
+        const beatImpulse = Math.exp(-beatPhase * 9.5)
+        const secondImpulse = Math.exp(-Math.abs(beatPhase - 0.48) * 15) * 0.28
+        const melody = 0.5 + Math.sin(t * 0.72 + Math.sin(t * 0.21) * 1.4) * 0.32 + Math.sin(t * 1.37) * 0.12
+        const shimmer = 0.5 + Math.sin(t * 7.8 + Math.sin(t * 1.2)) * 0.5
+
+        return {
+          bass: clamp(mode.bass * (beatImpulse + secondImpulse)),
+          beat: clamp(beatImpulse),
+          melody: clamp(mode.melody * melody),
+          treble: clamp(mode.treble * Math.pow(shimmer, 4)),
+          warmth: mode.warmth,
+          density: mode.density
+        }
+      }
+
+      function draw(now) {
+        const dt = Math.min(0.034, (now - last) / 1000)
+        last = now
+        time += dt
+        const mode = modes[modeName]
+        const audio = simulateAudio(mode, time)
+        rotation += dt * (0.08 + audio.melody * 0.04)
+
+        pulses.forEach((pulse) => {
+          pulse.age += dt
+        })
+        while (pulses[0]?.age > 1.25) pulses.shift()
+
+        ctx.clearRect(0, 0, width, height)
+        drawAtmosphere(audio)
+        drawParticles(audio)
+        updateMeters(audio)
+        requestAnimationFrame(draw)
+      }
+
+      function drawAtmosphere(audio) {
+        const cx = width * 0.5
+        const cy = height * 0.48
+        const sphere = Math.min(width, height) * 0.34
+        const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, sphere * 0.9)
+        glow.addColorStop(0, `rgba(255, 236, 166, ${0.04 + audio.bass * 0.08})`)
+        glow.addColorStop(0.22, `rgba(78, 230, 219, ${0.03 + audio.melody * 0.05})`)
+        glow.addColorStop(0.7, 'rgba(8, 14, 20, 0.02)')
+        glow.addColorStop(1, 'rgba(0,0,0,0)')
+        ctx.fillStyle = glow
+        ctx.beginPath()
+        ctx.arc(cx, cy, sphere, 0, TAU)
+        ctx.fill()
+
+        ctx.save()
+        ctx.translate(cx, cy)
+        ctx.rotate(rotation * 0.42)
+        ctx.strokeStyle = `rgba(78, 230, 219, ${0.045 + audio.melody * 0.045})`
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.ellipse(0, 0, sphere * 1.18, sphere * 0.84, -0.28, 0, TAU)
+        ctx.stroke()
+        ctx.strokeStyle = `rgba(255, 224, 109, ${0.035 + audio.bass * 0.04})`
+        ctx.beginPath()
+        ctx.ellipse(0, 0, sphere * 1.05, sphere * 0.72, 0.54, 0, TAU)
+        ctx.stroke()
+        ctx.restore()
+      }
+
+      function drawParticles(audio) {
+        const cx = width * 0.5
+        const cy = height * 0.48
+        const sphere = Math.min(width, height) * 0.31
+        const sorted = particles
+          .map((particle) => projectParticle(particle, sphere))
+          .sort((a, b) => a.depth - b.depth)
+
+        ctx.save()
+        ctx.globalCompositeOperation = 'lighter'
+        for (const item of sorted) {
+          const p = item.particle
+          const light = particleLight(p, item, audio)
+          if (light.alpha < 0.028) continue
+
+          const x = cx + item.x
+          const y = cy + item.y
+          if (light.bloom > 0.08) {
+            ctx.fillStyle = light.color
+            ctx.globalAlpha = light.bloom
+            ctx.beginPath()
+            ctx.arc(x, y, light.size * 3.8, 0, TAU)
+            ctx.fill()
+          }
+          ctx.fillStyle = light.color
+          ctx.globalAlpha = light.alpha
+          ctx.beginPath()
+          ctx.arc(x, y, light.size, 0, TAU)
+          ctx.fill()
+        }
+        ctx.restore()
+      }
+
+      function projectParticle(particle, sphere) {
+        const yTilt = Math.sin(rotation * 0.31) * 0.1
+        const cos = Math.cos(rotation + particle.radius * 0.18)
+        const sin = Math.sin(rotation + particle.radius * 0.18)
+        const x1 = particle.x * cos - particle.z * sin
+        const z1 = particle.x * sin + particle.z * cos
+        const y1 = particle.y * Math.cos(yTilt) - z1 * Math.sin(yTilt)
+        const z2 = particle.y * Math.sin(yTilt) + z1 * Math.cos(yTilt)
+        const perspective = 1.18 / (1.52 - z2 * 0.34)
+        return {
+          particle,
+          x: x1 * particle.radius * sphere * perspective,
+          y: y1 * particle.radius * sphere * perspective,
+          z: z2,
+          depth: z2,
+          perspective
+        }
+      }
+
+      function particleLight(p, projected, audio) {
+        const flowAngle = time * (0.38 + audio.melody * 0.48)
+        const direction = Math.cos(flowAngle) * p.x + Math.sin(flowAngle) * p.z + p.y * 0.22
+        const melodyRibbon = smoothstep(0.42, 0.94, Math.sin(direction * 5.2 + time * 1.7 + p.phase) * 0.5 + 0.5)
+        const shellSpark = p.layer === 'shell' && p.seed > 0.88
+          ? audio.treble * Math.pow(Math.sin(time * 15 + p.phase) * 0.5 + 0.5, 8)
+          : 0
+
+        let pulseLight = 0
+        for (const pulse of pulses) {
+          const decay = Math.exp(-pulse.age * (pulse.type === 'downbeat' ? 2.1 : 3.1))
+          const wave = Math.exp(-Math.pow(p.radius - (0.22 + pulse.age * 0.72), 2) / 0.035)
+          const groupHit = p.group === pulse.group || p.group === (pulse.group + 1) % 16 ? 1 : 0.18
+          const angularHit = Math.max(0, Math.cos(Math.atan2(p.z, p.x) - pulse.angle))
+          const layerWeight = p.layer === 'core' ? 1.08 : p.layer === 'cloud' ? 0.66 : 0.2
+          pulseLight += decay * wave * groupHit * Math.pow(angularHit, 2.2) * layerWeight * pulse.strength
+        }
+
+        const coreGlow = p.layer === 'core' ? audio.bass * (0.2 + pulseLight * 1.3) : 0
+        const cloudGlow = p.layer === 'cloud' ? audio.melody * melodyRibbon * 0.62 : 0
+        const shellGlow = shellSpark * 0.86
+        const base = p.layer === 'core' ? 0.34 : p.layer === 'cloud' ? 0.25 : 0.17
+        const intensity = clamp(base + coreGlow + cloudGlow + shellGlow + pulseLight * 0.82, 0, 1.7)
+        const warmMix = clamp(audio.warmth * 0.56 + pulseLight * 0.34 + p.warmth * 0.1)
+        const tealMix = clamp((1 - audio.warmth) * 0.34 + audio.melody * 0.24)
+        const alpha = clamp(0.16 + intensity * 0.86 + projected.z * 0.05, 0.04, 0.96)
+        const size = (p.layer === 'shell' ? 1.18 : p.layer === 'cloud' ? 1.42 : 1.82) *
+          projected.perspective *
+          (1 + intensity * 0.6)
+
+        const color = mixColor(warmMix, tealMix, intensity)
+        const bloom = clamp((pulseLight * 0.32 + shellGlow * 0.22 + coreGlow * 0.1) * projected.perspective, 0, 0.2)
+        return { alpha, bloom, color, size }
+      }
+
+      function mixColor(warm, teal, intensity) {
+        const milk = [255, 247, 223]
+        const gold = [255, 224, 109]
+        const aqua = [78, 230, 219]
+        const rose = [243, 166, 188]
+        const r = milk[0] * 0.42 + gold[0] * warm * 0.34 + aqua[0] * teal * 0.24 + rose[0] * (1 - warm) * 0.08
+        const g = milk[1] * 0.42 + gold[1] * warm * 0.34 + aqua[1] * teal * 0.24 + rose[1] * (1 - warm) * 0.08
+        const b = milk[2] * 0.42 + gold[2] * warm * 0.34 + aqua[2] * teal * 0.24 + rose[2] * (1 - warm) * 0.08
+        const boost = 0.95 + intensity * 0.62
+        return `rgb(${Math.round(r * boost)}, ${Math.round(g * boost)}, ${Math.round(b * boost)})`
+      }
+
+      function updateMeters(audio) {
+        beatBar.style.transform = `scaleX(${clamp(audio.beat)})`
+        melodyBar.style.transform = `scaleX(${clamp(audio.melody)})`
+        sparkBar.style.transform = `scaleX(${clamp(audio.treble)})`
+      }
+
+      modeButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          modeButtons.forEach((item) => item.classList.toggle('active', item === button))
+          modeName = button.dataset.mode
+          lastBeatStep = -1
+          beatCursor = 0
+          pulses.length = 0
+        })
+      })
+
+      window.addEventListener('resize', resize)
+      resize()
+      seedParticles()
+      requestAnimationFrame(draw)
+    </script>
+  </body>
+</html>

@@ -1,0 +1,65 @@
+{
+  "scope": "isolated real service; not installed UI or microphone acceptance",
+  "observations": [
+    {
+      "phase": "edit",
+      "status": "passed",
+      "reply": "改好了。“合成购物验收”这条待办的正文已经更新为“买茶和燕麦奶”，标题保持不变。",
+      "calls": [
+        "load_skill",
+        "notes_list",
+        "notes_update"
+      ],
+      "itemId": "f0934be0-0093-483e-8c9a-77f447218839",
+      "version": 2,
+      "completed": false,
+      "dedicatedReminder": "scheduled",
+      "independentReminder": "scheduled",
+      "elapsedMs": 10638,
+      "assetReleaseId": "seamo-ai-r1-agent-assets-3.4.1",
+      "database": "isolated-in-memory",
+      "profileBusinessWrites": false,
+      "audioPlayed": false
+    },
+    {
+      "phase": "complete",
+      "status": "passed",
+      "reply": "已把\"合成购物验收（买茶和燕麦奶）\"标记为完成，关联的待办提醒也一并取消了。",
+      "calls": [
+        "load_skill",
+        "notes_list",
+        "notes_complete"
+      ],
+      "itemId": "f0934be0-0093-483e-8c9a-77f447218839",
+      "version": 3,
+      "completed": true,
+      "dedicatedReminder": "cancelled",
+      "independentReminder": "scheduled",
+      "elapsedMs": 8276,
+      "assetReleaseId": "seamo-ai-r1-agent-assets-3.4.1",
+      "database": "isolated-in-memory",
+      "profileBusinessWrites": false,
+      "audioPlayed": false
+    },
+    {
+      "phase": "undo",
+      "status": "passed",
+      "reply": "已经撤销好了，\"合成购物验收\"（买茶和燕麦奶）现在恢复为未完成状态，关联的提醒也一并恢复了。",
+      "calls": [
+        "load_skill",
+        "notes_list",
+        "notes_complete"
+      ],
+      "itemId": "f0934be0-0093-483e-8c9a-77f447218839",
+      "version": 4,
+      "completed": false,
+      "dedicatedReminder": "scheduled",
+      "independentReminder": "scheduled",
+      "elapsedMs": 9177,
+      "assetReleaseId": "seamo-ai-r1-agent-assets-3.4.1",
+      "database": "isolated-in-memory",
+      "profileBusinessWrites": false,
+      "audioPlayed": false
+    }
+  ]
+}

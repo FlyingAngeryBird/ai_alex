@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="UTF-8" /><link rel="icon" href="data:," /><title>R1 Composer isolated interaction check</title></head>
+<body style="margin:0"><div id="app"></div>
+<script type="module">
+import { createApp, h, ref } from 'vue'
+import R1Composer from '../../src/components/R1Composer.vue'
+import '../../src/r1-shell.css'
+createApp({
+  setup() {
+    const listening = ref(false)
+    const events = ref({ start: 0, end: 0, cancel: 0, send: 0 })
+    const start = () => { events.value.start += 1; listening.value = true }
+    const end = () => { events.value.end += 1; listening.value = false }
+    const cancel = () => { events.value.cancel += 1; listening.value = false }
+    const send = (_text, complete) => { events.value.send += 1; complete(true) }
+    return () => h('div', { class: 'r1-shell' }, [
+      h('p', { style: 'padding:30px;font-size:14px' }, '独立交互检查：不调用麦克风，不写入用户数据。'),
+      h('output', { 'aria-label': '交互计数', style: 'display:block;padding:30px' }, JSON.stringify(events.value)),
+      h(R1Composer, { assistantName: '测试助手', autoListenState: 'off', busy: false,
+        isListening: listening.value, temporaryMode: false, serviceLabel: '仅测试组件事件', musicActive: false,
+        onVoicePressStart: start, onVoicePressEnd: end, onVoicePressCancel: cancel, onSend: send })
+    ])
+  }
+}).mount('#app')
+</script></body></html>

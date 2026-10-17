@@ -1,0 +1,50 @@
+{
+  "scope": "actual_Doubao_Custom_search_then_real_M01_selected_candidate_save_and_associated_reminder_in_isolated_SQLite",
+  "selection": "programmatically_selected_actual_official_search_candidate_not_UI_comparison_acceptance",
+  "audioPlayed": false,
+  "profileBusinessWrites": false,
+  "phases": [
+    {
+      "phase": "save_and_remind",
+      "status": "passed",
+      "reply": "都办好了：\n\n- **便签**：RFC 9110《HTTP Semantics》官方信息已按候选原样保存，包含 RFC Editor 页面的状态、废止关系、作者和摘要。\n- **提醒**：明天（10月18日）上午 9:00 提醒你阅读该便签，两者已关联，到点点开就能直接看。",
+      "calls": [
+        "load_skill",
+        "load_skill",
+        "notes_create",
+        "reminders_create"
+      ],
+      "itemId": "534b0d04-9e14-4fe6-b7ca-29e46f18e6d4",
+      "reminderId": "9c79ebae-f945-4b51-8c93-fef95cef11b1",
+      "candidateId": "web:c7584c08199ff5aa2f99",
+      "sourceUrls": [
+        "https://www.rfc-editor.org/info/rfc9110"
+      ],
+      "elapsedMs": 32791,
+      "assetReleaseId": "seamo-ai-r1-agent-assets-3.3.0",
+      "database": "isolated-in-memory",
+      "profileBusinessWrites": false,
+      "audioPlayed": false
+    },
+    {
+      "phase": "repeat_save",
+      "status": "passed",
+      "reply": "已记下了——当前这条 RFC 9110 官方标准信息已原样存进便签，若之前保存过会自动沿用同一条，没有新建重复副本。按你的要求，没有再建提醒。",
+      "calls": [
+        "load_skill",
+        "notes_create"
+      ],
+      "itemId": "534b0d04-9e14-4fe6-b7ca-29e46f18e6d4",
+      "reminderId": "9c79ebae-f945-4b51-8c93-fef95cef11b1",
+      "candidateId": "web:c7584c08199ff5aa2f99",
+      "sourceUrls": [
+        "https://www.rfc-editor.org/info/rfc9110"
+      ],
+      "elapsedMs": 24550,
+      "assetReleaseId": "seamo-ai-r1-agent-assets-3.3.0",
+      "database": "isolated-in-memory",
+      "profileBusinessWrites": false,
+      "audioPlayed": false
+    }
+  ]
+}
