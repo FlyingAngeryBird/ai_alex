@@ -20,7 +20,11 @@ export function createNativeAudioUplink(options: {
     if (wait > 0) { timer = setTimeout(() => { timer = null; pump() }, wait); return }
     const frame = queue.shift()!; queuedBytes -= frame.pcm.byteLength
     if (now() - frame.at > (options.maxBufferedMs ?? 500)) { fail(); return }
-    pending = true; nextAt = now() + frame.pcm.byteLength / 32
+    const duration = frame.pcm.byteLength / 32, sentAt = now()
+    // Keep the sample clock across small timer delays; resetting it to now on
+    // every packet accumulates timer rounding until a healthy stream overflows.
+    nextAt = sentAt - nextAt >= duration ? sentAt + duration : nextAt + duration
+    pending = true
     timeout = setTimeout(fail, options.sendTimeoutMs ?? 1000)
     Promise.resolve().then(() => { if (!closed) return options.send(frame.pcm) }).then(() => {
       if (!closed) options.onSent?.()

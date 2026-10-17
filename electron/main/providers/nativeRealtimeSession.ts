@@ -16,6 +16,8 @@ export class NativeRealtimeSession {
   private answeredCalls = new Set<string>()
   private cancelledResponses = new Set<string>()
   private activeResponse: string | null = null
+  private questionResponses = new Map<string, string>()
+  private transcriptions = new Map<string, string>()
   private finishOpening: ((error?: string) => void) | null = null
   private timeout: ReturnType<typeof setTimeout> | null = null
   constructor(private readonly input: {
@@ -127,6 +129,34 @@ export class NativeRealtimeSession {
       this.input.onEvent(event); return
     }
     if (this.state !== 'ready') throw new Error('session not ready')
+    // Some live service events omit response_id or the final transcript. Bind
+    // only through explicit question/item IDs, never whichever reply was latest.
+    if (event.type.startsWith('response.output_') && typeof event.question_id === 'string' && event.question_id) {
+      const question = event.question_id
+      const explicit = typeof event.response_id === 'string' && event.response_id ? event.response_id : null
+      let id = this.questionResponses.get(question)
+      if (!id) {
+        id = explicit ?? `question:${question}`
+        if (this.questionResponses.size >= 256) throw new Error('response limit')
+        this.questionResponses.set(question, id)
+      } else if (explicit && !id.startsWith('question:')) {
+        id = explicit; this.questionResponses.set(question, id)
+      }
+      event = { ...event, response_id: id }
+    }
+    if (typeof event.item_id === 'string' && event.item_id) {
+      const id = event.item_id
+      if (event.type === 'conversation.item.input_audio_transcription.delta' && typeof event.delta === 'string') {
+        const text = (this.transcriptions.get(id) ?? '') + event.delta
+        if (text.length > 16000 || this.transcriptions.size >= 256 && !this.transcriptions.has(id)) throw new Error('transcription limit')
+        this.transcriptions.set(id, text)
+      }
+      if (event.type === 'conversation.item.input_audio_transcription.completed') {
+        if (typeof event.transcript !== 'string') event = { ...event, transcript: this.transcriptions.get(id) ?? '' }
+        this.transcriptions.delete(id)
+      }
+      if (event.type === 'conversation.item.input_audio_transcription.failed') this.transcriptions.delete(id)
+    }
     if (event.type === 'conversation.item.input_audio_transcription.started' && this.activeResponse) {
       this.cancelledResponses.add(this.activeResponse)
       this.activeResponse = null
@@ -162,6 +192,7 @@ export class NativeRealtimeSession {
     this.state = 'closed'
     this.finishOpening?.(code)
     this.pendingCalls.clear(); this.answeredCalls.clear(); this.cancelledResponses.clear(); this.activeResponse = null
+    this.questionResponses.clear(); this.transcriptions.clear()
     // Keep error listener installed: terminating an unfinished upgrade can emit error.
     this.socket?.terminate(); this.socket = null
     this.input.onClosed(code)

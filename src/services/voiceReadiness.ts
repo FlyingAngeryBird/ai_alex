@@ -15,7 +15,7 @@ export function voiceConfigurationMessage(code: string): string | null {
   return ({ REALTIME_NOT_CONFIGURED: '请在设置中保存原生实时对话 3.0 API Key，再开启自动会话。',
     REALTIME_VOICE_REQUIRED: '请在设置中保存实时对话默认音色，或保存你的声音 ID，再开启自动会话。',
     REALTIME_CONFIG_INVALID: '实时对话配置格式不正确，请在设置中重新保存。',
-    REALTIME_ASR_NOT_CONFIGURED: '请在设置中保存流式 ASR API Key，或语音识别 App ID 和 Access Token，再按住说话。',
+    REALTIME_ASR_NOT_CONFIGURED: '按住说话需要单独配置语音识别（ASR）。若已配置原生实时对话，请点击下方「开启自动会话」；按住说话的配置可在设置中填写。',
     VOICE_CONFIGURATION_UNAVAILABLE: '暂时无法读取语音配置，尚未开启麦克风。请重试或在设置中检查。' } as Record<string, string>)[code] ?? null
 }
 

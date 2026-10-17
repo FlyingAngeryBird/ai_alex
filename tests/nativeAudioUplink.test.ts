@@ -49,3 +49,16 @@ it('rejects excessive buffering and invalid PCM without forwarding it', async ()
   await Promise.resolve()
   expect(onError).toHaveBeenCalledOnce(); expect(send).not.toHaveBeenCalled()
 })
+
+it('does not accumulate one millisecond of timer rounding per frame in a healthy continuous stream', async () => {
+  vi.useFakeTimers(); vi.setSystemTime(0)
+  const send = vi.fn(async () => undefined), onError = vi.fn()
+  const uplink = createNativeAudioUplink({ now: () => Date.now(), send, onError })
+  // Deliver each scheduled timer 1ms late, as happens with real timer granularity.
+  const realTimeout = globalThis.setTimeout
+  vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, delay: number) => realTimeout(fn, delay + 1)) as typeof setTimeout)
+  for (let i = 0; i < 1000; i++) { uplink.enqueue(frame()); await vi.advanceTimersByTimeAsync(20) }
+  expect(onError).not.toHaveBeenCalled()
+  expect(send.mock.calls.length).toBeGreaterThanOrEqual(999)
+  uplink.stop(); vi.restoreAllMocks()
+})
