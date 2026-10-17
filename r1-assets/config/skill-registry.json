@@ -1,5 +1,5 @@
 {
-  "releaseId": "seamo-ai-r1-agent-assets-3.3.0",
+  "releaseId": "seamo-ai-r1-agent-assets-3.4.2",
   "entries": [
     {
       "skillId": "SK01",
@@ -40,7 +40,7 @@
       "skillId": "SK03",
       "name": "capture-item",
       "legacyKey": "capture_item",
-      "version": "1.0.1",
+      "version": "1.1.0",
       "description": "按明确委托保存原话或整理内容，拆分待办，维护对象并导出TXT/MD。适用于记下来、列待办、修改保存内容；不自动创建提醒。",
       "path": "skills/capture-item/SKILL.md",
       "resourcePaths": [

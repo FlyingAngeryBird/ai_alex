@@ -9,6 +9,7 @@ import { musicAliases, type R1Music } from '../r1/music.js'
 import type { R1TopicSummaries } from '../r1/topicSummaries.js'
 import type { R1AutomaticMemory } from '../r1/automaticMemory.js'
 import { selectedConversationEntity, currentCandidateContext } from '../r1/sessionMode.js'
+import { itemMutationAliases } from '../r1/itemTools.js'
 import { ipcMain, type WebContents } from 'electron'
 import { NativePlaybackLedger } from '../r1/nativePlayback.js'
 import { randomUUID } from 'node:crypto'
@@ -43,7 +44,7 @@ export function registerNativeVoiceHandlers(deps: {
   searchHint?: ReturnType<typeof createNativeSearchHintCache>;
 }): { close(code?: string): void } {
   const sessions = new Map<number, { id: string; session: NativeRealtimeSession; silenceSearch(): void; playback(input: Record<string, unknown>): void }>()
-  const aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', ...memoryToolAliases, 'notes_create', ...reminderToolAliases, ...(deps.focusServices ? focusToolAliases : []), ...(deps.music ? musicAliases : []), ...(deps.search && deps.pages ? ['web_search', 'web_read_page'] : [])]
+  const aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', ...memoryToolAliases, 'notes_create', ...itemMutationAliases, ...reminderToolAliases, ...(deps.focusServices ? focusToolAliases : []), ...(deps.music ? musicAliases : []), ...(deps.search && deps.pages ? ['web_search', 'web_read_page'] : [])]
   const taskAliases = deps.implementedTaskAliases.filter(alias => !['web_search', 'web_read_page'].includes(alias))
   const fail = (code: string) => ({ ok: false, error: { code, message: code } })
   const emit = (owner: WebContents, id: string, event: NativeRealtimeEvent) => {

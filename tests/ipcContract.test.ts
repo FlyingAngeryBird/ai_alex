@@ -30,6 +30,7 @@ describe('IPC contract', () => {
       'music.search',
       'music.toggleFavorite',
       'r1.items.list',
+      'r1.items.export',
       'r1.persona.get',
       'r1.persona.update',
       'r1.topics.list',

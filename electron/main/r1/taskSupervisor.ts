@@ -332,6 +332,10 @@ ${source.snippet}
   beginDecision(lease: TaskLease): R1TaskInput {
     this.assertLease(lease)
     const record = this.checked(lease.taskId)
+    const evidence = this.webResult(record)
+    record.checkpoint.progressBrief = evidence.candidates.length
+      ? `已取得 ${evidence.candidates.length} 个候选，正在核对并整理结果。`
+      : record.checkpoint.receiptActionIds.length ? '已取得任务资料，正在处理。' : '正在理解你的委托。'
     if (record.budget.decisionsRemaining < 1) throw new Error('TASK_BUDGET_EXHAUSTED')
     const input: R1TaskInput = { ...lease, status: 'running', goal: record.goal, constraints: [...record.constraints],
       ...(record.checkpoint.artifactEdit ? { currentArtifact: structuredClone(record.checkpoint.artifactEdit) } : {}),
@@ -339,7 +343,7 @@ ${source.snippet}
       temporary: record.temporary, budget: structuredClone(record.budget), validReceiptActionIds: [...record.checkpoint.receiptActionIds],
       observations: structuredClone(record.checkpoint.observations), loadedSkillIds: [...record.checkpoint.loadedSkillIds] }
     this.assets.validateStructured('task-input', input)
-    record.budget.decisionsRemaining--; this.persist(record)
+    record.budget.decisionsRemaining--; this.persist(record); this.emit(record, 'updated')
     return input
   }
   consumeTool(lease: TaskLease, alias: string, identity?: { callId: string; fingerprint: string }): string {
@@ -510,6 +514,8 @@ ${source.snippet}
     let receipt: TaskToolReceipt
     try {
       if (record.budget[budgetKey] < 1) throw new Error(alias === 'web_search' ? 'TASK_SEARCH_BUDGET_EXHAUSTED' : 'TASK_PAGE_BUDGET_EXHAUSTED')
+      record.checkpoint.progressBrief = alias === 'web_search' ? '正在检索信息。' : '正在读取已找到的公开页面。'
+      this.emit(record, 'updated')
       record.budget[budgetKey]--; this.persist(record)
       const data = await run()
       receipt = { kind: 'receipt', actionId, tool: this.assets.toolDefinition(alias).name,

@@ -27,6 +27,7 @@ export const exposedChannels = [
   'music.search',
   'music.toggleFavorite',
   'r1.items.list',
+  'r1.items.export',
   'r1.persona.get',
   'r1.persona.update',
   'r1.topics.list',
@@ -292,6 +293,7 @@ function exposeLingliApi(
       }
     },
     items: {
+      export: input => invokeR1('r1.items.export', input),
       list: () => invokeR1('r1.items.list'),
       create: (input) => invokeR1('r1.items.create', input),
       update: (input) => invokeR1('r1.items.update', input),

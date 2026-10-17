@@ -8,18 +8,30 @@ import type { R1TaskSupervisor, TaskLease, TaskToolReceipt } from './taskSupervi
 import type { R1Items } from './items.js'
 import { musicAliases, type R1Music } from './music.js'
 import { R1MusicTools } from './musicTools.js'
+import { R1ItemTools, itemMutationAliases } from './itemTools.js'
 type PlanInput = Parameters<R1TaskSupervisor['updatePlan']>[1]
 
 /** Registered synchronous local tools; no host filesystem, shell or model-controlled authorization. */
 export class R1TaskToolExecutor {
   private readonly focusTools = new Map<string, R1FocusTools>()
   private readonly reminders = new Map<string, R1ReminderTools>()
+  private readonly itemTools = new Map<string, R1ItemTools>()
   private readonly musicTools = new Map<string, R1MusicTools>()
   readonly implementedAliases: readonly string[]
   constructor(private readonly tasks: R1TaskSupervisor, private readonly assets: R1PromptAssets,
     private readonly items?: R1Items, private readonly search?: SearchProvider, private readonly pages?: ReturnType<typeof createPageReader>, private readonly services?: FocusToolServices,
     private readonly music?: R1Music) {
-    this.implementedAliases = Object.freeze(['read_file', 'write_todos', ...(items ? ['notes_create', ...reminderToolAliases] : []), ...(search ? ['web_search'] : []), ...(pages ? ['web_read_page'] : []), ...(services ? focusToolAliases : []), ...(music ? musicAliases : [])])
+    this.implementedAliases = Object.freeze(['read_file', 'write_todos', ...(items ? ['notes_create', ...itemMutationAliases, ...reminderToolAliases] : []), ...(search ? ['web_search'] : []), ...(pages ? ['web_read_page'] : []), ...(services ? focusToolAliases : []), ...(music ? musicAliases : [])])
+  }
+  private itemSession(lease: TaskLease): R1ItemTools {
+    let tools = this.itemTools.get(lease.runId)
+    if (!tools) {
+      this.itemTools.clear()
+      tools = new R1ItemTools(this.items!, { assertCurrent: () => this.tasks.assertLease(lease),
+        requirePersistence: () => this.tasks.assertPersistenceAllowed(lease) })
+      this.itemTools.set(lease.runId, tools)
+    }
+    return tools
   }
   private musicSession(lease: TaskLease): R1MusicTools {
     let tools = this.musicTools.get(lease.runId)
@@ -125,6 +137,9 @@ export class R1TaskToolExecutor {
           if (result.loadedSkillId) this.tasks.loadSkill(lease, result.loadedSkillId)
         }
       } else if (alias === 'write_todos') data = this.tasks.updatePlan(lease, (input as { steps: PlanInput }).steps)
+      else if ((itemMutationAliases as readonly string[]).includes(alias)) {
+        return this.itemSession(lease).execute(alias, input as Record<string, unknown>, actionId)
+      }
       else {
         const args = input as { type: 'note' | 'todo'; title: string; content: string; mode: 'original' | 'organized'; sourceRefs: string[]; candidateTarget?: unknown }
         if (args.candidateTarget != null) throw new Error('CANDIDATE_SAVE_REQUIRES_CONVERSATION_SELECTION')
@@ -136,6 +151,13 @@ export class R1TaskToolExecutor {
       return { data }
     }, callId)
     if (this.items) this.reminderTools(lease).observe(receipt)
+    if (this.items) {
+      this.itemSession(lease).observe(receipt)
+      if (alias === 'read_file' && receipt.status === 'succeeded' && !receipt.data.hasMore &&
+        String(receipt.data.path).startsWith(`/task/${lease.taskId}/receipts/`)) {
+        try { this.itemSession(lease).observe(JSON.parse(String(receipt.data.content))) } catch { /* Only actual scoped receipts can establish an Item. */ }
+      }
+    }
     if (this.music && alias === 'read_file' && receipt.status === 'succeeded') {
       try {
         const replay = JSON.parse(String(receipt.data.content)) as { tool?: string; status?: string; data?: Record<string, unknown> }

@@ -16,6 +16,8 @@ description: "按明确委托保存原话或整理内容，拆分待办，维护
 - 删除Item后，已经单独创建的Reminder仍存在；返回关联提醒供用户决定，不能自动取消。
 - 导出调用notes.export，由UI打开保存选择。awaiting_user表示尚未导出；只有文件写入succeeded才说已导出，用户关闭选择则cancelled。
 - 当前搜索候选的原样保存使用 notes_create.candidateTarget，四个身份/版本取 currentCandidate，type=note、mode=original；程序保存真实来源内容并与页面按钮复用同一Item，不采用模型content替换候选事实。普通原话/整理内容省略该字段；Task不使用会话选中对象字段。保存成功后以返回itemId关联提醒，提醒失败不得重建便签。
+- 一步修改、完成、撤销走即时notes_update/notes_complete；先notes_list读到唯一对象及当前version。只改用户明确字段，保留未指定标题/正文。notes_complete仅用于todo；completed=false是撤销完成，不是删除。
+- 完成待办只取消未投递的todo_due专用提醒；普通独立提醒保留。撤销时只按实际reminderReceipts说明恢复结果，已过期需人工核对，不能笼统声称所有提醒恢复。
 ## 完成与失败
 以数据库或文件回执为准。正文与标题遵守L01/L02，超限保留原内容并要求分段，不能静默截断。相同动作重试沿用程序的幂等标识。
 ## 组合

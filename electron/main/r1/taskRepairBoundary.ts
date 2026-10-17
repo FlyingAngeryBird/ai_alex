@@ -10,12 +10,13 @@ export class R1TaskRepairBoundary implements ArkModelBoundary {
   readonly diagnostic: { assetReleaseId: string; promptHash: string; promptIds: string[] }
   constructor(private readonly assets: R1PromptAssets, invalidOutput: string, errors: string[],
     snapshot: R1TaskInput, private readonly check: () => void,
-    receiptProofs: Array<Pick<TaskToolReceipt, 'actionId' | 'tool' | 'status' | 'entityId' | 'entityVersion'>> = []) {
+    receiptProofs: Array<Pick<TaskToolReceipt, 'actionId' | 'tool' | 'status' | 'entityId' | 'entityVersion'> & {
+      webEvidence?: Record<string, unknown> }> = [], requiredWebTools: string[] = []) {
     const compiled = assets.compile('repair', { repair_json: { schemaId: 'task-draft',
       targetSchema: assets.structuredSchema('task-draft'), invalidOutput,
       validationErrors: errors.slice(0, 50), validReferenceIds: [...new Set([...snapshot.sourceRefs,
         ...snapshot.validReceiptActionIds, ...snapshot.observations.map(value => value.refId)])].slice(0, 50),
-      sourceSnapshot: { ...structuredClone(snapshot), receiptProofs: structuredClone(receiptProofs),
+      sourceSnapshot: { ...structuredClone(snapshot), receiptProofs: structuredClone(receiptProofs), requiredWebTools,
         artifactBases: snapshot.observations.filter(observation => observation.kind === 'artifact')
           .map(observation => ({ artifactId: observation.refId, version: observation.version })) } } })
     this.systemText = compiled.text

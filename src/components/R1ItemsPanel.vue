@@ -102,6 +102,22 @@ async function toggle(item: Item): Promise<void> {
   } catch (error) { message.value = errorMessage(error, '更新失败，请刷新后重试。') }
   finally { busy.value = false }
 }
+async function exportItem(format: 'txt' | 'md'): Promise<void> {
+  const draft = editor.value, item = draft?.item
+  if (!draft || !item || busy.value) return
+  if (draft.title !== item.title || draft.body !== item.body || draft.kind !== item.kind) {
+    message.value = '请先保存修改，再导出这个版本。'; return
+  }
+  busy.value = true; message.value = ''
+  try {
+    const result = await window.seamoR1.items.export({ items: [{ itemId: item.itemId, expectedVersion: item.version }], format })
+    if (!result.ok) throw new Error(result.error.code)
+    message.value = result.data.cancelled ? '已取消导出，事项保留。' : `已导出事项版本 ${item.version}。`
+  } catch (error) { message.value = error instanceof Error && error.message === 'EXPORT_FILE_WRITTEN_RECEIPT_FAILED'
+    ? '文件已写出，但导出回执未能保存。请检查所选位置，不要重复导出。'
+    : errorMessage(error, '导出未完成，请检查当前版本和保存位置后重试。') }
+  finally { busy.value = false }
+}
 function openReminder(item: Item | null = null): void {
   const reminder = item ? firstReminder(item) ?? null : null
   message.value = ''
@@ -227,6 +243,8 @@ onUnmounted(() => stopEvents?.())
       <label>类型<select v-model="editor.kind"><option value="todo">待办</option><option value="note">记录</option></select></label>
       <p v-if="temporaryMode">保存后会独立留在设备上；请先在事项侧栏确认保存范围。</p>
       <div class="r1-memory-dialog-actions"><button type="button" @click="editor = null">取消</button>
+        <button v-if="editor.item" type="button" :disabled="busy" @click="exportItem('txt')">导出 TXT</button>
+        <button v-if="editor.item" type="button" :disabled="busy" @click="exportItem('md')">导出 Markdown</button>
         <button v-if="editor.item?.kind === 'todo'" type="button" @click="editor = null; emit('startFocus')">开始专注</button>
         <button type="submit" :disabled="busy || !editor.title.trim()">保存</button></div>
       <p v-if="message" role="status">{{ message }}</p>

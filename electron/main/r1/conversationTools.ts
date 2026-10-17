@@ -15,6 +15,7 @@ import { bindArtifactEdit, type ArtifactEditingContext, type ArtifactEditProposa
 import { currentCandidateContext, type CandidateContext } from './sessionMode.js'
 import { candidateSaveActionId } from './taskSupervisor.js'
 import { isDeepStrictEqual } from 'node:util'
+import { R1ItemTools, itemMutationAliases } from './itemTools.js'
 import { musicAliases, type R1Music } from './music.js'
 import { R1MusicTools } from './musicTools.js'
 import { afterTransactionCommit, inTransaction, type R1Database } from './database.js'
@@ -36,7 +37,7 @@ function taskView(task: R1Task) {
 
 /** Tools operate on the actual user turn. The model cannot supply source bodies, mode or confirmation. */
 export class R1ConversationTools {
-  readonly aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', ...memoryToolAliases, 'notes_create', ...reminderToolAliases]
+  readonly aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', ...memoryToolAliases, 'notes_create', ...itemMutationAliases, ...reminderToolAliases]
   memoryMutationReceipt: Record<string, unknown> | null = null
   memoryConfirmation: MemoryConfirmation | null = null
   private readonly memories: R1MemoryTools
@@ -45,12 +46,16 @@ export class R1ConversationTools {
   private readonly musicService?: R1Music
   private readonly pendingCalls = new Map<string, { fingerprint: string; promise: Promise<Record<string, unknown>> }>()
   private readonly reminders: R1ReminderTools
+  private readonly itemTools: R1ItemTools
   private readonly calls = new Map<string, { fingerprint: string; output: Record<string, unknown> }>()
   readonly loadedSkillIds = new Set<string>(['SK01'])
   constructor(private readonly db: R1Database, private readonly assets: R1PromptAssets,
     private readonly tasks: R1TaskSupervisor, private readonly scope: ConversationToolScope,
     private readonly implementedTaskAliases: readonly string[], services?: FocusToolServices, private readonly artifacts: R1Artifacts = new R1Artifacts(db), music?: R1Music) {
     scope.assertCurrent()
+    this.itemTools = new R1ItemTools(new R1Items(db), { assertCurrent: scope.assertCurrent, requirePersistence() {
+      if (scope.temporary && !scope.persistenceConfirmed) throw new Error('TEMPORARY_SAVE_CONFIRMATION_REQUIRED')
+    } })
     const recallProperties = assets.toolDefinition('memory_recall').output_data_schema.properties as Record<string, unknown> | undefined
     this.memories = new R1MemoryTools(new R1MemoryStore(db, assets.memoryRecallPolicy()), scope.source, recallProperties && Object.hasOwn(recallProperties, 'topics') ? new R1Topics(db) : undefined)
     if (services) { this.aliases.push(...focusToolAliases); this.focus = new R1FocusTools(services, scope.source, scope.assertCurrent) }
@@ -223,6 +228,15 @@ export class R1ConversationTools {
           this.assets.validateToolOutput(alias, receipt); this.scope.assertCurrent()
           return receipt
         })
+      } else if ((itemMutationAliases as readonly string[]).includes(alias)) {
+        output = inTransaction(this.db, () => {
+          const actionId = randomUUID(), result = this.itemTools.execute(alias, args, actionId)
+          const receipt = { kind: 'receipt', actionId, tool: this.assets.toolDefinition(alias).name, status: 'succeeded',
+            entityId: result.entityId, entityVersion: result.entityVersion, data: result.data,
+            errorCode: null, retryable: false, runId: null }
+          this.assets.validateToolOutput(alias, receipt); this.scope.assertCurrent()
+          return receipt
+        })
       } else if (alias === 'notes_create') {
         if (this.scope.temporary && !this.scope.persistenceConfirmed) throw new Error('TEMPORARY_SAVE_CONFIRMATION_REQUIRED')
         const target = args.candidateTarget as { taskId: string; goalVersion: number; candidateId: string; candidateVersion: number } | null | undefined
@@ -324,6 +338,7 @@ export class R1ConversationTools {
     }
     this.assets.validateToolOutput(alias, output)
     this.reminders.observe(output)
+    this.itemTools.observe(output)
     this.calls.set(callId, { fingerprint, output: structuredClone(output) })
     return structuredClone(output)
   }

@@ -125,6 +125,7 @@ export type R1Api = {
     onChanged(handler: (event: FocusEvent) => void): () => void
   }
   items: {
+    export(input: import('../main/r1/itemExport.js').ItemExportInput): Promise<R1Result<Awaited<ReturnType<typeof import('../main/r1/itemExport.js').exportItems>>>>
     list(): Promise<R1Result<Item[]>>
     create(input: MethodInput<'create'>): Promise<R1Result<MethodOutput<'create'>>>
     update(input: MethodInput<'update'>): Promise<R1Result<MethodOutput<'update'>>>

@@ -27,6 +27,14 @@ export class R1TaskRunner {
       error.message === 'PROMPT_ASSET_VARIABLE_INVALID:task-draft' ? 'TASK_DRAFT_SCHEMA_INVALID' : stableCode(error)
     try { this.options.onDiagnostic?.({ taskId: lease.taskId, runId: lease.runId, kind, code }) } catch { /* diagnostic only */ }
   }
+  private async requestWithinBudget(input: Parameters<ReturnType<typeof createArkResponsesProvider>['request']>[0], remainingMs: number) {
+    const deadline = AbortSignal.timeout(Math.max(1, Math.floor(remainingMs)))
+    try { return await this.provider.request({ ...input, signal: input.signal ? AbortSignal.any([input.signal, deadline]) : deadline }) }
+    catch (error) {
+      if (deadline.aborted && !input.signal?.aborted) throw new Error('TASK_BUDGET_EXHAUSTED')
+      throw error
+    }
+  }
   start(): void {
     if (this.unsubscribe || this.closed) return
     this.unsubscribe = this.tasks.onChanged(event => {
@@ -65,7 +73,7 @@ export class R1TaskRunner {
       const aliases = this.tasks.authorizedAliases(lease).filter(alias => this.executor.implementedAliases.includes(alias))
       const boundary = new R1TaskRequestBoundary(this.assets, this.persona(), input, aliases,
         () => this.tasks.authority(lease.taskId), this.tasks.steeringEvent(lease))
-      const response = await this.provider.request({ boundary, messages, rounds, signal, maxOutputTokens: 8192 })
+      const response = await this.requestWithinBudget({ boundary, messages, rounds, signal, maxOutputTokens: 8192 }, input.budget.activeMsRemaining)
       this.tasks.assertLease(lease)
       if (response.calls.length) {
         // Validate against the original round's Skill exposure before executing any same-batch call.
@@ -89,13 +97,18 @@ export class R1TaskRunner {
         const proofs = repairInput.validReceiptActionIds.map(actionId => {
           const receipt = this.tasks.readReceipt(lease, actionId)
           return { actionId: receipt.actionId, tool: receipt.tool, status: receipt.status,
-            entityId: receipt.entityId, entityVersion: receipt.entityVersion }
+            entityId: receipt.entityId, entityVersion: receipt.entityVersion,
+            ...(receipt.status === 'succeeded' && receipt.tool === 'web.search' ? {
+              webEvidence: { query: receipt.data.query, queriedAt: receipt.data.queriedAt,
+                sources: receipt.data.sources, candidates: receipt.data.candidates } } :
+              receipt.status === 'succeeded' && receipt.tool === 'web.readPage' ? {
+                webEvidence: { source: receipt.data.source } } : {}) }
         })
         const repair = new R1TaskRepairBoundary(this.assets, response.text,
           [error instanceof SyntaxError ? 'TASK_DRAFT_JSON_INVALID' : error instanceof Error ? error.message : 'TASK_DRAFT_INVALID'],
-          repairInput, () => this.tasks.assertLease(lease), proofs)
-        const repairedResponse = await this.provider.request({ boundary: repair,
-          messages: [{ role: 'user', content: JSON.stringify({ schemaId: 'task-draft', taskId: lease.taskId, goalVersion: lease.goalVersion }) }], signal, maxOutputTokens: 8192 })
+          repairInput, () => this.tasks.assertLease(lease), proofs, aliases.filter(alias => ['web_search', 'web_read_page'].includes(alias)))
+        const repairedResponse = await this.requestWithinBudget({ boundary: repair,
+          messages: [{ role: 'user', content: JSON.stringify({ schemaId: 'task-draft', taskId: lease.taskId, goalVersion: lease.goalVersion }) }], signal, maxOutputTokens: 8192 }, repairInput.budget.activeMsRemaining)
         if (repairedResponse.calls.length) throw new Error('STRUCTURED_OUTPUT_INVALID')
         try { this.tasks.publish(lease, JSON.parse(repairedResponse.text), this.artifacts) }
         catch (error) { this.diagnostic(lease, 'repair_rejected', error); throw new Error('STRUCTURED_OUTPUT_INVALID') }

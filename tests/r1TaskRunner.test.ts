@@ -235,3 +235,52 @@ describe('bounded R1 background task runner', () => {
     } finally { await s.close() }
   })
 })
+
+it('passes actual search/page evidence into the single tools-free publication repair without rerunning actions', async () => {
+ const { createBraveSearchProvider } = await import('../electron/main/providers/braveSearchProvider')
+ const { createPageReader } = await import('../electron/main/providers/pageReader')
+ const db = openR1Database(':memory:'), conversations = new R1Conversations(db), tasks = new R1TaskSupervisor(db, assets, () => 0)
+ const source = conversations.append({ sessionId: conversations.start(), turnId: 'research', role: 'user', body: '查找并读取官方标准页', status: 'final' })
+ const search = createBraveSearchProvider({ key: () => 'test', fetcher: (async () => new Response(JSON.stringify({ web: { results: [{ title: '标准页', url: 'https://example.org/standard', description: '标准摘要' }] } }))) as typeof fetch })
+ const pages = createPageReader({ read: async url => ({ url: url.href, bytes: Buffer.from('<title>标准页</title><main>真实标准正文</main>'), contentType: 'text/html', truncated: false }) })
+ const executor = new R1TaskToolExecutor(tasks, assets, undefined, search, pages)
+ let count = 0, taskId = ''
+ const provider = { request: vi.fn(async (input: Request) => {
+  count++
+  if (count === 1) return response('', [call('load', 'read_file', { file_path: '/skills/web-qa/SKILL.md' })])
+  if (count === 2) return response('', [call('search', 'web_search', { query: '标准页' })])
+  const web = tasks.get(taskId).webResult!
+  if (count === 3) return response('', [call('read', 'web_read_page', { sourceRef: web.sources[0].sourceRef, url: web.sources[0].url, fields: [] })])
+  if (count === 4) return response('模型返回了未结构化的查询摘要')
+  expect(input.boundary.finalize(input.messages).tools).toEqual([])
+  expect(input.boundary.systemText).toContain('"requiredWebTools":["web_search","web_read_page"]')
+  expect(input.boundary.systemText).toContain('https://example.org/standard')
+  expect(input.boundary.systemText).toContain('真实标准正文')
+  expect(input.boundary.systemText).toContain('"readStatus":"read"')
+  const receipts = db.prepare("SELECT action_id FROM receipts WHERE status='succeeded'").all() as { action_id: string }[]
+  return response(JSON.stringify({ ...draft(), artifacts: [], sourceRefs: web.sources.map(row => row.sourceRef),
+   receiptActionIds: receipts.map(row => row.action_id), candidates: web.candidates.map(row => ({ candidateId: row.candidateId, label: row.label, summary: '实际来源', sourceRefs: row.sourceRefs })) }))
+ }) }
+ const runner = new R1TaskRunner(tasks, assets, executor, new R1Artifacts(db), provider, () => new R1PersonaStore(db).get())
+ try {
+  taskId = tasks.accept({ requestKey: 'research', sourceMessageId: source.messageId, timezone: 'Asia/Shanghai', goal: source.body, constraints: [], authorizedAliases: ['read_file', 'web_search', 'web_read_page'], complexity: 'complex' }).taskId
+  runner.start(); await runner.idle()
+  expect(tasks.get(taskId).status).toBe('succeeded')
+  expect(count).toBe(5)
+  expect(db.prepare('SELECT COUNT(*) AS n FROM receipts').get()).toMatchObject({ n: 3 })
+ } finally { tasks.close(); await runner.close(); db.close() }
+})
+it('aborts an outstanding model request at the remaining Task deadline without allowing a late result', async () => {
+ const budget = assets.taskBudget('light'), spy = vi.spyOn(assets, 'taskBudget').mockReturnValue({ ...budget, activeMsRemaining: 500 })
+ const request = vi.fn(async (input: Request): Promise<ArkResponse> => new Promise((_resolve, reject) => {
+  input.signal!.addEventListener('abort', () => reject(new Error('ARK_REQUEST_CANCELLED')), { once: true })
+ }))
+ const s = setup(request)
+ try {
+  const task = s.accept(); spy.mockRestore()
+  s.runner.start(); await s.runner.idle()
+  expect(request).toHaveBeenCalledTimes(1)
+  expect(s.tasks.get(task.taskId)).toMatchObject({ status: 'partially_succeeded', result: { unresolved: ['TASK_BUDGET_EXHAUSTED'] } })
+  expect(s.db.prepare('SELECT COUNT(*) AS n FROM artifacts').get()).toMatchObject({ n: 0 })
+ } finally { spy.mockRestore(); await s.close() }
+})

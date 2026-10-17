@@ -1,4 +1,5 @@
-import { ipcMain } from 'electron'
+import { ipcMain, dialog } from 'electron'
+import { exportItems, type ItemExportInput } from '../r1/itemExport.js'
 import { R1Items } from '../r1/items.js'
 import { R1PersonaStore } from '../r1/persona.js'
 import { R1MemoryStore } from '../r1/memory.js'
@@ -67,6 +68,17 @@ export function registerR1Handlers(db: R1Database, ipc: IpcMainLike = ipcMain,
     { if (sessionMode.temporary) throw new Error('HISTORY_UNAVAILABLE_IN_TEMPORARY_SESSION')
       return history.messages(payload.sessionId) }))
   ipc.handle('r1.items.list', () => ({ ok: true, data: items.list() }))
+  ipc.handle('r1.items.export', async (_event, payload) => {
+    try {
+      const data = await exportItems(db, payload as ItemExportInput,
+        () => JSON.stringify([sessionMode.temporary, sessionMode.sessionId]), async (name, extension) => {
+          const selected = await dialog.showSaveDialog({ defaultPath: name,
+            filters: [{ name: extension === 'md' ? 'Markdown' : '纯文本', extensions: [extension] }] })
+          return selected.canceled ? null : selected.filePath ?? null
+        })
+      return { ok: true, data }
+    } catch (error) { return failure(error) }
+  })
   ipc.handle('r1.items.create', action<Parameters<R1Items['create']>[0]>((payload) => items.create(payload)))
   ipc.handle('r1.items.update', action<Parameters<R1Items['update']>[0]>((payload) => items.update(payload)))
   ipc.handle('r1.items.complete', action<Parameters<R1Items['complete']>[0]>((payload) => items.complete(payload)))
