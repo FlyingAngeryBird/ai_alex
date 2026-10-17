@@ -87,6 +87,7 @@ let itemActions: R1ItemActions | null = null
 let topicSummaries: R1TopicSummaries | null = null
 let automaticMemory: R1AutomaticMemory | null = null
 let dataManagement: R1DataManagement | null = null
+let credentialVault: CredentialVault | null = null
 const r1SessionMode: R1SessionMode = { temporary: false }
 function invalidateMemoryContexts(deletionEpoch: number): void {
   reminderDelivery?.invalidate()
@@ -205,10 +206,12 @@ void app.whenReady().then(async () => {
       if (event.reason === 'completed') for (const artifact of event.task.result?.artifacts ?? []) artifactChanged(artifact)
     })
     const vault = new CredentialVault(join(app.getPath('userData'), 'credentials.bin'))
-    try { vault.load() } catch {
-      // Keep local pages usable. The vault retains its failure state, blocks saves
-      // that could overwrite unreadable secrets, and can retry through settings.
-    }
+    credentialVault = vault
+    // Create the window before a possible macOS keychain prompt can block the main
+    // process. Until the deferred read finishes, status reports CREDENTIAL_LOAD_PENDING
+    // instead of an empty vault; failures keep the encrypted file intact and the
+    // settings page offers a safe re-read.
+    vault.beginLoad()
     const deliveryAudit = new R1DeliveryAudit(r1Database)
     taskDelivery = new R1TaskDelivery({ audit: deliveryAudit, assets: r1PromptAssets, tasks: r1Tasks, conversations: r1Conversations,
       provider: createArkResponsesProvider({ timeoutMs: 12000, thinking: 'disabled' }), persona: () => new R1PersonaStore(r1Database!).get(),
@@ -341,6 +344,9 @@ void app.whenReady().then(async () => {
     }
   }
   createMainWindow()
+  setTimeout(() => {
+    try { credentialVault?.load() } catch { /* failure state kept; settings offers a safe re-read */ }
+  }, 0)
   r1Focus?.startScheduler()
   if (r1Database) {
     reminderScheduler = createElectronReminderScheduler(r1Database, event => reminderDelivery?.observeReminder(event) ?? null)

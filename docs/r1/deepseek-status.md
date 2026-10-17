@@ -43,7 +43,7 @@
 - 导出回执身份：`exportItems`/`exportArtifact` 接受 actionId/task/run，回执 JSON 的 actionId/runId 与 ticket、原 task/run 一致；删除回执用显式 SELECT＋UPDATE 关联，不再用 catch 任意数据库失败当重复吞掉。
 - 验证：`r1ItemActions` 16 项（新增并发、对话框撤销/会话变化/Task 变化、keep/cancel 提醒 ID、Artifact 回执身份、Runner 立即等待）；关联 49 项、typecheck 与生产构建通过。按审查要求未重复全量 653 项。
 
-## E1 真实应用核心流程（进行中；自然问法根因已修复，待 alpha.13 授权复测）
+## E1 真实应用核心流程（真实窗口执行结果；自然查询已受理，保存/工作稿链部分完成）
 
 - 已操作真实 alpha.11 窗口：Finder/Terminal 启动、截图可用；AppleScript 辅助访问被拒后改用 Electron 本地调试端口（未安装新工具）驱动真实 renderer。
 - 已证：真实开场白；自然查询两次 `ARK_TOOL_SCOPE_OR_SCHEMA_INVALID`；显式“发起后台任务”后 start_task→真实搜索/读页→completed（10 候选/来源）；任务面板并排比较（2 列）、选中第 2 候选；自然追问后真实保存便签「RFC 9110 官方标准」（source_ref 与选中候选一致，正文含真实 URL 与“仅搜索摘要”），并创建关联提醒（1 小时后，scheduled）。
@@ -53,7 +53,11 @@
 - 根因：start_task/steer_task 的 delegation 强制要求 toolAliases/requiredActions，与 PR03“必要副作用可空”语义冲突；requiredActions 枚举缺 `web_read_page`，与 DEC-054“明确读原文时声明”冲突。模型按提示构造即被 Schema 拒绝。
 - 修复 **alpha.13**（`c3d5f9b`，资产 3.5.4、schema 3.2.1，DEC-057）：delegation 字段改为可选；requiredActions 枚举补 web_read_page；PR03 说明只读查询可省略/空数组；工具输入拒绝时记录失败 schema 路径/关键字（不含参数值）。
 - 边界验证（`84b1ae9`）：delegation 省略 toolAliases/requiredActions 时程序仍只授权 `read_file`+`write_todos`，不默认域写入；requiredActions 未在授权工具范围内时返回 `TASK_REQUIREMENTS_INVALID`，不静默扩大权限；已加测试锁定。
-- alpha.13 包：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha13-e1/`，ZIP 148,345,052 字节，SHA256 `2e91478ad9e973ab39eba93958e92259e296e81b25c22c1421e3f5c6310d83ad`；启动需再次钥匙串授权（新二进制签名），弹窗已在屏幕。
+- alpha.13 授权后复测：原自然问法 **已受理**（不再 scope/schema 错误），任务 `e7903e89-1ebc-4663-8025-056fb0b60df9` 真实执行；约 35s 受理、36s 可见回复、39/45/53s 三次进展（“已取得 10 个候选”→读取页面），154s 以 `partially_succeeded` 结束（unresolved `ARK_REQUEST_TIMEOUT`），10 候选/11 来源仍可查看与选择。
+- 任务面板并排比较（2 列）正常；选中第 2 候选。自然追问“保存+1小时后提醒”连续 3 次返回 `ARK_RESPONSE_NOT_COMPLETED`（M01 供应商响应未完成），未创建事项/提醒；改用可信 UI 保存同一候选：事项 `86937919-5233-4974-bf89-11965b72ce44`，再次点击“已记下”不新增事项；面板“加个提醒”创建关联提醒 `92698e49-ea87-4461-a573-ecf2f85ad19c`（01:56 scheduled）。
+- 工作稿：复用测试工作稿「出门前检查清单」，只改第二段（手机行）→“保留修改”发布 v3；撤销→v4 恢复原第二段；首/三段保持不变；保存为便签 `0f7695a4-a705-49ac-972c-6206a5598a1a`。TXT 导出打开原生保存框（默认 `出门前检查清单.txt`、位置“文稿”），需人工点“保存/取消”；MD 同理，未以写文件冒充。
+- alpha.14 修复（待授权复测）：DEC-058 凭据读取可恢复（窗口先创建、`CREDENTIAL_LOAD_PENDING`、有界重试，设置页已有安全重读入口）；DEC-057 可选 delegation 字段不扩权（`84b1ae9`）；Ark 未完成响应记录状态/原因码（不含正文），用于定位本次 `ARK_RESPONSE_NOT_COMPLETED`。
+- alpha.13 包保留：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha13-e1/`（ZIP 148,345,052 字节，SHA256 `2e91478a…`）。
 - alpha.12 启动时出现 macOS 钥匙串授权对话框（“Seamo AI R1 Safe Storage”），需用户输入登录钥匙串密码；当前无 GUI 自动化权限（AppleScript 辅助访问被拒），无法代替用户授权。授权后继续 E1 的重复保存与工作稿流程；TXT/MD 原生保存框同样需要可用的 GUI 输入权限。
 - alpha.12 包：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha12-e1/`，ZIP 148,343,367 字节，SHA256 `7c59d8c082476083eb286b8b2e112fc4b5c4bef920d091ce1e04c7ca7156d821`。
 - 同步：`9dc75d3..84b1ae9` 已推送成功（远端=本地 `84b1ae9`）；PR #1 文案为 alpha.13。

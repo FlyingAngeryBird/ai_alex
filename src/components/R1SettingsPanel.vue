@@ -27,7 +27,7 @@ watch(() => props.showServiceConfiguration, revealServiceConfiguration)
 const preferences = useAppPreferences()
 const permissionBusy = ref(false)
 let permissionAbort: AbortController | null = null
-onBeforeUnmount(() => permissionAbort?.abort())
+onBeforeUnmount(() => { permissionAbort?.abort(); if (credentialRetryTimer !== null) { window.clearTimeout(credentialRetryTimer); credentialRetryTimer = null } })
 const outputSelectionSupported = typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype &&
   typeof AudioContext !== 'undefined' && 'setSinkId' in AudioContext.prototype
 onMounted(() => { void preferences.load() })
@@ -114,6 +114,8 @@ const credentialFields: { key: CredentialField; label: string; secret: boolean }
 const credentialInputs = reactive<Partial<Record<CredentialField, string>>>({})
 const credentialStatus = ref<CredentialStatus | null>(null)
 const credentialLoading = ref(false)
+let credentialRetryTimer: number | null = null
+let credentialRetryCount = 0
 const checks = reactive<Partial<Record<ServiceCheckTarget, ServiceCheckReport>>>({})
 const checking = ref<ServiceCheckTarget | null>(null)
 let checkRequestId: string | null = null
@@ -173,7 +175,14 @@ async function refreshCredentials(): Promise<void> {
     const result = await window.seamoR1.credentials.status()
     if (disposed) return
     if (result.ok) { credentialStatus.value = result.data; emit('credentialsChanged', result.data); message.value = ''; invalidateChecks() }
-    else { credentialStatus.value = null; message.value = result.error.code === 'SYSTEM_SECRET_STORAGE_UNAVAILABLE'
+    else if (result.error.code === 'CREDENTIAL_LOAD_PENDING') {
+      credentialStatus.value = null
+      message.value = '正在读取服务配置；如出现系统钥匙串授权弹窗，请先完成授权，之后会自动重试。'
+      credentialRetryCount++
+      if (credentialRetryCount <= 3) {
+        credentialRetryTimer = window.setTimeout(() => { credentialRetryTimer = null; if (!disposed) void refreshCredentials() }, 1000)
+      }
+    } else { credentialStatus.value = null; message.value = result.error.code === 'SYSTEM_SECRET_STORAGE_UNAVAILABLE'
       ? '系统钥匙串暂时不可用。请手动解锁 login 钥匙串后重试；已保存的加密配置保留。'
       : '服务配置暂时无法解密。加密文件保留，未覆盖；请检查系统安全存储后重试。' }
   } catch {

@@ -46,6 +46,26 @@ describe('R1 encrypted credential vault', () => {
     expect(process.env.VOLCENGINE_ARK_API_KEY).toBeUndefined()
   })
 
+  it('reports a pending startup read instead of unconfigured and recovers after unlock', () => {
+    const path = makePath(), vault = new CredentialVault(path, storage)
+    vault.save({ VOLCENGINE_ARK_API_KEY: 'saved-key' })
+    delete process.env.VOLCENGINE_ARK_API_KEY
+    const reopened = new CredentialVault(path, storage)
+    reopened.beginLoad()
+    expect(reopened.isLoading).toBe(true)
+    expect(() => reopened.status()).toThrow('CREDENTIAL_LOAD_PENDING')
+    expect(reopened.load().VOLCENGINE_ARK_API_KEY).toBe(true)
+    expect(reopened.isLoading).toBe(false)
+    expect(reopened.status().VOLCENGINE_ARK_API_KEY).toBe(true)
+    // The status IPC must surface the pending code, not a misleading default or a save error.
+    const handlers = new Map<string, (event: unknown, payload?: unknown) => unknown>()
+    const pending = new CredentialVault(path, storage)
+    pending.beginLoad()
+    registerCredentialHandlers(pending, { handle: (name, handler) => { handlers.set(name, handler) } })
+    expect(handlers.get('r1.credentials.status')!({})).toMatchObject({ ok: false, error: { code: 'CREDENTIAL_LOAD_PENDING' } })
+    pending.load()
+    expect(handlers.get('r1.credentials.status')!({})).toMatchObject({ ok: true })
+  })
   it('rejects unexpected fields and unavailable encryption without writing a file', () => {
     const path = makePath()
     const vault = new CredentialVault(path, { ...storage, isEncryptionAvailable: () => false })

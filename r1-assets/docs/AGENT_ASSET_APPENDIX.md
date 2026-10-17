@@ -1542,12 +1542,19 @@ DEC-R1-MUSIC-023 补充：沿用原型已有“退出播放”按钮，类型化
 - 验证：合同/资产校验；alpha.13 真实窗口用原失败自然问法复测（受理→检索进展→来源），再补重复保存与工作稿链。
 - 回退：代码与资产整体退至 9dc75d3；不覆盖用户数据。
 
+#### DEC-R1-CREDENTIAL-RECOVERY-058：钥匙串读取失败后的可恢复性
+- 现象：alpha.13 启动时在 `vault.load()` 处等待钥匙串授权，窗口后创建；一次性授权完成后启动期读取已失败，界面显示“服务状态读取失败”，需重启或进设置重试。
+- 实测：设置页已有“重新读取服务配置”入口，`r1.credentials.status` 在 `needsReload` 时安全重读且不覆盖加密文件；失败未被标成“未配置”，App 显示“服务状态读取失败 · 前往设置”，设置页显示“暂时不可读；已保存文件保留”。
+- 修复：主窗口先创建，随后延迟读取 vault；读取期间返回 `CREDENTIAL_LOAD_PENDING`（不再把空内存态当未配置）；App 自动有界重试并在设置页重试，无需用户重填已保存 Key；失败状态仍保留，加密文件不删除不覆盖。
+- 版本：代码修复，无 Prompt/Schema 变更；资产 3.5.5（仅记录本决策）、工具 schema 3.2.1、SQLite12。
+- 验证：隔离 vault 测试覆盖 pending→成功/失败→重试；真实窗口在授权后显示“已配置”。系统密码仍由用户处理。
+
 
 ### 25.3 完整默认配置
 
 ```json
 {
-  "releaseId": "seamo-ai-r1-agent-assets-3.5.4",
+  "releaseId": "seamo-ai-r1-agent-assets-3.5.5",
   "schemaVersion": "3.2.1",
   "providerPolicy": {
     "primary": "volcengine",

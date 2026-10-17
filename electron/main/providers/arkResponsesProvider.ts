@@ -127,7 +127,15 @@ export function createArkResponsesProvider(options: { env?: Environment;
       input.boundary.assertCurrent?.()
       if (body?.status === 'incomplete' && body.incomplete_details?.reason === 'max_output_tokens') invalid('ARK_OUTPUT_BUDGET_EXHAUSTED')
       if (body?.status === 'incomplete' && body.incomplete_details?.reason === 'content_filter') invalid('ARK_RESPONSE_FILTERED')
-      if (!body || body.error || body.status !== 'completed' || typeof body.id !== 'string' || !body.id) invalid('ARK_RESPONSE_NOT_COMPLETED')
+      if (!body || body.error || body.status !== 'completed' || typeof body.id !== 'string' || !body.id) {
+        // Diagnostic only: provider status/reason/code, never prompt or reply text.
+        try {
+          const errorCode = body?.error && typeof body.error === 'object' && 'code' in body.error
+            ? String((body.error as { code?: unknown }).code) : undefined
+          console.error('[seamo-ark] response_not_completed', String(body?.status), String(body?.incomplete_details?.reason), errorCode)
+        } catch { /* diagnostics only */ }
+        invalid('ARK_RESPONSE_NOT_COMPLETED')
+      }
       const output = checkedOutput(body.output, input.boundary)
       const calls = output.filter((item): item is ArkFunctionCall => item.type === 'function_call')
       if (calls.some(call => allCallIds.has(call.call_id))) invalid('ARK_DUPLICATE_CALL_ID')

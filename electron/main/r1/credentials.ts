@@ -30,12 +30,17 @@ export class CredentialVault {
   private values: Partial<Record<CredentialField, string>> = {}
   private currentRevision = 0
   private loadFailure: string | null = null
+  private loading = false
   get revision(): number { return this.currentRevision }
   get needsReload(): boolean { return this.loadFailure !== null }
+  get isLoading(): boolean { return this.loading }
+  /** Mark the deferred startup read as in flight so status never reports an empty vault as unconfigured. */
+  beginLoad(): void { this.loading = true }
 
   constructor(private readonly path: string, private readonly storage: SecretStorage = safeStorage) {}
 
   load(): CredentialStatus {
+    this.loading = true
     try {
       const next: Partial<Record<CredentialField, string>> = {}
       if (existsSync(this.path)) {
@@ -51,6 +56,7 @@ export class CredentialVault {
       this.values = next; this.loadFailure = null
       this.applyToRuntime()
       this.currentRevision++
+      this.loading = false
       return this.status()
     } catch (error) {
       this.loadFailure = error instanceof Error && error.message === 'SYSTEM_SECRET_STORAGE_UNAVAILABLE'
@@ -59,10 +65,13 @@ export class CredentialVault {
       for (const field of CREDENTIAL_FIELDS) delete process.env[field]
       this.currentRevision++
       throw new Error(this.loadFailure)
+    } finally {
+      this.loading = false
     }
   }
 
   status(): CredentialStatus {
+    if (this.loading) throw new Error('CREDENTIAL_LOAD_PENDING')
     if (this.loadFailure) throw new Error(this.loadFailure)
     return Object.fromEntries(CREDENTIAL_FIELDS.map((field) => [field,
       Boolean(this.values[field]?.trim() || process.env[field]?.trim())])) as CredentialStatus

@@ -215,6 +215,8 @@ const textBusy = ref(false)
 const composer = ref<InstanceType<typeof R1Composer> | null>(null)
 const credentialStatus = ref<CredentialStatus | null>(null)
 const credentialReadFailed = ref(false)
+let credentialRetryTimer: number | null = null
+let credentialRetryCount = 0
 const persona = ref<R1Persona | null>(null)
 const welcomeOpen = ref(false), welcomeBusy = ref(false), welcomeError = ref('')
 async function finishWelcome(target: 'home' | 'settings' | 'services'): Promise<void> {
@@ -232,6 +234,22 @@ async function finishWelcome(target: 'home' | 'settings' | 'services'): Promise<
 const currentDate = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())
 const hasSidePanel = computed(() => settingsOpen.value || itemsOpen.value || memoryOpen.value || historyOpen.value)
 const microphoneCapturing = computed(() => nativeConversation.active.value || keyboardRecorder.isRecording.value || realtimeRecorder.isRecording.value)
+function applyCredentialStatus(credentials: Awaited<ReturnType<typeof window.seamoR1.credentials.status>>): boolean {
+  if (credentials.ok) { credentialStatus.value = credentials.data; credentialReadFailed.value = false; credentialRetryCount = 0; return true }
+  if (credentials.error.code === 'CREDENTIAL_LOAD_PENDING') { scheduleCredentialRetry(); return false }
+  credentialReadFailed.value = true
+  return false
+}
+function scheduleCredentialRetry(): void {
+  if (credentialRetryTimer !== null) return
+  if (credentialRetryCount >= 20) { credentialReadFailed.value = true; return }
+  credentialRetryCount++
+  credentialRetryTimer = window.setTimeout(async () => {
+    credentialRetryTimer = null
+    try { applyCredentialStatus(await window.seamoR1.credentials.status()) }
+    catch { credentialReadFailed.value = true }
+  }, 800)
+}
 const serviceLabel = computed(() => {
   if (voicePreparing.value) return '正在准备语音，松开可取消…'
   const status = credentialStatus.value
@@ -824,6 +842,7 @@ async function toggleAutoListen(): Promise<void> {
   autoListen.stop()
   clearAutoListenGraceTimer()
   clearAutoListenRecoveryTimer()
+  if (credentialRetryTimer !== null) { window.clearTimeout(credentialRetryTimer); credentialRetryTimer = null }
   releaseAssistantAudio()
   conversation.stopCurrentReply()
   await window.lingli.invoke('chat.stopResponse')
@@ -1123,12 +1142,11 @@ onMounted(() => {
   void Promise.all([window.seamoR1.credentials.status(), window.seamoR1.persona.get(), preferences.load(), window.seamoR1.onboarding.get()]).then(([credentials, currentPersona, preferencesReady, onboarding]) => {
     if (onboarding.ok) welcomeOpen.value = !onboarding.data.completed
     else conversation.addSystemMessage('首次引导状态暂时无法读取，可在设置中重新打开使用说明。')
-    if (credentials.ok) credentialStatus.value = credentials.data
-    else credentialReadFailed.value = true
+    const credentialsReady = applyCredentialStatus(credentials)
     if (currentPersona.ok) persona.value = currentPersona.data
     else conversation.addSystemMessage('人格设置暂时无法读取，请重新启动应用。')
-    if (welcomeOpen.value || !onboarding.ok || !preferencesReady || !credentials.ok || !currentPersona.ok ||
-      !credentials.data.VOLCENGINE_ARK_API_KEY || !credentials.data.VOLCENGINE_ARK_MODEL) return
+    if (welcomeOpen.value || !onboarding.ok || !preferencesReady || !credentialsReady || !currentPersona.ok ||
+      !credentialStatus.value?.VOLCENGINE_ARK_API_KEY || !credentialStatus.value?.VOLCENGINE_ARK_MODEL) return
     startupGreetingTimer = window.setTimeout(() => {
       if (conversation.messages.value.length || conversation.isListening.value || nativeConversation.active.value || nativeConversation.starting.value) return
       void conversation.generateOpeningGreeting().then(() => {

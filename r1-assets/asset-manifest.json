@@ -1,6 +1,6 @@
 {
-  "releaseId": "seamo-ai-r1-agent-assets-3.5.4",
-  "version": "3.5.4",
+  "releaseId": "seamo-ai-r1-agent-assets-3.5.5",
+  "version": "3.5.5",
   "files": [
     {
       "path": ".gitignore",
@@ -25,17 +25,17 @@
     {
       "path": "config/prompt-registry.json",
       "bytes": 4487,
-      "sha256": "9a0d6f05ddc1a5c233d3a73a3adb125544743d91be78ccbf9e94bf06b0edeb5e"
+      "sha256": "5f76ce930ad289822fab1bcc3decd627da78084115728a50d150b3c8e8869bef"
     },
     {
       "path": "config/runtime.defaults.json",
       "bytes": 5213,
-      "sha256": "ea7c9cc28ccb91c9b368f40416455c5cb1ac6956ceee5ad5adb3cc6700fb1b60"
+      "sha256": "f704ba89a61e2c29f5a62ee88a7e0e3971b06ba9fbaa660de923c0685fdf9148"
     },
     {
       "path": "config/skill-registry.json",
       "bytes": 4143,
-      "sha256": "4adf720efa85d13b9c80eae163aafc0f747d4094ba40bfa5d57d0dfc44b32d6f"
+      "sha256": "bf2b60a6f7ac5087b3ea3ddab0fefdc72023ab06171f73af37ba7aaa10ffbdc2"
     },
     {
       "path": "contracts/tool-catalog.json",
@@ -44,8 +44,8 @@
     },
     {
       "path": "docs/AGENT_ASSET_APPENDIX.md",
-      "bytes": 159044,
-      "sha256": "23b605c54a65a05205fc68b2ea115538d545119863d4aa80dfa007efcdc1963e"
+      "bytes": 160214,
+      "sha256": "6b104ad0bd42a03c8262448bc356a683937c68779f7c4cb0b25ed165e02ff0bf"
     },
     {
       "path": "docs/ARCHITECTURE_CONTRACT.md",
@@ -59,8 +59,8 @@
     },
     {
       "path": "docs/CHANGE_POLICY.md",
-      "bytes": 40421,
-      "sha256": "1d58cb61d884e7c662420e55181efe695cfe422a59515ec834fd31f6fb7dcd62"
+      "bytes": 41589,
+      "sha256": "f808763a542ae638c784404014425fef4dfe09235cda1681b485fb273a24c1cb"
     },
     {
       "path": "docs/DETAIL_SPEC.md",
@@ -74,8 +74,8 @@
     },
     {
       "path": "docs/Seamo_AI_R1_PRD_v0.5.1.md",
-      "bytes": 333297,
-      "sha256": "23213ffad71a8f1ce75815fec8493226a0b4bcc4895cceadbf02e65e857ef9d7"
+      "bytes": 334467,
+      "sha256": "cccab0c5952255e2b1097e3f0610580e5eab7a798a1ee2d6d006e78b093e57aa"
     },
     {
       "path": "evals/behavior-cases.jsonl",
