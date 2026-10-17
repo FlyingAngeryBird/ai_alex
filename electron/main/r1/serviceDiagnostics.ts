@@ -53,7 +53,7 @@ export class R1ServiceDiagnostics {
       const boundary = new R1ModelRequestBoundary(this.assets, persona, context, [],
         input.service === 'realtime' ? 'realtime' : 'textOnly')
       if (input.service === 'ark') {
-        await (this.deps.ark ?? createArkResponsesProvider()).request({ boundary,
+        await (this.deps.ark ?? createArkResponsesProvider({ timeoutMs: 30_000 })).request({ boundary,
           messages: [{ role: 'user', content: '连接测试，请简短回复。' }], signal: controller.signal, maxOutputTokens: 512 })
       } else {
         await (this.deps.realtime ?? checkNativeRealtimeSession)({ boundary,

@@ -135,7 +135,7 @@ function searchedAt(value: string): string {
       </header>
       <form class="search-form" @submit.prevent="search">
         <label for="web-query">查询内容</label>
-        <div><input id="web-query" v-model="query" maxlength="600" placeholder="例如：上海本周末展览" />
+        <div><input id="web-query" v-model="query" maxlength="100" placeholder="例如：上海本周末展览（最多100字）" />
           <button type="submit" :disabled="busy || !query.trim()">{{ busy ? '查询中…' : '查询' }}</button></div>
       </form>
       <p v-if="error" role="alert" class="search-error">{{ error }}</p>
@@ -147,7 +147,7 @@ function searchedAt(value: string): string {
             <h3>{{ candidate.title }}</h3>
             <small>{{ candidate.url }}</small>
             <p v-if="candidate.snippet">{{ candidate.snippet }}</p>
-            <div class="search-result-footer"><span>页面日期：未知 · 正文未读取</span>
+            <div class="search-result-footer"><span>页面日期：{{ candidate.pageDate ? searchedAt(candidate.pageDate) : '未知' }} · 正文未读取</span>
               <div><button type="button" @click="open(candidate.candidateId)">打开来源</button>
                 <button type="button" @click="select(candidate)">选中并记录</button></div></div>
           </li>

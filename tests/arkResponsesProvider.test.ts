@@ -69,4 +69,15 @@ describe('Ark Responses native tool protocol', () => {
       messages: [{ role: 'system', content: 'SDK system only' }] })).rejects.toMatchObject({ code: 'ARK_INPUT_REQUIRED' })
     expect(fetcher).not.toHaveBeenCalled()
   })
+  it('keeps a longer configured background deadline cancellable and rejects late responses', async () => {
+    const controller = new AbortController()
+    const adapter = createArkResponsesProvider({ env, timeoutMs: 60_000, fetch: async (_url, init) => {
+      expect(init?.signal?.aborted).toBe(false)
+      controller.abort()
+      expect(init?.signal?.aborted).toBe(true)
+      return response([call])
+    } })
+    await expect(adapter.request({ boundary: boundary(), messages, signal: controller.signal }))
+      .rejects.toMatchObject({ code: 'ARK_REQUEST_CANCELLED' })
+  })
 })
