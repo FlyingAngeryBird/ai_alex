@@ -26,3 +26,7 @@ notes_create新增可选candidateTarget，仅用于明确原样保存当前候�
 ## 仍需验收
 
 实际UI候选比较和选择后自然语音保存/提醒；中途目标切换及页面排序；实际到期声音/打断/勿扰/临时模式；完整V13与全部A/V、音乐资源、签名公证及安装回退。此前alpha.7用户允许钥匙串后服务读取仍失败，同包正常退出并重启后恢复配置；已用实际UI创建一分钟验收提醒，结果另记提醒报告。整个R1尚未完成。
+
+## 可追溯候选包
+
+源码 `fc162d159918aa72c23240b1b1ebbad943a656ca` 已与GitHub分支逐字节提交SHA核验同步，无改写历史。alpha.10包目录 `/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha10-candidate-continuation/`；ZIP `Seamo-AI-R1-1.0.0-alpha.10-mac-arm64.zip`，148656488字节，SHA256 `99a2e949e07e80e67f46ec06ccca057ffbee1cb33b553a42d893ba88c7e2f608`。包内build-info匹配源码/资产3.3.0，55个生产依赖，本机临时签名完整性通过；不是Developer ID签名/公证/正式Release。普通提醒6214ms、专注3409ms的真实播放证据来自同一alpha.7旧包，不冒充alpha.10新包验收。

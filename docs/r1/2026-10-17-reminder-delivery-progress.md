@@ -44,3 +44,9 @@
 实际PR09播报response `reminder-delivery:93016e68-d82e-46e6-b017-6a1ec109a7f8`，开始存储 `2026-10-17T12:30:12.315Z`，最终status=heard、played_until_ms=6214。用户确认“听到了，声音正常”。这是普通到期短播报实测通过，不能替代系统通知实际可见、所有专注/错过聚合/勿扰/临时/设备或完整V16验证。
 
 待补：合同announcedAt的持久化提醒与实际播报回执关联仍需审查；目前heard记录在实际Messages播放账本中，不能宣称已具备所有提醒播报审计字段。
+
+## alpha.7 实际一分钟专注结束（2026-10-17 20:32，上海时间）
+
+通过首页真实文字委托“开始一分钟专注，不要联动音乐”。界面显示倒计时；Focus `3ce60917-6d33-47f7-b273-dba91d2da1df` duration_sec=60，正常到期后remaining_sec=0、state=completed、version=2，完成时间 `2026-10-17T12:32:27.441Z`，首页显示完成提示。
+
+播报response `reminder-delivery:adf887a1-ce20-4861-a03e-22f30dc23ef8` 实际heard、played_until_ms=3409。用户确认“听到了，声音正常”。普通提醒和专注结束两个短播报场景通过；音乐联动、暂停/恢复/睡眠、插话/勿扰/临时和通知设备仍分别待验收。
