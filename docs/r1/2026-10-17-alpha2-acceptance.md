@@ -4,13 +4,19 @@
 
 ## 源码与开发包
 
-- 源码提交：`6dae5ac8036459a8322f68526afa73a593d00001`，已推送GitHub的`codex/seamo-r1`，草稿[PR #1](https://github.com/FlyingAngeryBird/ai_alex/pull/1)。
-- 开发预览标签：`r1-preview-1.0.0-alpha.2`；仅标识这一批源码，不代表G阶段通过。
-- 本地包目录：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha2-6dae5ac/`，其中`.app`和`Seamo-AI-R1-1.0.0-alpha.2-mac-arm64.zip`对应同一源码。
-- ZIP SHA256：`1aa4aa562faf59f28255f14153e5c307f899d3be2a927d831bd7df92a96907bb`。
+- 最终包源码提交：`9017bf8d3d3c1d35de6d930dfb6c2ef73fb8e461`，已同步GitHub的`codex/seamo-r1`，草稿[PR #1](https://github.com/FlyingAngeryBird/ai_alex/pull/1)。
+- 最终开发预览标签：`r1-preview-1.0.0-alpha.2-build2`；功能检查点标签`r1-preview-1.0.0-alpha.2`保留指向6dae5ac。两者均非G阶段通过标签。
+- 本地包目录：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha2-final/`，其中`.app`和`Seamo-AI-R1-1.0.0-alpha.2-mac-arm64.zip`对应同一源码。
+- ZIP SHA256：`6326ed3cb57fe28450097f3b5b32ba8a8fb8ca7bf4186f570148ad8161ef731c`。
 - Apple Silicon arm64；codesign完整性验证通过，但只是本机临时签名，未公证、未完成安装验收。包内build-info记录源提交和资产2.5.1；包内未发现`.env`文件。
-- 对准确提交重新完整回归89文件553项通过（11:12运行）。包目录的`evidence/`保存测试、构建、打包和本次音源检查日志；`acceptance-manifest.json`明确区分代码检查与完整产品验收。
-- 用户目前运行的稳定性包`f3eab20`未被覆盖；打开本批包前先退出正在运行的R1，避免两个版本共用数据。首次升级自动保存schema10副本，回退规则见文末。
+- 对最终9017bf8重新完整回归89文件553项通过（11:18运行）。包目录的`evidence/`保存测试、构建、打包和本次音源检查日志；`acceptance-manifest.json`明确区分代码检查与完整产品验收。
+- 旧稳定性包`f3eab20`未覆盖，旧进程已退出。最终包因Mac锁屏，真实启动/升级窗口检查仍待解锁。首次升级会自动保存schema10副本，回退规则见文末。
+
+## 打包补正 DEC-038
+
+原脚本复制Electron.app后仍保留其42.5.0版本号。现从package.json写入macOS版本1.0.0、构建1.0.0a2，完整1.0.0-alpha.2及源码提交写入build-info；实际读取最终plist和签名完整性验证均通过。产品交互与批准资产未改变。
+
+本次旧稳定包菜单退出后窗口关闭但进程仍驻留；检查SQLite文件句柄已关闭后终止该空闲进程。最终包正常退出行为仍需解锁后复核，未标安装/退出通过。
 
 ## 本批完成的实现
 
