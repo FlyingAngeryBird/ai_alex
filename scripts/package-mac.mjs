@@ -6,6 +6,11 @@ import { createRequire } from 'node:module'
 import { copyProductionDependencies, productionDependencyPaths } from './runtime-dependencies.mjs'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const appVersion = JSON.parse(readFileSync(join(projectRoot, 'package.json'), 'utf8')).version
+const versionMatch = /^(\d+\.\d+\.\d+)(?:-(alpha|beta|rc)\.([1-9]\d{0,2}))?$/.exec(appVersion)
+if (!versionMatch || Number(versionMatch[3] ?? 1) > 255) throw new Error('Unsupported macOS application version')
+const releaseVersion = versionMatch[1]
+const bundleVersion = releaseVersion + (versionMatch[2] ? `${({ alpha: 'a', beta: 'b', rc: 'fc' })[versionMatch[2]]}${versionMatch[3]}` : '')
 const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: projectRoot, encoding: 'utf8' }).trim()
 if (execFileSync('git', ['status', '--porcelain', '--untracked-files=normal'], { cwd: projectRoot, encoding: 'utf8' }).trim()) {
   throw new Error('Commit the reviewed source before packaging so the app has a recoverable source version.')
@@ -85,6 +90,10 @@ function patchInfoPlist() {
   }
 
   writeFileSync(plistPath, plist)
+  // Electron's copied bundle contains its runtime version. Finder/About must
+  // identify our product version; keep the complete semver in build-info too.
+  execFileSync('/usr/libexec/PlistBuddy', ['-c', `Set :CFBundleShortVersionString ${releaseVersion}`, plistPath])
+  execFileSync('/usr/libexec/PlistBuddy', ['-c', `Set :CFBundleVersion ${bundleVersion}`, plistPath])
 }
 
 function signForLocalDevelopment() {
@@ -127,7 +136,7 @@ cpSync(join(projectRoot, 'r1-assets'), join(appDir, 'r1-assets'), {
   recursive: true
 })
 copyProductionDependencies(appDir, productionDependencies)
-writeFileSync(join(appDir, 'build-info.json'), JSON.stringify({ sourceCommit, builtAt: new Date().toISOString(),
+writeFileSync(join(appDir, 'build-info.json'), JSON.stringify({ sourceCommit, appVersion, bundleVersion, builtAt: new Date().toISOString(),
   channel: 'development-preview', signing: 'local-ad-hoc', notarized: false,
   assetReleaseId: JSON.parse(readFileSync(join(projectRoot, 'r1-assets/asset-manifest.json'), 'utf8')).releaseId,
   productionPackages: productionDependencies.length }, null, 2))
