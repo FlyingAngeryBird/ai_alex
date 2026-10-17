@@ -14,7 +14,8 @@ describe('R1 released prompt assets', () => {
         userAddress: '海', style: '温和而简洁' })
       const assets = loadR1PromptAssets(resolve('r1-assets'))
       const text = assets.compose(saved, modelContext({ personaVersion: saved.version }))
-      expect(assets.releaseId).toBe('seamo-ai-r1-agent-assets-3.5.3')
+      expect(assets.releaseId).toBe('seamo-ai-r1-agent-assets-3.5.4')
+      expect(assets.schemaVersion).toBe('3.2.1')
       expect(assets.memoryRecallPolicy()).toEqual({ limit: 5, budgetMs: 200 })
       expect(text).toContain('你是Seamo AI应用中的个人语音助手')
       expect(text).toContain('按assistantName称呼自己')
@@ -75,5 +76,16 @@ describe('R1 released prompt assets', () => {
       action: 'export', data: {} })).toThrow('MODEL_TOOL_OUTPUT_OWNER_INVALID')
     expect(() => assets.validateToolOutput('notes_delete', { kind: 'ui_action', uiActionId: 'ui', status: 'awaiting_user',
       action: 'confirm_item_delete', data: {} })).not.toThrow()
+    // Delegation fields are optional for read-only follow-ups; an explicit page
+    // read is a valid required action (DEC-054/057).
+    expect(() => assets.validateToolInput('start_task', { goal: '查官方页面', constraints: [], sourceRefs: [],
+      delegation: { toolAliases: ['web_search', 'web_read_page'] } })).not.toThrow()
+    expect(() => assets.validateToolInput('start_task', { goal: '读原文核验', constraints: [], sourceRefs: [],
+      delegation: { toolAliases: ['web_search', 'web_read_page'],
+        requiredActions: [{ alias: 'web_read_page', minimumCount: 1 }] } })).not.toThrow()
+    expect(() => assets.validateToolInput('steer_task', { taskId: 't', expectedGoalVersion: 1,
+      patch: { goal: '只读 2022 年版本', addConstraints: [], removeConstraints: [] }, sourceRefs: [], delegation: { toolAliases: ['web_search'] } })).not.toThrow()
+    expect(() => assets.validateToolInput('start_task', { goal: 'x', constraints: [], sourceRefs: [],
+      delegation: { toolAliases: ['not_a_tool'] } })).toThrow('MODEL_TOOL_INPUT_INVALID')
   })
 })

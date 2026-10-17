@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "3.2.0",
+  "schemaVersion": "3.2.1",
   "businessTools": [
     {
       "name": "memory.recall",
@@ -5290,6 +5290,7 @@
                     "alias": {
                       "type": "string",
                       "enum": [
+                        "web_read_page",
                         "memory_remember",
                         "memory_update",
                         "memory_forget",
@@ -5331,10 +5332,7 @@
                 "maxItems": 20
               }
             },
-            "required": [
-              "toolAliases",
-              "requiredActions"
-            ],
+            "required": [],
             "additionalProperties": false
           },
           "artifactTarget": {
@@ -5769,6 +5767,7 @@
                     "alias": {
                       "type": "string",
                       "enum": [
+                        "web_read_page",
                         "memory_remember",
                         "memory_update",
                         "memory_forget",
@@ -5810,10 +5809,7 @@
                 "maxItems": 20
               }
             },
-            "required": [
-              "toolAliases",
-              "requiredActions"
-            ],
+            "required": [],
             "additionalProperties": false
           },
           "artifactTarget": {

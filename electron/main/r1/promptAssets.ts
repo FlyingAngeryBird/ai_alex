@@ -286,7 +286,16 @@ export function loadR1PromptAssets(root: string): R1PromptAssets {
     validateToolInput(alias, input) {
       const check = toolValidators.get(alias)
       if (!check) throw new Error('MODEL_TOOL_ALIAS_UNKNOWN')
-      if (!check(input)) throw new Error('MODEL_TOOL_INPUT_INVALID')
+      if (!check(input)) {
+        // Safe diagnostic: failing schema path/keyword only, never user values.
+        try {
+          const details = (check.errors ?? []).slice(0, 3).map(error => `${error.instancePath || '/'}:${error.keyword}` +
+            (error.params && typeof error.params === 'object' && 'additionalProperty' in error.params
+              ? `:${String((error.params as { additionalProperty?: unknown }).additionalProperty)}` : '')).join('|')
+          console.error('[seamo-tools] input_invalid', alias, details)
+        } catch { /* diagnostics only */ }
+        throw new Error('MODEL_TOOL_INPUT_INVALID')
+      }
     }
   }
 }

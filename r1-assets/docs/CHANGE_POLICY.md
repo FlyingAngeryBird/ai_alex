@@ -220,3 +220,12 @@ DEC-R1-MUSIC-023 补充：沿用原型已有“退出播放”按钮，类型化
 - 版本：资产 3.5.3、PR03 2.2.3；工具 schema 3.2.0、SQLite12 不变。
 - 验证：alpha.12 真实窗口复测自然查询→候选→选择→保存/提醒→重复保存，及工作稿续改/撤销/保存/导出；fixture/隔离测试不替代。
 - 回退：代码与资产整体退至 1df37c2；不覆盖用户数据。
+
+## DEC-R1-TASK-DELEGATION-057：委托字段可选与显式读页枚举
+- 现象：alpha.12 真实窗口自然查询仍返回 `ARK_TOOL_SCOPE_OR_SCHEMA_INVALID`；主进程诊断定位为 `start_task MODEL_TOOL_INPUT_INVALID`，不是超时或 web 工具直调。
+- 原因：start_task/steer_task 的 delegation 强制要求 toolAliases 与 requiredActions，而 PR03 语义是“必要副作用”可空；同时 requiredActions 枚举缺少 web_read_page，与 DEC-054 的“明确要求读原文时声明 web_read_page”冲突。模型按提示构造即被 Schema 拒绝。
+- 修复：delegation 内字段改为可选（程序已有默认处理）；requiredActions 枚举补 web_read_page；PR03 说明只读查询可省略/空数组，显式读原文才声明。工具合同 schema 3.2.1；其余工具、预算、权限不变。
+- 诊断：工具输入校验失败时仅在主进程 stderr 记录失败 schema 路径与关键字，不记录参数值或凭据。
+- 版本：资产 3.5.4、PR03 2.2.4、工具 schema 3.2.1；SQLite12 不变。
+- 验证：合同/资产校验；alpha.13 真实窗口用原失败自然问法复测（受理→检索进展→来源），再补重复保存与工作稿链。
+- 回退：代码与资产整体退至 9dc75d3；不覆盖用户数据。
