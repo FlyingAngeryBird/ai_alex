@@ -11,12 +11,19 @@ function recoveryFixture(options: Pick<Parameters<typeof useNativeConversation>[
   }
   const worklets: Worklet[] = []
   class Worklet {
+    onprocessorerror: (() => void) | null = null
+    holdClears = false
+    pendingClears: unknown[] = []
+    acknowledgeClear() { this.port.onmessage?.({ data: { type: 'cleared', requestId: this.pendingClears.shift() } }) }
     connect() {} disconnect() {}
     constructor() { worklets.push(this) }
     port = { close() {}, onmessage: null as null | ((event: { data: Record<string, unknown> }) => void),
       postMessage: (data: Record<string, unknown>) => {
         order.push(String(data.type) + (data.enabled === undefined ? '' : `:${data.enabled}`))
-        if (data.type === 'clear') this.port.onmessage?.({ data: { type: 'cleared', requestId: data.requestId } })
+        if (data.type === 'clear') {
+          if (this.holdClears) this.pendingClears.push(data.requestId)
+          else this.port.onmessage?.({ data: { type: 'cleared', requestId: data.requestId } })
+        }
       } }
   }
   const startReplies: Array<{ ok: false; error: { code: string } }> = []
@@ -203,4 +210,50 @@ it('opens the microphone only for the active connection and clears queued audio 
   await voice.stop()
   expect(trackStop).toHaveBeenCalledOnce(); expect(closed).toHaveBeenCalledOnce(); expect(unsubscribe).toHaveBeenCalledOnce()
   expect(onError).not.toHaveBeenCalled(); expect(voice.active.value).toBe(false)
+})
+
+it('does not let a delayed interruption cancel a newer response on the same connection', async () => {
+  const s = recoveryFixture()
+  try {
+    await s.voice.start()
+    s.emit(0, { type: 'response.output_audio.delta', response_id: 'old', delta: 'AQACAA==' })
+    s.worklets[0].holdClears = true
+    const interrupting = s.voice.interrupt()
+    s.emit(0, { type: 'response.output_audio.delta', response_id: 'new', delta: 'AQACAA==' })
+    s.worklets[0].acknowledgeClear(); await interrupting
+    expect(s.invoke.mock.calls.filter(([channel]) => channel === 'voice.nativeCancel')).toHaveLength(0)
+    expect(s.voice.getDiagnostics()).toMatchObject({ clearRequests: 1, clearAcks: 1, clearTimeouts: 0 })
+    s.worklets[0].holdClears = false
+  } finally { await s.voice.stop() }
+})
+it('does not let an old clear acknowledgement cancel a replacement connection', async () => {
+  const s = recoveryFixture()
+  try {
+    await s.voice.start()
+    s.emit(0, { type: 'response.output_audio.delta', response_id: 'old', delta: 'AQACAA==' })
+    const old = s.worklets[0]; old.holdClears = true
+    const interrupting = s.voice.interrupt()
+    s.emit(0, { type: 'closed', code: 'MEMORY_CONTEXT_REFRESH_REQUIRED' })
+    const interruptRequest = old.pendingClears.shift()
+    old.acknowledgeClear()
+    await vi.waitFor(() => expect(s.starts()).toHaveLength(2))
+    old.port.onmessage?.({ data: { type: 'cleared', requestId: interruptRequest } })
+    await interrupting
+    expect(s.invoke.mock.calls.filter(([channel]) => channel === 'voice.nativeCancel')).toHaveLength(0)
+    expect(s.voice.active.value).toBe(true)
+  } finally { await s.voice.stop() }
+})
+it('rebuilds an unexpectedly closed service session and stops capture when the worklet crashes', async () => {
+  const s = recoveryFixture()
+  try {
+    await s.voice.start(); s.emit(0, { type: 'closed', code: 'REALTIME_SESSION_CLOSED' })
+    await vi.waitFor(() => expect(s.starts()).toHaveLength(2))
+    await vi.waitFor(() => expect(s.voice.active.value).toBe(true))
+    expect(s.voice.getDiagnostics().connectionRebuilds).toBe(1)
+    s.worklets[1].onprocessorerror?.()
+    await vi.waitFor(() => expect(s.trackStops[1]).toHaveBeenCalledOnce())
+    expect(s.voice.active.value).toBe(false)
+    expect(s.voice.getDiagnostics().lastError).toBe('REALTIME_AUDIO_PROCESSOR_FAILED')
+    expect(s.onError).toHaveBeenCalledWith(expect.stringContaining('语音处理已停止'))
+  } finally { await s.voice.stop() }
 })

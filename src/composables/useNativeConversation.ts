@@ -6,7 +6,7 @@ import { createNativeAudioUplink } from '../services/nativeAudioUplink'
 
 const needsContextRefresh = (code: string) => ['MEMORY_CONTEXT_REFRESH_REQUIRED', 'REALTIME_CONTEXT_REFRESH_REQUIRED'].includes(code)
 const retryableConnectionFailure = (code: string) => ['REALTIME_NETWORK_FAILED', 'REALTIME_CONNECTION_CLOSED',
-  'REALTIME_START_TIMEOUT', 'REALTIME_UPGRADE_FAILED'].includes(code)
+  'REALTIME_SESSION_CLOSED', 'REALTIME_START_TIMEOUT', 'REALTIME_UPGRADE_FAILED'].includes(code)
 function connectionMessage(code: string): string {
   if (/[\u3400-\u9fff]/.test(code)) return code
   const configuration = voiceConfigurationMessage(code)
@@ -41,7 +41,8 @@ export function useNativeConversation(options: {
     rawAudioEvents: 0, audioMissingResponseId: 0, audioDiscardedCancelled: 0,
     serverAudioFrames: 0, serverAudioBytes: 0, discardedCancelledAudio: 0, serverAsrDeltas: 0,
     serverAsrCompleted: 0, serverAsrWithTranscript: 0, serverAsrWithItemId: 0,
-    audioPeak: 0, playbackStarts: 0, playbackUnderruns: 0, playbackCompletions: 0, playedUntilMs: 0,
+    audioPeak: 0, playbackStarts: 0, playbackUnderruns: 0, playbackRebuffers: 0, playbackCompletions: 0, playedUntilMs: 0,
+    clearRequests: 0, clearAcks: 0, clearTimeouts: 0, maxClearAckMs: 0, connectionRebuilds: 0,
     asrCompleted: 0, asrWithTranscript: 0, asrWithItemId: 0, asrWithText: 0, asrWithResults: 0, lastError: '' })
   let diagnostics = freshDiagnostics()
   function adoptServerDiagnostics(value: unknown): void {
@@ -66,9 +67,14 @@ export function useNativeConversation(options: {
     setSpeaking(false)
     if (!processor) return Promise.resolve()
     const requestId = crypto.randomUUID()
+    const requestedAt = performance.now(), trace = diagnostics; trace.clearRequests++
     return new Promise(resolve => {
-      const timeout = setTimeout(() => { clearWaiters.delete(requestId); resolve() }, 250)
-      clearWaiters.set(requestId, () => { clearTimeout(timeout); clearWaiters.delete(requestId); resolve() })
+      const timeout = setTimeout(() => { clearWaiters.delete(requestId); trace.clearTimeouts++; resolve() }, 250)
+      clearWaiters.set(requestId, () => {
+        clearTimeout(timeout); clearWaiters.delete(requestId); trace.clearAcks++
+        trace.maxClearAckMs = Math.max(trace.maxClearAckMs, Math.ceil(performance.now() - requestedAt))
+        resolve()
+      })
       processor!.port.postMessage({ type: 'clear', requestId })
     })
   }
@@ -118,9 +124,14 @@ export function useNativeConversation(options: {
     closing = false
   }
   async function interrupt(): Promise<void> {
-    if (responseId) cancelled.add(responseId)
+    const id = connectionId, epoch = generation, interruptedResponse = responseId
+    if (interruptedResponse) cancelled.add(interruptedResponse)
     await clearPlayback()
-    if (connectionId) await window.lingli.invoke('voice.nativeCancel', { connectionId })
+    // A delayed queue acknowledgement must never cancel a replacement connection
+    // or a newer response that arrived while the old device queue was clearing.
+    if (id && connectionId === id && generation === epoch && responseId === interruptedResponse && !closing) {
+      await window.lingli.invoke('voice.nativeCancel', { connectionId: id })
+    }
   }
   async function start(): Promise<boolean> {
     if (active.value || starting.value || stopping || recovery) return false
@@ -161,6 +172,7 @@ export function useNativeConversation(options: {
         } else if (!retryableConnectionFailure(reason) || networkRetries++ >= runtimeDefaults.limits.autoReconnectAttempts) break
         await stopResources()
         if (!stillWanted()) return
+        diagnostics.connectionRebuilds++
         if (!needsContextRefresh(reason)) await new Promise(resolve => setTimeout(resolve, 250 * networkRetries))
         if (!stillWanted()) return
         try { if (await openConnection(request)) return; else return }
@@ -210,6 +222,11 @@ export function useNativeConversation(options: {
       await context.audioWorklet.addModule(new URL('native-duplex-worklet.js', document.baseURI).href)
       if (!current()) return false
       processor = new AudioWorkletNode(context, 'seamo-native-duplex', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] })
+      processor.onprocessorerror = () => {
+        if (!current()) return
+        diagnostics.lastError = 'REALTIME_AUDIO_PROCESSOR_FAILED'
+        void stop(); options.onError('语音处理已停止，已关闭收音。请重新开启自动会话；文字仍可使用。')
+      }
       processor.connect(context.destination)
       const connectionUplink = uplink = createNativeAudioUplink({
         async send(pcm) {
@@ -225,6 +242,7 @@ export function useNativeConversation(options: {
         if (!matches()) return
         if (data.type === 'playback') {
           if (data.status === 'started') diagnostics.playbackStarts++
+          if (data.status === 'started' && data.resumedAfterUnderrun === true) diagnostics.playbackRebuffers++
           if (data.status === 'underrun') diagnostics.playbackUnderruns++
           if (data.status === 'completed') diagnostics.playbackCompletions++
           if (Number.isSafeInteger(data.playedUntilMs)) diagnostics.playedUntilMs = Math.max(diagnostics.playedUntilMs, data.playedUntilMs)

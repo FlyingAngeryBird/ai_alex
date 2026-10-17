@@ -13,7 +13,8 @@ export function buildDiagnosticExport(db: R1Database, metadata: { appVersion: st
     const native = voiceTrace.nativeVoice
     if (native && typeof native === 'object') {
       for (const key of ['capturedFrames', 'sentFrames', 'rawAudioEvents', 'audioMissingResponseId', 'audioDiscardedCancelled',
-        'receivedAudioFrames', 'receivedAudioBytes', 'audioPeak', 'playbackStarts', 'playbackUnderruns', 'playbackCompletions',
+        'receivedAudioFrames', 'receivedAudioBytes', 'audioPeak', 'playbackStarts', 'playbackUnderruns', 'playbackRebuffers', 'playbackCompletions',
+        'clearRequests', 'clearAcks', 'clearTimeouts', 'maxClearAckMs', 'connectionRebuilds',
         'playedUntilMs', 'asrCompleted', 'asrWithTranscript', 'asrWithItemId', 'asrWithText', 'asrWithResults',
         'serverAudioFrames', 'serverAudioBytes', 'discardedCancelledAudio', 'serverAsrDeltas', 'serverAsrCompleted', 'serverAsrWithTranscript', 'serverAsrWithItemId']) {
         const value = (native as Record<string, unknown>)[key]

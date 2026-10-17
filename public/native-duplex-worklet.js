@@ -4,7 +4,7 @@ class NativeDuplexProcessor extends AudioWorkletProcessor {
     super()
     this.ring = new Float32Array(24000 * 30)
     this.read = 0; this.write = 0; this.responseId = null; this.playing = false; this.finished = false
-    this.cancelled = new Set(); this.capture = false; this.inputWeight = 0; this.inputSum = 0
+    this.cancelled = new Set(); this.underflowed = false; this.capture = false; this.inputWeight = 0; this.inputSum = 0
     this.pcm = new Int16Array(320); this.pcmIndex = 0; this.reportAt = 0; this.started = false
     this.port.onmessage = ({ data }) => {
       if (data.type === 'capture') {
@@ -41,11 +41,12 @@ class NativeDuplexProcessor extends AudioWorkletProcessor {
   }
   reset(id) {
     this.responseId = id; this.read = 0; this.write = 0; this.playing = false
-    this.finished = false; this.started = false; this.reportAt = 0
+    this.finished = false; this.started = false; this.reportAt = 0; this.underflowed = false
   }
   report(status) {
     if (this.responseId) this.port.postMessage({ type: 'playback', responseId: this.responseId,
-      playedUntilMs: Math.floor(Math.min(this.read, this.write) / 24), status })
+      playedUntilMs: Math.floor(Math.min(this.read, this.write) / 24), status,
+      ...(status === 'started' ? { resumedAfterUnderrun: this.underflowed } : {}) })
   }
   process(inputs, outputs) {
     const input = inputs[0]?.[0], output = outputs[0]?.[0]
@@ -72,7 +73,7 @@ class NativeDuplexProcessor extends AudioWorkletProcessor {
     if (!output || !this.responseId) return true
     // 150 ms candidate starting buffer, shortened only when the provider has finished a short utterance.
     if (!this.playing && (this.write - this.read >= 3600 || this.finished && this.write > this.read)) {
-      this.playing = true; this.started = true; this.report('started')
+      this.playing = true; this.started = true; this.report('started'); this.underflowed = false
     }
     if (!this.playing) return true
     for (let i = 0; i < output.length; i++) {
@@ -84,7 +85,7 @@ class NativeDuplexProcessor extends AudioWorkletProcessor {
     }
     if (this.read >= this.write) {
       if (this.finished) { this.report('completed'); this.cancelled.add(this.responseId); this.reset(null) }
-      else { this.report('underrun'); this.playing = false }
+      else { this.report('underrun'); this.playing = false; this.underflowed = true }
     } else if (this.read - this.reportAt >= 2400) { this.reportAt = this.read; this.report('playing') }
     return true
   }

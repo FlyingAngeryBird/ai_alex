@@ -346,7 +346,9 @@ async function clearCredential(field: CredentialField): Promise<void> {
             <p>采集 {{ nativeSnapshot.capturedFrames }} 包 · 已发送 {{ nativeSnapshot.sentFrames }} 包</p>
             <p>音频事件 {{ nativeSnapshot.rawAudioEvents }} · 接收 {{ nativeSnapshot.receivedAudioBytes }} 字节 · 峰值 {{ nativeSnapshot.audioPeak }}</p>
             <p>服务音频 {{ nativeSnapshot.serverAudioFrames }} 包 / {{ nativeSnapshot.serverAudioBytes }} 字节 · 服务端旧回复隔离 {{ nativeSnapshot.discardedCancelledAudio }} 包</p>
-            <p>开始播放 {{ nativeSnapshot.playbackStarts }} 次 · 完成 {{ nativeSnapshot.playbackCompletions }} 次 · 已播放 {{ nativeSnapshot.playedUntilMs }} ms · 缺帧 {{ nativeSnapshot.playbackUnderruns }} 次</p>
+            <p>开始播放 {{ nativeSnapshot.playbackStarts }} 次 · 完成 {{ nativeSnapshot.playbackCompletions }} 次 · 已播放 {{ nativeSnapshot.playedUntilMs }} ms</p>
+            <p>缓冲耗尽 {{ nativeSnapshot.playbackUnderruns }} 次（含句尾等待） · 耗尽后恢复播放 {{ nativeSnapshot.playbackRebuffers }} 次</p>
+            <p>清空队列 {{ nativeSnapshot.clearRequests }} 次 · 已确认 {{ nativeSnapshot.clearAcks }} 次 · 超时 {{ nativeSnapshot.clearTimeouts }} 次 · 最长确认 {{ nativeSnapshot.maxClearAckMs }} ms · 重建连接 {{ nativeSnapshot.connectionRebuilds }} 次</p>
             <p>音频上下文 {{ nativeSnapshot.audioContextState }} · 缺回复标识 {{ nativeSnapshot.audioMissingResponseId }} · 已取消音频 {{ nativeSnapshot.audioDiscardedCancelled }}</p>
             <p>识别结束 {{ nativeSnapshot.asrCompleted }} · 含原文 {{ nativeSnapshot.asrWithTranscript }} · 含消息标识 {{ nativeSnapshot.asrWithItemId }} · 含text {{ nativeSnapshot.asrWithText }} · 含results {{ nativeSnapshot.asrWithResults }}</p>
             <p>服务识别增量 {{ nativeSnapshot.serverAsrDeltas }} · 结束 {{ nativeSnapshot.serverAsrCompleted }} · 含原文 {{ nativeSnapshot.serverAsrWithTranscript }} · 含消息标识 {{ nativeSnapshot.serverAsrWithItemId }}</p>
