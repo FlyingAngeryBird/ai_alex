@@ -21,7 +21,8 @@ export type ArkResponseRound = { output: ArkOutputItem[]; results: ArkToolResult
 export type ArkResponse = { id: string; output: ArkOutputItem[]; calls: ArkFunctionCall[];
   text: string; usage: Record<string, unknown> | null }
 type Environment = { VOLCENGINE_ARK_API_KEY?: string; VOLCENGINE_ARK_BASE_URL?: string; VOLCENGINE_ARK_MODEL?: string }
-type ResponseBody = { id?: unknown; status?: unknown; output?: unknown; usage?: unknown; error?: unknown }
+type ResponseBody = { id?: unknown; status?: unknown; output?: unknown; usage?: unknown; error?: unknown;
+  incomplete_details?: { reason?: unknown } }
 export class ArkResponsesError extends Error {
   constructor(readonly code: string) { super(code); this.name = 'ArkResponsesError' }
 }
@@ -119,6 +120,8 @@ export function createArkResponsesProvider(options: { env?: Environment;
       if (input.signal?.aborted) invalid('ARK_REQUEST_CANCELLED')
       if (timeout.aborted) invalid('ARK_REQUEST_TIMEOUT')
       input.boundary.assertCurrent?.()
+      if (body?.status === 'incomplete' && body.incomplete_details?.reason === 'max_output_tokens') invalid('ARK_OUTPUT_BUDGET_EXHAUSTED')
+      if (body?.status === 'incomplete' && body.incomplete_details?.reason === 'content_filter') invalid('ARK_RESPONSE_FILTERED')
       if (!body || body.error || body.status !== 'completed' || typeof body.id !== 'string' || !body.id) invalid('ARK_RESPONSE_NOT_COMPLETED')
       const output = checkedOutput(body.output, input.boundary)
       const calls = output.filter((item): item is ArkFunctionCall => item.type === 'function_call')

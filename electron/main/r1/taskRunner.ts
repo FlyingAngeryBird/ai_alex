@@ -65,7 +65,7 @@ export class R1TaskRunner {
       const aliases = this.tasks.authorizedAliases(lease).filter(alias => this.executor.implementedAliases.includes(alias))
       const boundary = new R1TaskRequestBoundary(this.assets, this.persona(), input, aliases,
         () => this.tasks.authority(lease.taskId), this.tasks.steeringEvent(lease))
-      const response = await this.provider.request({ boundary, messages, rounds, signal })
+      const response = await this.provider.request({ boundary, messages, rounds, signal, maxOutputTokens: 8192 })
       this.tasks.assertLease(lease)
       if (response.calls.length) {
         // Validate against the original round's Skill exposure before executing any same-batch call.
@@ -95,7 +95,7 @@ export class R1TaskRunner {
           [error instanceof SyntaxError ? 'TASK_DRAFT_JSON_INVALID' : error instanceof Error ? error.message : 'TASK_DRAFT_INVALID'],
           repairInput, () => this.tasks.assertLease(lease), proofs)
         const repairedResponse = await this.provider.request({ boundary: repair,
-          messages: [{ role: 'user', content: JSON.stringify({ schemaId: 'task-draft', taskId: lease.taskId, goalVersion: lease.goalVersion }) }], signal })
+          messages: [{ role: 'user', content: JSON.stringify({ schemaId: 'task-draft', taskId: lease.taskId, goalVersion: lease.goalVersion }) }], signal, maxOutputTokens: 8192 })
         if (repairedResponse.calls.length) throw new Error('STRUCTURED_OUTPUT_INVALID')
         try { this.tasks.publish(lease, JSON.parse(repairedResponse.text), this.artifacts) }
         catch (error) { this.diagnostic(lease, 'repair_rejected', error); throw new Error('STRUCTURED_OUTPUT_INVALID') }
