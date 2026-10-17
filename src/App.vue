@@ -8,6 +8,7 @@ import R1MemoryPanel from '@/components/R1MemoryPanel.vue'
 import R1MemoryConfirmationDialog from '@/components/R1MemoryConfirmationDialog.vue'
 import type { MemoryConfirmation } from '../electron/main/r1/memoryConfirmations'
 import R1TaskPanel from '@/components/R1TaskPanel.vue'
+import R1TaskCompletionNotice from '@/components/R1TaskCompletionNotice.vue'
 import { useNativeConversation } from '@/composables/useNativeConversation'
 import { useTasks } from '@/composables/useTasks'
 import R1HistoryPanel from '@/components/R1HistoryPanel.vue'
@@ -184,6 +185,12 @@ const serviceConfigurationField = ref<CredentialField>('VOLCENGINE_ARK_API_KEY')
 const itemsOpen = ref(false)
 const taskState = useTasks(window.seamoR1.tasks)
 const taskOpen = ref(false)
+const latestTaskCompletion = computed(() => taskState.completionNotices.value.at(-1) ?? null)
+function viewTaskCompletion(): void {
+  const notice = latestTaskCompletion.value
+  if (!notice) return
+  taskState.selectedId.value = notice.taskId; openTask(); taskState.dismissCompletion(notice.key)
+}
 function openTask(): void {
   closePanels()
   if (!taskState.selected.value) taskState.selectedId.value = taskState.tasks.value.at(-1)?.taskId ?? null
@@ -1047,6 +1054,7 @@ onMounted(() => {
     reminderNotice.value = event
   }) ?? null
   stopMemoryInvalidation = window.seamoR1.memory.onInvalidated(() => {
+    taskState.clearCompletionNotices()
     if (assistantAudioPlaying.value || conversation.particleState.value === 'thinking') {
       releaseAssistantAudio(true)
       conversation.addSystemMessage('记忆已更新，已停止旧上下文的回复。')
@@ -1214,7 +1222,10 @@ onBeforeUnmount(() => {
       <button type="button" @click="openPanel('items'); reminderNotice = null">查看事项</button>
       <button type="button" @click="reminderNotice = null">关闭</button>
     </aside>
-    <aside v-if="!welcomeOpen && !temporaryMode && !reminderNotice && !focusNotice && taskState.recoveryTasks.value.length" class="r1-reminder-toast" role="status">
+    <R1TaskCompletionNotice v-if="!welcomeOpen && !reminderNotice && !focusNotice && !focus.error.value && latestTaskCompletion"
+      :notice="latestTaskCompletion" :count="taskState.completionNotices.value.length"
+      @view="viewTaskCompletion" @dismiss="taskState.dismissCompletion(latestTaskCompletion.key)" />
+    <aside v-if="!welcomeOpen && !temporaryMode && !reminderNotice && !focusNotice && !latestTaskCompletion && taskState.recoveryTasks.value.length" class="r1-reminder-toast" role="status">
       <div><strong>上次还有 {{ taskState.recoveryTasks.value.length }} 项委托未完成</strong><p>尚未重新执行。选择继续后，会先核对已保存的结果。</p></div>
       <button type="button" @click="taskState.selectedId.value = taskState.recoveryTasks.value[0]!.taskId; openTask(); taskState.dismissRecovery()">查看委托</button>
       <button type="button" @click="taskState.dismissRecovery()">稍后</button>

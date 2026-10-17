@@ -11,6 +11,10 @@
 
 .r1-reminder-toast{position:absolute;z-index:80;right:24px;bottom:24px;display:flex;align-items:flex-start;gap:20px;max-width:380px;padding:18px 20px;border:1px solid rgba(137,218,211,.44);border-radius:15px;background:#13242d;box-shadow:0 16px 45px rgba(0,0,0,.45);color:#f4f4ee}
 .r1-reminder-toast strong{font-size:14px}.r1-reminder-toast p{margin:8px 0;font-size:13px;line-height:1.5}.r1-reminder-toast small{color:#a6babe;font-size:11px}.r1-reminder-toast button{border:0;background:transparent;color:#a8d7d7;cursor:pointer}
+.r1-reminder-toast .r1-task-notice-copy{max-height:7em;overflow:auto;overflow-wrap:anywhere;white-space:pre-line}
+.r1-task-completion-notice{max-width:min(440px,calc(100vw - 32px));right:16px;bottom:24px}
+.r1-task-completion-notice>div{min-width:0;flex:1}
+.r1-task-completion-notice>button{flex-shrink:0;white-space:nowrap;padding:0}
 
 * {
   box-sizing: border-box;

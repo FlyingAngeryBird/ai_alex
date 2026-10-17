@@ -1,0 +1,20 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><title>Seamo 委托结果提示组件检查（模拟）</title></head>
+<body><div id="app"></div><script type="module">
+import { createApp, h, ref } from 'vue'
+import Notice from '../../src/components/R1TaskCompletionNotice.vue'
+import '../../src/style.css'
+createApp({ setup() {
+ const status = ref('completed'), visible = ref(true), action = ref('尚未操作')
+ const briefs = { completed:'已整理两份公开资料，结果和来源已保存，请查看工作稿。',
+ partial:'已找到天气信息；另一项资料暂未核实，不能当作已完成。', needs_input:'资料已找到，需要你确认日期范围后才能继续。',
+ failed:'这项委托未能完成，可以查看已保存的进度。', long:'长摘要滚动检查。'.repeat(120) }
+ return () => h('main',{style:'height:100%;position:relative;padding:24px'},[
+  h('h1',{style:'font-size:20px'},'委托结果提示：组件模拟检查'),
+  h('p','不访问服务、不读取真实任务、不启用收音。'),
+  h('div',{style:'display:flex;gap:12px;flex-wrap:wrap'},Object.keys(briefs).map(key=>h('button',{onClick:()=>{status.value=key;visible.value=true}},key))),
+  h('p',action.value),
+  visible.value ? h(Notice,{notice:{key:'fixture',taskId:'fixture',goalVersion:1,resultId:'fixture',title:'模拟委托',completionStatus:status.value==='long'?'partial':status.value,brief:briefs[status.value]},count:2,
+   onView:()=>{action.value='已请求打开对应委托';visible.value=false},onDismiss:()=>{action.value='已关闭提示，委托仍保留';visible.value=false}}) : null
+ ])
+} }).mount('#app')
+</script></body></html>

@@ -1,6 +1,9 @@
 import { computed, ref } from 'vue'
 import type { R1Api } from '../../electron/shared/r1Api'
-import type { R1Task } from '../../electron/main/r1/taskSupervisor'
+import type { R1Task, TaskEvent } from '../../electron/main/r1/taskSupervisor'
+
+export type TaskCompletionNotice = { key: string; taskId: string; goalVersion: number; resultId: string | null;
+  title: string; completionStatus: 'completed' | 'partial' | 'needs_input' | 'failed'; brief: string }
 
 /** Scope changes invalidate pending reads and controls; closing a panel does not. */
 export function useTasks(api: R1Api['tasks']) {
@@ -10,6 +13,32 @@ export function useTasks(api: R1Api['tasks']) {
   const busy = ref(false)
   const loading = ref(false)
   const recoveryIds = ref<string[]>([])
+  const completionNotices = ref<TaskCompletionNotice[]>([])
+  const pendingCompletions = new Map<string, { taskId: string; goalVersion: number; resultId: string | null }>()
+  const seenCompletions = new Set<string>()
+  function collectCompletions(): void {
+    const current = (notice: Pick<TaskCompletionNotice, 'taskId' | 'goalVersion' | 'resultId'>) => {
+      const task = tasks.value.find(task => task.taskId === notice.taskId)
+      return task && task.goalVersion === notice.goalVersion && task.resultId === notice.resultId &&
+        ['succeeded', 'partially_succeeded', 'waiting_input', 'failed'].includes(task.status) &&
+        (task.status === 'failed' || (task.result?.goalVersion === task.goalVersion && task.result.resultId === task.resultId))
+    }
+    completionNotices.value = completionNotices.value.filter(current)
+    for (const [key, expected] of pendingCompletions) {
+      const taskId = expected.taskId
+      const task = tasks.value.find(task => task.taskId === taskId)
+      if (!task || task.goalVersion !== expected.goalVersion || !current(expected)) { pendingCompletions.delete(key); continue }
+      if (!seenCompletions.has(key)) {
+        seenCompletions.add(key)
+        const result = task.status === 'failed' ? null : task.result
+        completionNotices.value.push({ key, taskId, goalVersion: task.goalVersion, resultId: task.resultId,
+          title: task.goal, completionStatus: result?.completionStatus ?? 'failed',
+          brief: result?.replyBrief ?? '这项委托未能完成，可以查看已保存的进度。' })
+      }
+      pendingCompletions.delete(key)
+    }
+    completionNotices.value = completionNotices.value.slice(-5)
+  }
   const recoveryTasks = computed(() => tasks.value.filter(task => recoveryIds.value.includes(task.taskId) && task.status === 'needs_resume'))
   let checkedRecovery = false
   const selected = computed(() => tasks.value.find(task => task.taskId === selectedId.value) ?? null)
@@ -27,6 +56,7 @@ export function useTasks(api: R1Api['tasks']) {
       if (disposed || scope !== epoch || request !== revision) return
       if (!result.ok) throw new Error(result.error.code)
       tasks.value = result.data
+      collectCompletions()
       if (!checkedRecovery) { checkedRecovery = true; recoveryIds.value = tasks.value.filter(task => task.status === 'needs_resume').map(task => task.taskId) }
       if (!tasks.value.some(task => task.taskId === selectedId.value)) selectedId.value = null
       error.value = ''
@@ -38,6 +68,7 @@ export function useTasks(api: R1Api['tasks']) {
   }
   function changeScope(): void {
     epoch++
+    pendingCompletions.clear(); completionNotices.value = []; seenCompletions.clear()
     tasks.value = []
     recoveryIds.value = []; checkedRecovery = true
     selectedId.value = null
@@ -66,14 +97,28 @@ export function useTasks(api: R1Api['tasks']) {
   function start(): void {
     if (disposed || stopEvents) return
     // Re-read the current scope instead of trusting a queued event from a prior session.
-    stopEvents = api.onChanged(() => { void refresh() })
+    stopEvents = api.onChanged((event: TaskEvent) => {
+      if (disposed) return
+      if (['completed', 'waiting_input'].includes(event.reason) &&
+        (event.task.result || event.task.status === 'failed')) {
+        pendingCompletions.set(`${event.task.taskId}:${event.task.goalVersion}:${event.task.resultId ?? 'failed'}`, {
+          taskId: event.task.taskId, goalVersion: event.task.goalVersion, resultId: event.task.resultId })
+      }
+      // Cards are derived from a fresh authoritative read, never event payload
+      // prose. Any overlapping refresh can drain the pending completion IDs.
+      void refresh()
+    })
     void refresh()
   }
   function dispose(): void {
     disposed = true
     epoch++
+    pendingCompletions.clear(); completionNotices.value = []
     stopEvents?.()
     stopEvents = null
   }
-  return { tasks, selectedId, selected, error, busy, loading, recoveryTasks, dismissRecovery: () => { recoveryIds.value = [] }, refresh, changeScope, control, start, dispose }
+  return { tasks, selectedId, selected, error, busy, loading, recoveryTasks, completionNotices,
+    clearCompletionNotices() { epoch++; pendingCompletions.clear(); completionNotices.value = []; void refresh() },
+    dismissCompletion: (key: string) => { completionNotices.value = completionNotices.value.filter(notice => notice.key !== key) },
+    dismissRecovery: () => { recoveryIds.value = [] }, refresh, changeScope, control, start, dispose }
 }
