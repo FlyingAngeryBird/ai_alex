@@ -16,6 +16,8 @@ R1 当前是开发预览：应用 ID `com.seamo.ai.r1`，数据目录 `~/Library
 
 ## 2026-10-17 开发检查点
 
+当前可复测开发包为源码`8fbc6d6`：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-audio-segments/Seamo AI R1.app`。用户实测字幕不重复、回复可出声；3次播放完成与heard回执已核验，538项回归和构建通过。仅短会话通过，1次欠载待长听观测；20轮、打断、工具/设备/延迟及正式签名/公证/安装仍未验收。以下21e027f为历史开发检查点。详见[音频联调记录](2026-10-17-native-audio-progress.md)。
+
 音频传输和计数诊断源码`21e027f`已保存，86文件535项与生产构建通过。仓库外独立预览`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-21e027f/Seamo AI R1.app`已生成、签名完整性通过；启动暂时阻塞在系统钥匙串读取，尚未证明新页面可用或真实出声。用户上次实测无声/拥塞已记失败，详见[音频联调记录](2026-10-17-native-audio-progress.md)。本批源码回退`b02ceb7`，数据Schema不变；不标阶段通过或正式Release。
 
 ## 2026-10-15 开发检查点
