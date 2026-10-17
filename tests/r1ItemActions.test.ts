@@ -8,6 +8,8 @@ import { R1Items } from '../electron/main/r1/items'
 import { R1Artifacts } from '../electron/main/r1/artifacts'
 import { R1TaskSupervisor } from '../electron/main/r1/taskSupervisor'
 import { R1TaskToolExecutor } from '../electron/main/r1/taskToolExecutor'
+import { R1TaskRunner } from '../electron/main/r1/taskRunner'
+import { R1PersonaStore } from '../electron/main/r1/persona'
 import { R1ItemActions, type ItemActionView } from '../electron/main/r1/itemActions'
 import { loadR1PromptAssets } from '../electron/main/r1/promptAssets'
 
@@ -16,7 +18,7 @@ let directory = ''
 beforeEach(() => { directory = mkdtempSync(join(tmpdir(), 'seamo-item-action-')) })
 afterEach(() => { rmSync(directory, { recursive: true, force: true }) })
 
-function setup(options: { sessionCurrent?: () => boolean; beforeWrite?: () => void } = {}) {
+function setup(options: { sessionCurrent?: () => boolean; beforeWrite?: () => void; isTaskCurrent?: (task: { taskId: string; runId: string; goalVersion: number }) => boolean } = {}) {
   const db = openR1Database(':memory:'), items = new R1Items(db), artifacts = new R1Artifacts(db)
   const notifications: (ItemActionView | null)[] = []
   let now = Date.parse('2026-10-17T12:00:00Z')
@@ -26,7 +28,7 @@ function setup(options: { sessionCurrent?: () => boolean; beforeWrite?: () => vo
     notify: (_owner, view) => { notifications.push(view) },
     choose: async (_name, extension) => { choices++; options.beforeWrite?.(); return nextPath === undefined ? join(directory, `export.${extension}`) : nextPath },
     isSessionCurrent: options.sessionCurrent ?? (() => true),
-    isTaskCurrent: () => true,
+    isTaskCurrent: options.isTaskCurrent ?? (() => true),
     now: () => now
   })
   const context = (ownerId = 1) => ({ ownerId, sessionId: 'session-1', temporary: false, assertCurrent() {} })
@@ -250,4 +252,171 @@ it('prepares a Task export UI action, writes only after confirmation and adopts 
     expect(() => s.tasks.verifyRecovery(next.lease)).not.toThrow()
     expect(s.tasks.beginDecision(next.lease).validReceiptActionIds).toContain((output as { uiActionId: string }).uiActionId)
   } finally { s.close() }
+})
+
+it('keeps the kept-reminder IDs from the real delete receipts instead of the preview', async () => {
+  const s = setup()
+  try {
+    const item = s.items.create({ actionId: 'seed', kind: 'todo', title: '购物', body: '茶' }).item
+    const dueAtUtc = new Date(Date.now() + 3600_000).toISOString()
+    const reminder = s.items.createReminder({ actionId: 'rem', itemId: item.itemId, body: '购物', dueAtUtc,
+      timezone: 'Asia/Shanghai', linkPurpose: 'todo_due' }).reminder
+    const keep = s.actions.offerDelete(s.context(), { itemId: item.itemId, expectedVersion: 1 })
+    expect(await s.actions.resolve(1, { ticket: keep.ticket, decision: 'delete', reminderDisposition: 'keep' }))
+      .toMatchObject({ remainingReminderIds: [reminder.reminderId] })
+    const second = s.items.create({ actionId: 'seed-2', kind: 'todo', title: '购物2', body: '茶' }).item
+    const reminder2 = s.items.createReminder({ actionId: 'rem-2', itemId: second.itemId, body: '购物2', dueAtUtc,
+      timezone: 'Asia/Shanghai', linkPurpose: 'todo_due' }).reminder
+    const cancel = s.actions.offerDelete(s.context(), { itemId: second.itemId, expectedVersion: 1 })
+    expect(await s.actions.resolve(1, { ticket: cancel.ticket, decision: 'delete', reminderDisposition: 'cancel' }))
+      .toMatchObject({ remainingReminderIds: [] })
+    expect(s.items.listReminders().find(row => row.reminderId === reminder2.reminderId)).toMatchObject({ status: 'cancelled' })
+  } finally { s.close() }
+})
+
+it('shares one export commit across concurrent confirmations', async () => {
+  const s = setup()
+  try {
+    const item = s.items.create({ actionId: 'seed', kind: 'note', title: '笔记', body: '并发导出' }).item
+    const view = s.actions.offerExport(s.context(), { reason: 'model', kind: 'export', itemIds: [item.itemId],
+      artifactId: null, artifactVersion: null, format: 'txt' })
+    const [first, second] = await Promise.all([
+      s.actions.resolve(1, { ticket: view.ticket, decision: 'export' }),
+      s.actions.resolve(1, { ticket: view.ticket, decision: 'export' })
+    ])
+    expect(first).toEqual(second)
+    expect(s.choices()).toBe(1)
+    expect(readFileSync((first as { path: string }).path, 'utf8')).toContain('并发导出')
+  } finally { s.close() }
+})
+
+it('refuses to write when the ticket is revoked while the save dialog is open', async () => {
+  let ticket = ''
+  const s = setup({ beforeWrite: () => { s.actions.revokePending([ticket], 'TASK_CANCELLED') } })
+  try {
+    const item = s.items.create({ actionId: 'seed', kind: 'note', title: '笔记', body: '撤销导出' }).item
+    const view = s.actions.offerExport(s.context(), { reason: 'model', kind: 'export', itemIds: [item.itemId],
+      artifactId: null, artifactVersion: null, format: 'txt' })
+    ticket = view.ticket
+    s.setPath(join(directory, 'revoked.txt'))
+    await expect(s.actions.resolve(1, { ticket: view.ticket, decision: 'export' }))
+      .rejects.toThrow('ITEM_ACTION_REVOKED')
+    expect(() => readFileSync(join(directory, 'revoked.txt'))).toThrow()
+  } finally { s.close() }
+})
+
+it('refuses to write when the session or Task binding changes while the dialog is open', async () => {
+  let current = true
+  const s = setup({ sessionCurrent: () => current, beforeWrite: () => { current = false } })
+  try {
+    const item = s.items.create({ actionId: 'seed', kind: 'note', title: '笔记', body: '会话变化' }).item
+    const view = s.actions.offerExport(s.context(), { reason: 'model', kind: 'export', itemIds: [item.itemId],
+      artifactId: null, artifactVersion: null, format: 'txt' })
+    s.setPath(join(directory, 'session-changed.txt'))
+    await expect(s.actions.resolve(1, { ticket: view.ticket, decision: 'export' }))
+      .rejects.toThrow('ITEM_ACTION_SESSION_CHANGED')
+    expect(() => readFileSync(join(directory, 'session-changed.txt'))).toThrow()
+  } finally { s.close() }
+  let taskCurrent = true
+  const taskBound = setup({ isTaskCurrent: () => taskCurrent, beforeWrite: () => { taskCurrent = false } })
+  try {
+    const item = taskBound.items.create({ actionId: 'seed', kind: 'note', title: '笔记', body: '任务变化' }).item
+    const context = { ...taskBound.context(), task: { taskId: 'task-1', runId: 'run-1', goalVersion: 1 } }
+    const view = taskBound.actions.offerExport(context, { reason: 'model', kind: 'export', itemIds: [item.itemId],
+      artifactId: null, artifactVersion: null, format: 'txt' })
+    taskBound.setPath(join(directory, 'task-changed.txt'))
+    await expect(taskBound.actions.resolve(1, { ticket: view.ticket, decision: 'export' }))
+      .rejects.toThrow('ITEM_ACTION_TASK_STALE')
+    expect(() => readFileSync(join(directory, 'task-changed.txt'))).toThrow()
+  } finally { taskBound.close() }
+})
+
+it('links an Artifact export receipt to the original task/run with the ticket identity', async () => {
+  const db = openR1Database(':memory:'), items = new R1Items(db), artifacts = new R1Artifacts(db)
+  const conversations = new R1Conversations(db)
+  const tasks = new R1TaskSupervisor(db, assets, () => 0)
+  const actions = new R1ItemActions(db, items, artifacts, {
+    notify: () => {}, choose: async (_name, extension) => join(directory, `artifact-task.${extension}`),
+    isSessionCurrent: () => true,
+    isTaskCurrent: task => { try { return tasks.get(task.taskId).goalVersion === task.goalVersion } catch { return false } }
+  })
+  try {
+    const source = conversations.append({ sessionId: conversations.start(), turnId: 'turn', role: 'user',
+      body: '导出工作稿', status: 'final' })
+    const task = tasks.accept({ requestKey: 'req-artifact', sourceMessageId: source.messageId, timezone: 'Asia/Shanghai',
+      goal: '导出合成工作稿', constraints: [], complexity: 'complex', ownerId: 7, authorizedAliases: ['read_file'] })
+    const lease = tasks.claimNext()!.lease
+    const artifact = artifacts.create({ sourceTurnId: source.turnId, draft: { kind: 'text', title: '工作稿', content: '稿件正文',
+      baseArtifactId: null, baseArtifactVersion: null, sourceRefs: [] } })
+    const view = actions.offerExport({ ownerId: 7, sessionId: source.sessionId, temporary: false,
+      assertCurrent() { tasks.assertLease(lease) },
+      task: { taskId: task.taskId, runId: lease.runId, goalVersion: task.goalVersion } },
+      { reason: 'model', kind: 'export', itemIds: [], artifactId: artifact.artifactId,
+        artifactVersion: artifact.version, format: 'txt' })
+    const result = await actions.resolve(7, { ticket: view.ticket, decision: 'export' })
+    expect(result).toMatchObject({ cancelled: false, artifactId: artifact.artifactId })
+    const row = db.prepare('SELECT task_id, run_id, actual_result_json FROM receipts WHERE action_id = ?')
+      .get(view.ticket) as { task_id: string; run_id: string; actual_result_json: string }
+    expect(row).toMatchObject({ task_id: task.taskId, run_id: lease.runId })
+    expect(JSON.parse(row.actual_result_json)).toMatchObject({ kind: 'receipt', actionId: view.ticket,
+      tool: 'notes.export', runId: lease.runId })
+  } finally { tasks.close(); db.close() }
+})
+
+it('stops a Task immediately when a ui_action is issued and adopts the confirmed receipt without replaying it', async () => {
+  const db = openR1Database(':memory:'), items = new R1Items(db), artifacts = new R1Artifacts(db)
+  const conversations = new R1Conversations(db)
+  const tasks = new R1TaskSupervisor(db, assets, () => 0)
+  const actions = new R1ItemActions(db, items, artifacts, {
+    notify: () => {}, choose: async (_name, extension) => join(directory, `runner.${extension}`),
+    isSessionCurrent: () => true,
+    isTaskCurrent: task => { try { return tasks.get(task.taskId).goalVersion === task.goalVersion } catch { return false } },
+    onTaskReceipt: taskId => { tasks.refreshExternalReceipts(taskId) }
+  })
+  const executor = new R1TaskToolExecutor(tasks, assets, items, undefined, undefined, undefined, undefined, actions)
+  const item = items.create({ actionId: 'seed', kind: 'note', title: '记录', body: '正文' }).item
+  const source = conversations.append({ sessionId: conversations.start(), turnId: 'turn', role: 'user',
+    body: '把这条记录删掉', status: 'final' })
+  const task = tasks.accept({ requestKey: 'req', sourceMessageId: source.messageId, timezone: 'Asia/Shanghai',
+    goal: '删除合成记录', constraints: [], complexity: 'complex', ownerId: 7,
+    authorizedAliases: ['read_file', 'notes_list', 'notes_delete'] })
+  let requests = 0
+  const provider = { async request() {
+    requests++
+    if (requests === 1) {
+      const call = { type: 'function_call', id: 'c1', call_id: 'c1', name: 'read_file',
+        arguments: JSON.stringify({ file_path: '/skills/capture-item/SKILL.md' }) }
+      return { id: 'r1', output: [call], calls: [call], text: '', usage: null }
+    }
+    if (requests === 2) {
+      const call = { type: 'function_call', id: 'c2', call_id: 'c2', name: 'notes_list',
+        arguments: JSON.stringify({ itemIds: [item.itemId] }) }
+      return { id: 'r2', output: [call], calls: [call], text: '', usage: null }
+    }
+    if (requests === 3) {
+      const call = { type: 'function_call', id: 'c3', call_id: 'c3', name: 'notes_delete',
+        arguments: JSON.stringify({ itemId: item.itemId, expectedVersion: 1, reminderDisposition: 'keep', confirmedReminders: [] }) }
+      return { id: 'r3', output: [call], calls: [call], text: '', usage: null }
+    }
+    throw new Error('RUNNER_CONTINUED_AFTER_UI_ACTION')
+  } } as unknown as ReturnType<typeof import('../electron/main/providers/arkResponsesProvider').createArkResponsesProvider>
+  const runner = new R1TaskRunner(tasks, assets, executor, artifacts, provider, () => new R1PersonaStore(db).get())
+  try {
+    runner.start()
+    await runner.idle()
+    expect(requests).toBe(3)
+    const waiting = tasks.get(task.taskId)
+    expect(waiting.status).toBe('waiting_input')
+    expect(waiting.result).toMatchObject({ completionStatus: 'needs_input', unresolved: ['等待界面确认'] })
+    const ticket = tasks.pendingUiActions(task.taskId)[0].actionId
+    expect(items.list()).toHaveLength(1)
+    await actions.resolve(7, { ticket, decision: 'delete', reminderDisposition: 'keep' })
+    expect(items.list()).toHaveLength(0)
+    expect(tasks.get(task.taskId).status).toBe('waiting_input')
+    expect(tasks.get(task.taskId).progressBrief).toContain('界面确认已完成')
+    tasks.resume(task.taskId, task.goalVersion)
+    const next = tasks.claimNext()!
+    expect(() => tasks.verifyRecovery(next.lease)).not.toThrow()
+    expect(items.list()).toHaveLength(0)
+  } finally { tasks.close(); await runner.close(); db.close() }
 })

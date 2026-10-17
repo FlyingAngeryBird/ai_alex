@@ -79,9 +79,17 @@ export class R1TaskRunner {
         // Validate against the original round's Skill exposure before executing any same-batch call.
         for (const call of response.calls) boundary.validateToolCall(call.name, JSON.parse(call.arguments))
         const results = []
-        for (const call of response.calls) results.push({ callId: call.call_id,
-          output: await this.executor.executeAsync(lease, call.name, JSON.parse(call.arguments), call.call_id, signal) })
+        let waitingForUser = false
+        for (const call of response.calls) {
+          const output = await this.executor.executeAsync(lease, call.name, JSON.parse(call.arguments), call.call_id, signal)
+          results.push({ callId: call.call_id, output })
+          const value = output as { kind?: unknown; status?: unknown } | null
+          if (value && typeof value === 'object' && value.kind === 'ui_action' && value.status === 'awaiting_user') waitingForUser = true
+        }
         rounds.push({ output: response.output, results })
+        // A model-initiated delete/export has no domain receipt yet: stop the run
+        // now, release the active budget and wait for the user's real confirmation.
+        if (waitingForUser) { this.tasks.waitForUserAction(lease); return }
         continue
       }
       try {

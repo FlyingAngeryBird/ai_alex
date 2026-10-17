@@ -399,6 +399,44 @@ ${source.snippet}
   bindPendingInvalidator(fn: (taskId: string, actionIds: string[], reason: string) => void): void {
     this.pendingInvalidator = fn
   }
+  /** A UI action found a real stored receipt; reflect it without resuming or replaying work. */
+  refreshExternalReceipts(taskId: string): R1Task {
+    const record = this.checked(taskId)
+    const before = record.checkpoint.receiptActionIds.length
+    this.adoptExternalReceipts(record)
+    if (record.checkpoint.receiptActionIds.length !== before) {
+      record.checkpoint.progressBrief = '界面确认已完成，已记录真实回执；可继续核对结果。'
+      this.persist(record); this.emit(record, 'updated')
+    }
+    return this.get(taskId)
+  }
+  /**
+   * A model-issued delete/export waits for the trusted renderer. The run ends
+   * immediately instead of spending further decisions or a PR10 repair draft.
+   */
+  waitForUserAction(lease: TaskLease): TaskResult {
+    this.assertLease(lease)
+    const record = this.checked(lease.taskId)
+    if (record.checkpoint.publicationRunId === lease.runId && record.checkpoint.result) {
+      return structuredClone(record.checkpoint.result)
+    }
+    const receipts = (record.checkpoint.toolReceipts ?? []).map(receipt => {
+      const row = this.db.prepare('SELECT status, entity_id FROM receipts WHERE action_id = ?')
+        .get(receipt.actionId) as { status: TaskResult['entityReceipts'][number]['status']; entity_id: string | null } | undefined
+      const temporary = record.temporary && (receipt.entityId === null || receipt.tool.startsWith('music.'))
+      return { actionId: receipt.actionId, tool: receipt.tool, status: temporary ? receipt.status : row?.status ?? 'unknown',
+        entityId: row?.entity_id ?? receipt.entityId, summary: '以实际执行回执为准。' }
+    })
+    const brief = '有一项操作等待你在界面确认；确认后会在原任务记录真实回执。'
+    const result: TaskResult = { resultId: randomUUID(), goalVersion: record.goalVersion, completionStatus: 'needs_input',
+      replyBrief: brief, sourceRefs: [...record.checkpoint.sourceRefs], artifacts: [], unresolved: ['等待界面确认'],
+      candidateRefs: [], entityReceipts: receipts }
+    record.checkpoint.result = result; record.checkpoint.publicationRunId = lease.runId
+    record.checkpoint.progressBrief = brief
+    this.account(record); this.endRun(record, 'waiting_input'); record.status = 'waiting_input'
+    this.persist(record); this.emit(record, 'waiting_input')
+    return structuredClone(result)
+  }
   /**
    * A model-requested UI confirmation is not a domain receipt. It consumes a
    * tool slot, is checkpointed for cancellation, and is returned as ui_action.

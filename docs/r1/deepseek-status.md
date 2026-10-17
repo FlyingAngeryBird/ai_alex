@@ -7,6 +7,7 @@
 | 批次 | 范围 | 状态 | 提交 |
 | --- | --- | --- | --- |
 | D1 | notes_delete/notes_export：文字＋原生实时语音＋Task＋可信 UI 非阻塞桥；DEC-053；资产 3.5.0/schema 3.2.0 | 代码完成，待审查；真实服务证据受阻 | `86489a9` |
+| D1a | 审查修复：保存框中真实态复核、并发导出单提交、Task 立即等待、remainingReminderIds、导出回执身份 | 代码完成，待正式审查 | 本批追加提交 |
 | D2 | Web 完成合同（有效引用/读取级别/用户明确要求/真实缺口） | 未开始，待 D1 审查 | — |
 
 ## D1 实现
@@ -27,6 +28,16 @@
 - `npm run build`：通过（保留既有 Vite 大 chunk 提示）。
 - 资产：`rebuild_release.py` 重建 59 文件 manifest；`validate_assets.py`（10 Prompt/6 Skill/38+3 工具/14 schema/21 fixtures）与 `check_contract_examples.py` 16 例通过。
 - 真实服务主链：`scripts/check-item-actions.mjs` 需 GUI 会话读取已配置 vault；本会话无 GUI，Electron `app.whenReady()` 不返回（已用最小探针确认，脚本自身也未进入首个 stage），故未取得真实 M01 删除/导出证据。未复制/使用 `.env`（已删除此前误拷的本地文件），未打印密钥，未写用户业务库。
+
+## D1a 审查修复（对应 Codex 静态审查）
+
+- 保存框中真实态：`exportItems`/`exportArtifact` 新增可信 `assertCurrent` 回调，在对话框返回后、版本复核后、写文件前执行；由 `R1ItemActions` 复核 pending 仍是同一 ticket、未过期、真实 session/temporary、owner webContents 存活、Task goal/状态。任一失败不写文件。
+- 并发确认：按 ticket 建立共享 in-flight Promise，同一 ticket 的并发 export 只打开一次保存框、只写一次；重复调用回放同一结果。
+- 终态明确：取消→settled cancelled；成功→settled exported/deleted；文件已写但回执失败→settled 明确错误且不重写；其它确认失败→settled 对应错误码并撤销 pending，重复请求不再产生副作用。
+- Task 立即等待：TaskRunner 收到 `ui_action(awaiting_user)` 后立即调用 `waitForUserAction`，任务进入 `waiting_input` 并结束活动预算/run，不再消耗后续决策或 PR10 草稿；确认后 `onTaskReceipt→refreshExternalReceipts` 吸收真实回执并更新进展。
+- `remainingReminderIds` 改为由真实删除回执（`reminder_kept`）生成，与恢复路径一致。
+- 导出回执身份：`exportItems`/`exportArtifact` 接受 actionId/task/run，回执 JSON 的 actionId/runId 与 ticket、原 task/run 一致；删除回执用显式 SELECT＋UPDATE 关联，不再用 catch 任意数据库失败当重复吞掉。
+- 验证：`r1ItemActions` 16 项（新增并发、对话框撤销/会话变化/Task 变化、keep/cancel 提醒 ID、Artifact 回执身份、Runner 立即等待）；关联 49 项、typecheck 与生产构建通过。按审查要求未重复全量 653 项。
 
 ## 未完成 / 风险
 

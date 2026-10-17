@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import { statSync } from 'node:fs'
 import type { R1Database } from './database.js'
 import { R1Items } from './items.js'
 import type { R1Artifacts } from './artifacts.js'
@@ -61,7 +60,9 @@ export class R1ItemActions {
       notify(ownerId: number, view: ItemActionView | null): void
       choose(name: string, extension: string): Promise<string | null>
       isSessionCurrent(context: { sessionId: string; temporary: boolean }): boolean
+      isOwnerAlive?(ownerId: number): boolean
       isTaskCurrent?(task: ItemActionTaskBinding): boolean
+      onTaskReceipt?(taskId: string): void
       onChanged?(change: { kind: 'deleted' | 'exported'; itemId: string | null; artifactId: string | null }): void
       now?: () => number
       ttlMs?: number
@@ -172,7 +173,9 @@ export class R1ItemActions {
     return removed
   }
 
-  async resolve(ownerId: number, input: { ticket: string; decision: 'delete' | 'export' | 'cancel'; reminderDisposition?: 'keep' | 'cancel' }) {
+  private readonly inFlight = new Map<string, Promise<unknown>>()
+
+  async resolve(ownerId: number, input: { ticket: string; decision: 'delete' | 'export' | 'cancel'; reminderDisposition?: 'keep' | 'cancel' }): Promise<unknown> {
     if (!input || typeof input.ticket !== 'string' || !input.ticket || !['delete', 'export', 'cancel'].includes(input.decision)) {
       throw new Error('INVALID_ITEM_ACTION')
     }
@@ -184,15 +187,47 @@ export class R1ItemActions {
     }
     const record = this.pending.get(input.ticket)
     if (!record || record.context.ownerId !== ownerId) throw new Error('ITEM_ACTION_NOT_FOUND')
-    if (Date.parse(record.view.expiresAt) <= this.now()) {
-      this.drop(input.ticket, ownerId); throw new Error('ITEM_ACTION_EXPIRED')
-    }
-    if (!this.options.isSessionCurrent({ sessionId: record.context.sessionId, temporary: record.context.temporary })) {
-      this.drop(input.ticket, ownerId); throw new Error('ITEM_ACTION_SESSION_CHANGED')
-    }
-    if (record.context.task && this.options.isTaskCurrent && !this.options.isTaskCurrent(record.context.task)) {
-      this.drop(input.ticket, ownerId); throw new Error('ITEM_ACTION_TASK_STALE')
-    }
+    // Concurrent clicks/requests share one commit: only the first may open the
+    // native dialog or write; replays receive the same promise/result.
+    const running = this.inFlight.get(input.ticket)
+    if (running) return running
+    const promise = this.resolveOnce(ownerId, input, record)
+    this.inFlight.set(input.ticket, promise)
+    try { return await promise } finally { if (this.inFlight.get(input.ticket) === promise) this.inFlight.delete(input.ticket) }
+  }
+
+  private trustedFailure(record: Pending, ownerId: number): string | null {
+    if (this.pending.get(record.view.ticket) !== record) return 'ITEM_ACTION_REVOKED'
+    if (Date.parse(record.view.expiresAt) <= this.now()) return 'ITEM_ACTION_EXPIRED'
+    if (!this.options.isSessionCurrent({ sessionId: record.context.sessionId, temporary: record.context.temporary })) return 'ITEM_ACTION_SESSION_CHANGED'
+    if (this.options.isOwnerAlive && !this.options.isOwnerAlive(ownerId)) return 'ITEM_ACTION_OWNER_MISMATCH'
+    if (record.context.task && this.options.isTaskCurrent && !this.options.isTaskCurrent(record.context.task)) return 'ITEM_ACTION_TASK_STALE'
+    return null
+  }
+  /** Real current-state check, also called by the export services after their dialog and before writing. */
+  private assertTrusted(record: Pending, ownerId: number): void {
+    const code = this.trustedFailure(record, ownerId)
+    if (code) throw new Error(code)
+  }
+  /** Every confirmed attempt has one terminal state; repeated requests replay it. */
+  private fail(record: Pending, ownerId: number, code: string): never {
+    if (this.pending.get(record.view.ticket) === record) this.drop(record.view.ticket, ownerId)
+    this.settled.set(record.view.ticket, { ownerId, value: { kind: 'error', at: this.now(), value: code } })
+    throw new Error(code)
+  }
+  private finish(record: Pending, ownerId: number, value: Record<string, unknown>, kind: 'exported' | 'deleted', change: {
+    itemId: string | null; artifactId: string | null
+  }): Record<string, unknown> {
+    this.drop(record.view.ticket, ownerId)
+    this.settled.set(record.view.ticket, { ownerId, value: { kind, at: this.now(), value } })
+    try { this.options.onChanged?.(kind === 'deleted' ? { kind: 'deleted', ...change } : { kind: 'exported', ...change }) } catch { /* committed */ }
+    if (record.context.task) { try { this.options.onTaskReceipt?.(record.context.task.taskId) } catch { /* receipt already persisted */ } }
+    return structuredClone(value)
+  }
+
+  private async resolveOnce(ownerId: number, input: { ticket: string; decision: 'delete' | 'export' | 'cancel'; reminderDisposition?: 'keep' | 'cancel' }, record: Pending): Promise<unknown> {
+    const stale = this.trustedFailure(record, ownerId)
+    if (stale) return this.fail(record, ownerId, stale)
     if (input.decision === 'cancel') {
       this.drop(input.ticket, ownerId)
       const value = { cancelled: true as const }
@@ -200,7 +235,7 @@ export class R1ItemActions {
       return value
     }
     if (input.decision === 'delete') return this.commitDelete(record, ownerId, input.reminderDisposition)
-    if (record.view.action !== 'export') throw new Error('ITEM_ACTION_NOT_FOUND')
+    if (record.view.action !== 'export') throw new Error('INVALID_ITEM_ACTION')
     return this.commitExport(record, ownerId)
   }
 
@@ -211,104 +246,64 @@ export class R1ItemActions {
     // Re-read the real domain state: an Item edit, reminder reschedule or new
     // linked reminder after the preview makes this confirmation stale.
     let preview: ReturnType<R1Items['deletionPreview']>
-    try { preview = this.items.deletionPreview(itemId) } catch { throw new Error('ITEM_ACTION_STALE') }
+    try { preview = this.items.deletionPreview(itemId) } catch { return this.fail(record, ownerId, 'ITEM_ACTION_STALE') }
     if (preview.item.version !== record.itemVersion ||
       JSON.stringify(preview.reminders) !== JSON.stringify(record.reminders)) {
-      this.drop(record.view.ticket, ownerId)
-      throw new Error('ITEM_ACTION_STALE')
+      return this.fail(record, ownerId, 'ITEM_ACTION_STALE')
     }
     let result: ReturnType<R1Items['delete']>
     try {
       result = this.items.delete({ actionId: record.view.ticket, itemId, expectedVersion: record.itemVersion!,
         reminderDisposition: disposition, confirmedReminders: record.reminders! })
     } catch (error) {
-      // A committed action is idempotent through its actionId; a rejected one is
-      // closed so the user must start a new preview from the current state.
-      this.drop(record.view.ticket, ownerId); throw error
+      return this.fail(record, ownerId, error instanceof Error && /^[A-Z][A-Z0-9_]{1,80}$/.test(error.message) ? error.message : 'ITEM_DELETE_FAILED')
     }
-    if (record.context.task) this.absorbReceipt(record, {
-      itemId: result.itemId, deleted: true,
-      remainingReminderIds: preview.reminders.map(reminder => reminder.reminderId),
-      reminderReceipts: result.reminderReceipts.map(receipt => ({ actionId: receipt.actionId, entityId: receipt.entityId,
-        entityVersion: receipt.entityVersion, status: receipt.status, detail: receipt.detail })) })
-    const value = { cancelled: false as const, itemId: result.itemId, deleted: true as const,
-      remainingReminderIds: preview.reminders.map(reminder => reminder.reminderId),
-      reminderReceipts: result.reminderReceipts }
+    // Only reminders the domain actually kept remain linked to the deleted Item.
+    const remainingReminderIds = result.reminderReceipts
+      .filter(receipt => receipt.detail === 'reminder_kept').map(receipt => receipt.entityId)
+    // A link failure keeps the pending ticket so the idempotent domain replay can retry it.
+    if (record.context.task) this.linkTaskReceipt(record)
+    return this.finish(record, ownerId, { cancelled: false, itemId: result.itemId, deleted: true,
+      remainingReminderIds, reminderReceipts: result.reminderReceipts }, 'deleted', { itemId, artifactId: null })
+  }
+
+  private linkTaskReceipt(record: Pending): void {
+    const task = record.context.task!
+    const row = this.db.prepare('SELECT task_id FROM receipts WHERE action_id = ?')
+      .get(record.view.ticket) as { task_id: string | null } | undefined
+    if (!row) throw new Error('TASK_RECEIPT_RECONCILIATION_REQUIRED')
+    if (row.task_id && row.task_id !== task.taskId) throw new Error('TASK_RECEIPT_SCOPE_INVALID')
+    this.db.prepare('UPDATE receipts SET task_id = ?, run_id = ? WHERE action_id = ?')
+      .run(task.taskId, task.runId, record.view.ticket)
+  }
+
+  private finishCancelled(record: Pending, ownerId: number): Record<string, unknown> {
     this.drop(record.view.ticket, ownerId)
-    this.settled.set(record.view.ticket, { ownerId, value: { kind: 'deleted', at: this.now(), value } })
-    try { this.options.onChanged?.({ kind: 'deleted', itemId, artifactId: null }) } catch { /* committed */ }
-    return structuredClone(value)
+    const value = { cancelled: true as const }
+    this.settled.set(record.view.ticket, { ownerId, value: { kind: 'cancelled', at: this.now(), value } })
+    return value
   }
 
   private async commitExport(record: Pending, ownerId: number) {
-    const scope = () => JSON.stringify([record.context.temporary, record.context.sessionId])
+    const task = record.context.task ? { taskId: record.context.task.taskId, runId: record.context.task.runId } : null
+    const assertCurrent = () => this.assertTrusted(record, ownerId)
     try {
       if (record.exportItems) {
-        const result = await exportItems(this.db, record.exportItems, scope, this.options.choose)
-        if (result.cancelled) {
-          this.drop(record.view.ticket, ownerId)
-          const value = { cancelled: true as const }
-          this.settled.set(record.view.ticket, { ownerId, value: { kind: 'cancelled', at: this.now(), value } })
-          return value
-        }
-        if (record.context.task) this.absorbReceipt(record, { path: result.path, format: result.format,
-          itemVersions: result.itemVersions, artifactId: result.artifactId, artifactVersion: result.artifactVersion,
-          byteCount: result.byteCount })
-        this.drop(record.view.ticket, ownerId)
-        this.settled.set(record.view.ticket, { ownerId, value: { kind: 'exported', at: this.now(), value: result } })
-        try { this.options.onChanged?.({ kind: 'exported', itemId: null, artifactId: result.artifactId }) } catch { /* written */ }
-        return structuredClone(result)
+        const result = await exportItems(this.db, record.exportItems,
+          () => JSON.stringify([record.context.temporary, record.context.sessionId]), this.options.choose,
+          { actionId: record.view.ticket, task, assertCurrent })
+        if (result.cancelled) return this.finishCancelled(record, ownerId)
+        return this.finish(record, ownerId, result as unknown as Record<string, unknown>, 'exported', { itemId: null, artifactId: null })
       }
       const artifact = record.exportArtifact!
       const result = await exportArtifact(this.artifacts, artifact,
-        () => record.context.temporary ? record.context.sessionId : null, this.options.choose)
-      if (result.cancelled) {
-        this.drop(record.view.ticket, ownerId)
-        const value = { cancelled: true as const }
-        this.settled.set(record.view.ticket, { ownerId, value: { kind: 'cancelled', at: this.now(), value } })
-        return value
-      }
-      const data = { path: result.path, format: artifact.format,
-        itemVersions: [] as { itemId: string; version: number }[], artifactId: result.artifactId,
-        artifactVersion: result.version, byteCount: statSync(result.path).size }
-      const receipt = { kind: 'receipt' as const, actionId: record.view.ticket, tool: 'notes.export', status: 'succeeded' as const,
-        entityId: result.artifactId, entityVersion: result.version, data, errorCode: null, retryable: false, runId: null }
-      try {
-        this.db.prepare('INSERT INTO receipts(action_id,status,actual_result_json,created_at) VALUES(?,?,?,?)')
-          .run(receipt.actionId, receipt.status, JSON.stringify(receipt), new Date().toISOString())
-      } catch { throw new Error('EXPORT_FILE_WRITTEN_RECEIPT_FAILED') }
-      if (record.context.task) this.absorbReceipt(record, data)
-      const value = { cancelled: false as const, ...data, receipt }
-      this.drop(record.view.ticket, ownerId)
-      this.settled.set(record.view.ticket, { ownerId, value: { kind: 'exported', at: this.now(), value } })
-      try { this.options.onChanged?.({ kind: 'exported', itemId: null, artifactId: result.artifactId }) } catch { /* written */ }
-      return structuredClone(value)
+        () => record.context.temporary ? record.context.sessionId : null, this.options.choose,
+        { db: this.db, actionId: record.view.ticket, task, assertCurrent })
+      if (result.cancelled) return this.finishCancelled(record, ownerId)
+      return this.finish(record, ownerId, result as unknown as Record<string, unknown>, 'exported', { itemId: null, artifactId: artifact.artifactId })
     } catch (error) {
-      const code = error instanceof Error && /^[A-Z][A-Z0-9_]{1,80}$/.test(error.message) ? error.message : 'ITEM_ACTION_FAILED'
-      // A written file whose receipt failed must never be silently rewritten:
-      // keep the ticket settled with the same explicit error for any repeat.
-      if (code === 'EXPORT_FILE_WRITTEN_RECEIPT_FAILED') {
-        this.drop(record.view.ticket, ownerId)
-        this.settled.set(record.view.ticket, { ownerId, value: { kind: 'error', at: this.now(), value: code } })
-      }
-      throw new Error(code)
-    }
-  }
-
-  /** Attach the confirmed domain receipt to the original task/run/action for resume reconciliation. */
-  private absorbReceipt(record: Pending, data: Record<string, unknown>): void {
-    const task = record.context.task!
-    const receipt = { kind: 'receipt' as const, actionId: record.view.ticket, tool: record.view.action === 'confirm_item_delete' ? 'notes.delete' : 'notes.export',
-      status: 'succeeded' as const, entityId: (data.itemId as string | undefined) ?? (data.artifactId as string | undefined) ?? null,
-      entityVersion: null, data, errorCode: null, retryable: false, runId: task.runId }
-    try {
-      this.db.prepare('INSERT INTO receipts(action_id, task_id, run_id, entity_id, entity_version, status, actual_result_json, created_at) VALUES(?,?,?,?,?,?,?,?)')
-        .run(receipt.actionId, task.taskId, task.runId, receipt.entityId, null, receipt.status, JSON.stringify(receipt), new Date().toISOString())
-    } catch {
-      // The domain receipt already exists for delete (same actionId) or the export
-      // receipt was recorded above; link it to the original task/run instead.
-      this.db.prepare('UPDATE receipts SET task_id = ?, run_id = ? WHERE action_id = ? AND task_id IS NULL')
-        .run(task.taskId, task.runId, receipt.actionId)
+      const code = error instanceof Error && /^[A-Z][A-Z0-9_]{1,80}$/.test(error.message) ? error.message : 'ITEM_EXPORT_FAILED'
+      return this.fail(record, ownerId, code)
     }
   }
 }

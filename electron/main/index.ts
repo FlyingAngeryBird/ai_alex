@@ -249,6 +249,9 @@ void app.whenReady().then(async () => {
       isSessionCurrent: context => context.temporary
         ? r1SessionMode.temporary === true && r1SessionMode.sessionId === context.sessionId
         : r1SessionMode.temporary !== true,
+      isOwnerAlive: ownerId => BrowserWindow.getAllWindows().some(window =>
+        !window.isDestroyed() && !window.webContents.isDestroyed() && window.webContents.id === ownerId),
+      onTaskReceipt(taskId) { try { r1Tasks?.refreshExternalReceipts(taskId) } catch { /* receipt already persisted */ } },
       isTaskCurrent: task => {
         try { const current = r1Tasks!.get(task.taskId)
           return current.goalVersion === task.goalVersion && !['cancelled', 'failed'].includes(current.status)

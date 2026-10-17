@@ -1008,6 +1008,7 @@ async function resolveItemAction(decision: 'delete' | 'export' | 'cancel', dispo
         if (itemAction.value?.ticket === pending.ticket) itemAction.value = null
         conversation.addSystemMessage(message)
       } else if (itemAction.value?.ticket === pending.ticket) itemActionError.value = message
+      else conversation.addSystemMessage(message)
       return
     }
     if (itemAction.value?.ticket === pending.ticket) itemAction.value = null
