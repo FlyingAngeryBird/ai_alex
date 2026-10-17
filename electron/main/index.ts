@@ -252,6 +252,9 @@ void app.whenReady().then(async () => {
       isOwnerAlive: ownerId => BrowserWindow.getAllWindows().some(window =>
         !window.isDestroyed() && !window.webContents.isDestroyed() && window.webContents.id === ownerId),
       onTaskReceipt(taskId) { try { r1Tasks?.refreshExternalReceipts(taskId) } catch { /* receipt already persisted */ } },
+      onTaskActionSettled(taskId, actionId, outcome, detail) {
+        try { r1Tasks?.settlePendingUiAction(taskId, actionId, outcome, detail) } catch { /* terminal state stays in the receipt */ }
+      },
       isTaskCurrent: task => {
         try { const current = r1Tasks!.get(task.taskId)
           return current.goalVersion === task.goalVersion && !['cancelled', 'failed'].includes(current.status)
@@ -260,6 +263,8 @@ void app.whenReady().then(async () => {
       onChanged(change) { for (const window of BrowserWindow.getAllWindows()) window.webContents.send('r1.itemsChanged', change) }
     })
     r1Tasks.bindPendingInvalidator((_taskId, actionIds, reason) => { itemActions?.revokePending(actionIds, reason) })
+    const itemActionSweep = setInterval(() => { itemActions?.sweep() }, 30_000)
+    itemActionSweep.unref?.()
     registerItemActionHandlers(itemActions)
     const taskTools = new R1TaskToolExecutor(r1Tasks, r1PromptAssets, new R1Items(r1Database), createDoubaoSearchProvider(), createPageReader(), focusServices, r1Music, itemActions)
     r1TaskRunner = new R1TaskRunner(r1Tasks, r1PromptAssets, taskTools, r1Artifacts,

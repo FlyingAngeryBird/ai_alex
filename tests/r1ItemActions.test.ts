@@ -167,7 +167,9 @@ function taskSetup(ownerId = 7) {
     choose: async (_name, extension) => join(directory, `task-export.${extension}`),
     isSessionCurrent: () => true, isTaskCurrent: task => {
       try { return tasks.get(task.taskId).goalVersion === task.goalVersion } catch { return false }
-    }
+    },
+    onTaskReceipt: taskId => { tasks.refreshExternalReceipts(taskId) },
+    onTaskActionSettled: (taskId, actionId, outcome, detail) => { tasks.settlePendingUiAction(taskId, actionId, outcome, detail) }
   })
   const executor = new R1TaskToolExecutor(tasks, assets, items, undefined, undefined, undefined, undefined, actions)
   tasks.bindPendingInvalidator((_taskId, actionIds, reason) => { actions.revokePending(actionIds, reason) })
@@ -379,7 +381,7 @@ it('stops a Task immediately when a ui_action is issued and adopts the confirmed
     body: '把这条记录删掉', status: 'final' })
   const task = tasks.accept({ requestKey: 'req', sourceMessageId: source.messageId, timezone: 'Asia/Shanghai',
     goal: '删除合成记录', constraints: [], complexity: 'complex', ownerId: 7,
-    authorizedAliases: ['read_file', 'notes_list', 'notes_delete'] })
+    authorizedAliases: ['read_file', 'notes_list', 'notes_delete', 'notes_export'] })
   let requests = 0
   const provider = { async request() {
     requests++
@@ -396,7 +398,9 @@ it('stops a Task immediately when a ui_action is issued and adopts the confirmed
     if (requests === 3) {
       const call = { type: 'function_call', id: 'c3', call_id: 'c3', name: 'notes_delete',
         arguments: JSON.stringify({ itemId: item.itemId, expectedVersion: 1, reminderDisposition: 'keep', confirmedReminders: [] }) }
-      return { id: 'r3', output: [call], calls: [call], text: '', usage: null }
+      const dependent = { type: 'function_call', id: 'c4', call_id: 'c4', name: 'notes_export',
+        arguments: JSON.stringify({ itemIds: [item.itemId], artifactId: null, artifactVersion: null, format: 'txt' }) }
+      return { id: 'r3', output: [call, dependent], calls: [call, dependent], text: '', usage: null }
     }
     throw new Error('RUNNER_CONTINUED_AFTER_UI_ACTION')
   } } as unknown as ReturnType<typeof import('../electron/main/providers/arkResponsesProvider').createArkResponsesProvider>
@@ -408,6 +412,12 @@ it('stops a Task immediately when a ui_action is issued and adopts the confirmed
     const waiting = tasks.get(task.taskId)
     expect(waiting.status).toBe('waiting_input')
     expect(waiting.result).toMatchObject({ completionStatus: 'needs_input', unresolved: ['等待界面确认'] })
+    expect(tasks.pendingUiActions(task.taskId)).toHaveLength(1)
+    const checkpoint = JSON.parse((db.prepare('SELECT checkpoint_json FROM agent_tasks WHERE task_id = ?')
+      .get(task.taskId) as { checkpoint_json: string }).checkpoint_json) as {
+      actions?: Array<{ alias: string }>; pendingUiActions?: Array<{ alias: string }> }
+    expect(checkpoint.actions?.map(action => action.alias)).toEqual(['read_file', 'notes_list', 'notes_delete'])
+    expect(checkpoint.pendingUiActions?.map(action => action.alias)).toEqual(['notes_delete'])
     const ticket = tasks.pendingUiActions(task.taskId)[0].actionId
     expect(items.list()).toHaveLength(1)
     await actions.resolve(7, { ticket, decision: 'delete', reminderDisposition: 'keep' })
@@ -419,4 +429,113 @@ it('stops a Task immediately when a ui_action is issued and adopts the confirmed
     expect(() => tasks.verifyRecovery(next.lease)).not.toThrow()
     expect(items.list()).toHaveLength(0)
   } finally { tasks.close(); await runner.close(); db.close() }
+})
+
+it('settles a cancelled Task confirmation so resume and completion are not blocked forever', async () => {
+  const s = taskSetup()
+  try {
+    const item = s.items.create({ actionId: 'seed', kind: 'note', title: '记录', body: '正文' }).item
+    s.executor.execute(s.active.lease, 'notes_list', { itemIds: [item.itemId] }, 'list')
+    const output = await s.executor.executeAsync(s.active.lease, 'notes_delete',
+      { itemId: item.itemId, expectedVersion: 1, reminderDisposition: 'keep', confirmedReminders: [] }, 'delete-call')
+    const ticket = (output as { uiActionId: string }).uiActionId
+    s.tasks.publish(s.active.lease, draft(s.task, 'needs_input', ['等待界面确认']), s.artifacts)
+    expect(s.tasks.get(s.task.taskId).status).toBe('waiting_input')
+    expect(await s.actions.resolve(7, { ticket, decision: 'cancel' })).toEqual({ cancelled: true })
+    expect(s.tasks.pendingUiActions(s.task.taskId)).toHaveLength(0)
+    const checkpoint = JSON.parse((s.db.prepare('SELECT checkpoint_json FROM agent_tasks WHERE task_id = ?')
+      .get(s.task.taskId) as { checkpoint_json: string }).checkpoint_json) as { uiActionOutcomes?: Array<{ actionId: string; outcome: string }> }
+    expect(checkpoint.uiActionOutcomes).toContainEqual(expect.objectContaining({ actionId: ticket, outcome: 'cancelled' }))
+    s.tasks.resume(s.task.taskId, s.task.goalVersion)
+    const next = s.tasks.claimNext()!
+    expect(() => s.tasks.verifyRecovery(next.lease)).not.toThrow()
+    const input = s.tasks.beginDecision(next.lease)
+    expect(input.observations.some(observation => observation.refId === ticket &&
+      observation.summary.includes('cancelled') && observation.summary.includes('未执行'))).toBe(true)
+    expect(input.validReceiptActionIds).not.toContain(ticket)
+    expect(() => s.tasks.publish(next.lease, draft(s.task, 'completed'), s.artifacts)).not.toThrow()
+    expect(s.tasks.get(s.task.taskId).status).toBe('succeeded')
+  } finally { s.close() }
+})
+
+it('sweeps an expired Task confirmation into a terminal state', async () => {
+  const db = openR1Database(':memory:'), items = new R1Items(db), artifacts = new R1Artifacts(db)
+  const conversations = new R1Conversations(db)
+  const tasks = new R1TaskSupervisor(db, assets, () => 0)
+  let now = Date.parse('2026-10-17T12:00:00Z')
+  const actions = new R1ItemActions(db, items, artifacts, {
+    notify: () => {}, choose: async () => null, isSessionCurrent: () => true,
+    isTaskCurrent: task => { try { return tasks.get(task.taskId).goalVersion === task.goalVersion } catch { return false } },
+    onTaskActionSettled: (taskId, actionId, outcome, detail) => { tasks.settlePendingUiAction(taskId, actionId, outcome, detail) },
+    now: () => now
+  })
+  const executor = new R1TaskToolExecutor(tasks, assets, items, undefined, undefined, undefined, undefined, actions)
+  try {
+    const item = items.create({ actionId: 'seed', kind: 'note', title: '记录', body: '正文' }).item
+    const source = conversations.append({ sessionId: conversations.start(), turnId: 'turn', role: 'user', body: '删除', status: 'final' })
+    const task = tasks.accept({ requestKey: 'req-ttl', sourceMessageId: source.messageId, timezone: 'Asia/Shanghai',
+      goal: '删除合成记录', constraints: [], complexity: 'complex', ownerId: 7,
+      authorizedAliases: ['read_file', 'notes_list', 'notes_delete'] })
+    const lease = tasks.claimNext()!.lease
+    executor.execute(lease, 'read_file', { file_path: '/skills/capture-item/SKILL.md' }, 'skill')
+    executor.execute(lease, 'notes_list', { itemIds: [item.itemId] }, 'list')
+    await executor.executeAsync(lease, 'notes_delete', { itemId: item.itemId, expectedVersion: 1,
+      reminderDisposition: 'keep', confirmedReminders: [] }, 'delete-call')
+    tasks.waitForUserAction(lease)
+    now += 300_001
+    actions.sweep()
+    expect(tasks.pendingUiActions(task.taskId)).toHaveLength(0)
+    const checkpoint = JSON.parse((db.prepare('SELECT checkpoint_json FROM agent_tasks WHERE task_id = ?')
+      .get(task.taskId) as { checkpoint_json: string }).checkpoint_json) as { uiActionOutcomes?: Array<{ outcome: string }> }
+    expect(checkpoint.uiActionOutcomes).toContainEqual(expect.objectContaining({ outcome: 'expired' }))
+    expect(items.list()).toHaveLength(1)
+    tasks.resume(task.taskId, task.goalVersion)
+    const next = tasks.claimNext()!
+    expect(() => tasks.verifyRecovery(next.lease)).not.toThrow()
+  } finally { tasks.close(); db.close() }
+})
+
+it('rejects a second confirmation in the same window instead of silently replacing the first', async () => {
+  const s = setup()
+  try {
+    const first = s.items.create({ actionId: 'seed-1', kind: 'note', title: '记录一', body: '正文' }).item
+    const second = s.items.create({ actionId: 'seed-2', kind: 'note', title: '记录二', body: '正文' }).item
+    const offered = s.actions.offerDelete(s.context(), { itemId: first.itemId, expectedVersion: 1 })
+    expect(() => s.actions.offerExport(s.context(), { reason: 'model', kind: 'export', itemIds: [second.itemId],
+      artifactId: null, artifactVersion: null, format: 'txt' })).toThrow('ITEM_ACTION_ALREADY_PENDING')
+    expect(await s.actions.resolve(1, { ticket: offered.ticket, decision: 'cancel' })).toEqual({ cancelled: true })
+    expect(s.items.list()).toHaveLength(2)
+  } finally { s.close() }
+})
+
+it('recovers a committed delete when only the Task receipt link failed, without deleting again', async () => {
+  const s = taskSetup()
+  try {
+    const item = s.items.create({ actionId: 'seed', kind: 'note', title: '记录', body: '正文' }).item
+    s.executor.execute(s.active.lease, 'notes_list', { itemIds: [item.itemId] }, 'list')
+    const output = await s.executor.executeAsync(s.active.lease, 'notes_delete',
+      { itemId: item.itemId, expectedVersion: 1, reminderDisposition: 'keep', confirmedReminders: [] }, 'delete-call')
+    const ticket = (output as { uiActionId: string }).uiActionId
+    const service = s.actions as unknown as { linkTaskReceipt: (record: unknown) => void }
+    const original = service.linkTaskReceipt
+    let failed = false
+    service.linkTaskReceipt = function (record: unknown) {
+      if (!failed) { failed = true; throw new Error('TASK_RECEIPT_LINK_FAILED') }
+      return original.call(this, record)
+    }
+    await expect(s.actions.resolve(7, { ticket, decision: 'delete', reminderDisposition: 'keep' }))
+      .rejects.toThrow('TASK_RECEIPT_LINK_FAILED')
+    expect(s.items.list()).toHaveLength(0)
+    const unlinked = s.db.prepare('SELECT task_id FROM receipts WHERE action_id = ?').get(ticket) as { task_id: string | null }
+    expect(unlinked.task_id).toBeNull()
+    const retried = await s.actions.resolve(7, { ticket, decision: 'delete', reminderDisposition: 'keep' })
+    expect(retried).toMatchObject({ cancelled: false, deleted: true })
+    expect(s.items.list()).toHaveLength(0)
+    const linked = s.db.prepare('SELECT task_id, run_id FROM receipts WHERE action_id = ?').get(ticket) as { task_id: string; run_id: string }
+    expect(linked).toMatchObject({ task_id: s.task.taskId, run_id: s.active.lease.runId })
+    s.tasks.publish(s.active.lease, draft(s.task, 'needs_input', ['等待界面确认']), s.artifacts)
+    s.tasks.resume(s.task.taskId, s.task.goalVersion)
+    const next = s.tasks.claimNext()!
+    expect(() => s.tasks.verifyRecovery(next.lease)).not.toThrow()
+  } finally { s.close() }
 })

@@ -63,6 +63,7 @@ export class R1ItemActions {
       isOwnerAlive?(ownerId: number): boolean
       isTaskCurrent?(task: ItemActionTaskBinding): boolean
       onTaskReceipt?(taskId: string): void
+      onTaskActionSettled?(taskId: string, actionId: string, outcome: 'executed' | 'cancelled' | 'expired' | 'superseded' | 'revoked' | 'failed', detail: string): void
       onChanged?(change: { kind: 'deleted' | 'exported'; itemId: string | null; artifactId: string | null }): void
       now?: () => number
       ttlMs?: number
@@ -71,12 +72,25 @@ export class R1ItemActions {
   private ttl(): number { return this.options.ttlMs ?? ITEM_ACTION_TTL_MS }
   private prune(): void {
     const now = this.now()
-    for (const [id, record] of this.pending) if (Date.parse(record.view.expiresAt) <= now) this.drop(id, record.context.ownerId)
+    for (const [id, record] of this.pending) if (Date.parse(record.view.expiresAt) <= now) {
+      this.drop(id, record.context.ownerId, 'expired', '确认已过期，未执行。')
+    }
     for (const [id, record] of this.settled) if (record.value.at + this.ttl() <= now) this.settled.delete(id)
   }
-  private drop(ticket: string, ownerId: number): void {
-    if (!this.pending.delete(ticket)) return
+  /** TTL sweep: an expired confirmation must not stay active inside a Task forever. */
+  sweep(): void { this.prune() }
+  private drop(ticket: string, ownerId: number,
+    outcome: 'executed' | 'cancelled' | 'expired' | 'superseded' | 'revoked' | 'failed' = 'revoked',
+    detail = '确认已撤销，未执行。'): void {
+    const record = this.pending.get(ticket)
+    if (!record) return
+    this.pending.delete(ticket)
     this.options.notify(ownerId, null)
+    if (record.context.task) {
+      try {
+        this.options.onTaskActionSettled?.(record.context.task.taskId, ticket, outcome, detail)
+      } catch { /* the supervisor records its own state; the receipt write stays authoritative */ }
+    }
   }
   private bounded(): void {
     this.prune()
@@ -109,11 +123,11 @@ export class R1ItemActions {
       if (previous.view.action !== 'confirm_item_delete' || previous.view.data.item?.itemId !== input.itemId) throw new Error('ITEM_ACTION_ALREADY_PENDING')
       return structuredClone(previous.view)
     }
-    if ([...this.pending.values()].some(record => record.view.action === 'confirm_item_delete' &&
-      record.view.data.item?.itemId === input.itemId && record.context.sessionId === context.sessionId)) throw new Error('ITEM_ACTION_ALREADY_PENDING')
-    // One visible confirmation per window keeps the renderer and the model in
-    // sync; a newer request supersedes an older unconfirmed preview.
-    for (const [id, record] of this.pending) if (record.context.ownerId === context.ownerId) this.drop(id, context.ownerId)
+    // One visible confirmation per window: a second Task/confirmation is
+    // rejected instead of silently replacing an unconfirmed one.
+    if ([...this.pending.values()].some(record => record.context.ownerId === context.ownerId)) {
+      throw new Error('ITEM_ACTION_ALREADY_PENDING')
+    }
     this.bounded()
     const view: ItemActionView = { ticket, action: 'confirm_item_delete',
       expiresAt: new Date(this.now() + this.ttl()).toISOString(),
@@ -132,7 +146,9 @@ export class R1ItemActions {
       if (previous.view.action !== 'export') throw new Error('ITEM_ACTION_ALREADY_PENDING')
       return structuredClone(previous.view)
     }
-    for (const [id, record] of this.pending) if (record.context.ownerId === context.ownerId) this.drop(id, context.ownerId)
+    if ([...this.pending.values()].some(record => record.context.ownerId === context.ownerId)) {
+      throw new Error('ITEM_ACTION_ALREADY_PENDING')
+    }
     this.bounded()
     const view: ItemActionView = { ticket: ticket ?? randomUUID(), action: 'export',
       expiresAt: new Date(this.now() + this.ttl()).toISOString(), data: { format: target.format } }
@@ -155,12 +171,12 @@ export class R1ItemActions {
   }
 
   revokeOwner(ownerId: number): void {
-    for (const [id, record] of this.pending) if (record.context.ownerId === ownerId) this.drop(id, ownerId)
+    for (const [id, record] of this.pending) if (record.context.ownerId === ownerId) this.drop(id, ownerId, 'revoked', '窗口已关闭，未执行。')
   }
   revokeSession(sessionId: string): void {
-    for (const [id, record] of this.pending) if (record.context.sessionId === sessionId) this.drop(id, record.context.ownerId)
+    for (const [id, record] of this.pending) if (record.context.sessionId === sessionId) this.drop(id, record.context.ownerId, 'revoked', '会话已切换，未执行。')
   }
-  revokeAll(): void { for (const [id, record] of this.pending) this.drop(id, record.context.ownerId) }
+  revokeAll(): void { for (const [id, record] of this.pending) this.drop(id, record.context.ownerId, 'revoked', '会话已切换，未执行。') }
   revokePending(actionIds: string[], reason = 'TASK_STOPPED'): string[] {
     const removed: string[] = []
     for (const id of actionIds) {
@@ -168,7 +184,7 @@ export class R1ItemActions {
       if (!record) continue
       removed.push(id)
       this.settled.set(id, { ownerId: record.context.ownerId, value: { kind: 'error', at: this.now(), value: reason } })
-      this.drop(id, record.context.ownerId)
+      this.drop(id, record.context.ownerId, 'revoked', reason)
     }
     return removed
   }
@@ -211,14 +227,14 @@ export class R1ItemActions {
   }
   /** Every confirmed attempt has one terminal state; repeated requests replay it. */
   private fail(record: Pending, ownerId: number, code: string): never {
-    if (this.pending.get(record.view.ticket) === record) this.drop(record.view.ticket, ownerId)
+    if (this.pending.get(record.view.ticket) === record) this.drop(record.view.ticket, ownerId, 'failed', code)
     this.settled.set(record.view.ticket, { ownerId, value: { kind: 'error', at: this.now(), value: code } })
     throw new Error(code)
   }
   private finish(record: Pending, ownerId: number, value: Record<string, unknown>, kind: 'exported' | 'deleted', change: {
     itemId: string | null; artifactId: string | null
   }): Record<string, unknown> {
-    this.drop(record.view.ticket, ownerId)
+    this.drop(record.view.ticket, ownerId, 'executed', '操作已执行。')
     this.settled.set(record.view.ticket, { ownerId, value: { kind, at: this.now(), value } })
     try { this.options.onChanged?.(kind === 'deleted' ? { kind: 'deleted', ...change } : { kind: 'exported', ...change }) } catch { /* committed */ }
     if (record.context.task) { try { this.options.onTaskReceipt?.(record.context.task.taskId) } catch { /* receipt already persisted */ } }
@@ -228,12 +244,7 @@ export class R1ItemActions {
   private async resolveOnce(ownerId: number, input: { ticket: string; decision: 'delete' | 'export' | 'cancel'; reminderDisposition?: 'keep' | 'cancel' }, record: Pending): Promise<unknown> {
     const stale = this.trustedFailure(record, ownerId)
     if (stale) return this.fail(record, ownerId, stale)
-    if (input.decision === 'cancel') {
-      this.drop(input.ticket, ownerId)
-      const value = { cancelled: true as const }
-      this.settled.set(input.ticket, { ownerId, value: { kind: 'cancelled', at: this.now(), value } })
-      return value
-    }
+    if (input.decision === 'cancel') return this.finishCancelled(record, ownerId)
     if (input.decision === 'delete') return this.commitDelete(record, ownerId, input.reminderDisposition)
     if (record.view.action !== 'export') throw new Error('INVALID_ITEM_ACTION')
     return this.commitExport(record, ownerId)
@@ -243,6 +254,18 @@ export class R1ItemActions {
     if (record.view.action !== 'confirm_item_delete' || !record.view.data.item) throw new Error('INVALID_ITEM_ACTION')
     if (disposition !== 'keep' && disposition !== 'cancel') throw new Error('INVALID_DISPOSITION')
     const itemId = record.view.data.item.itemId
+    // The deletion may already be committed while only the Task link failed on a
+    // previous attempt; the real receipt decides, never a second delete.
+    const committed = this.readCommittedDelete(record, itemId)
+    if (committed) {
+      if (record.context.task) {
+        try { this.linkTaskReceipt(record) } catch { throw new Error('TASK_RECEIPT_LINK_FAILED') }
+      }
+      const remaining = committed.reminderReceipts
+        .filter(receipt => receipt.detail === 'reminder_kept').map(receipt => receipt.entityId)
+      return this.finish(record, ownerId, { cancelled: false, itemId: committed.itemId, deleted: true,
+        remainingReminderIds: remaining, reminderReceipts: committed.reminderReceipts }, 'deleted', { itemId, artifactId: null })
+    }
     // Re-read the real domain state: an Item edit, reminder reschedule or new
     // linked reminder after the preview makes this confirmation stale.
     let preview: ReturnType<R1Items['deletionPreview']>
@@ -261,12 +284,26 @@ export class R1ItemActions {
     // Only reminders the domain actually kept remain linked to the deleted Item.
     const remainingReminderIds = result.reminderReceipts
       .filter(receipt => receipt.detail === 'reminder_kept').map(receipt => receipt.entityId)
-    // A link failure keeps the pending ticket so the idempotent domain replay can retry it.
-    if (record.context.task) this.linkTaskReceipt(record)
+    // The domain receipt exists now: a link failure keeps the ticket pending and
+    // reports the committed deletion, so retrying only restores the Task link.
+    if (record.context.task) {
+      try { this.linkTaskReceipt(record) } catch { throw new Error('TASK_RECEIPT_LINK_FAILED') }
+    }
     return this.finish(record, ownerId, { cancelled: false, itemId: result.itemId, deleted: true,
       remainingReminderIds, reminderReceipts: result.reminderReceipts }, 'deleted', { itemId, artifactId: null })
   }
 
+  private readCommittedDelete(record: Pending, itemId: string): ReturnType<R1Items['delete']> | null {
+    const row = this.db.prepare('SELECT status, actual_result_json FROM receipts WHERE action_id = ?')
+      .get(record.view.ticket) as { status: string; actual_result_json: string } | undefined
+    if (!row || row.status !== 'succeeded') return null
+    const parsed = JSON.parse(row.actual_result_json) as { result?: ReturnType<R1Items['delete']> }
+    const result = parsed.result
+    if (!result || result.itemId !== itemId || !Array.isArray(result.reminderReceipts)) {
+      throw new Error('TASK_RECEIPT_RECONCILIATION_REQUIRED')
+    }
+    return result
+  }
   private linkTaskReceipt(record: Pending): void {
     const task = record.context.task!
     const row = this.db.prepare('SELECT task_id FROM receipts WHERE action_id = ?')
@@ -278,7 +315,7 @@ export class R1ItemActions {
   }
 
   private finishCancelled(record: Pending, ownerId: number): Record<string, unknown> {
-    this.drop(record.view.ticket, ownerId)
+    this.drop(record.view.ticket, ownerId, 'cancelled', '用户取消，未执行。')
     const value = { cancelled: true as const }
     this.settled.set(record.view.ticket, { ownerId, value: { kind: 'cancelled', at: this.now(), value } })
     return value

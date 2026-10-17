@@ -997,7 +997,8 @@ async function resolveItemAction(decision: 'delete' | 'export' | 'cancel', dispo
       ...(disposition ? { reminderDisposition: disposition } : {}) })
     if (!result.ok) {
       const code = result.error.code
-      const message = code === 'EXPORT_FILE_WRITTEN_RECEIPT_FAILED' ? '文件已写出，但导出回执未能保存。请检查所选位置，不要重复导出。'
+      const message = code === 'TASK_RECEIPT_LINK_FAILED' ? '事项已删除，但任务记录关联失败；请重试关联，不要重复删除。'
+        : code === 'EXPORT_FILE_WRITTEN_RECEIPT_FAILED' ? '文件已写出，但导出回执未能保存。请检查所选位置，不要重复导出。'
         : ['ITEM_ACTION_STALE', 'VERSION_CONFLICT', 'REMINDER_CONFIRMATION_STALE'].includes(code) ? '这一项已有新的修改，请关闭后重新提出请求。'
           : code === 'ITEM_ACTION_EXPIRED' ? '这次确认已过期，请重新提出请求。'
             : ['ITEM_ACTION_SESSION_CHANGED', 'ITEM_ACTION_TASK_STALE', 'ITEM_ACTION_NOT_FOUND', 'ITEM_ACTION_OWNER_MISMATCH',

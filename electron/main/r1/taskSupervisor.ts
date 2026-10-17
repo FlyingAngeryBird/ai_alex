@@ -15,10 +15,11 @@ export type TaskSource = { messageId: string; sessionId: string; turnId: string;
 type PlanStep = { stepId: string; action: string; dependsOn: string[];
   status: 'pending' | 'running' | 'completed' | 'blocked' | 'cancelled'; successCondition: string }
 type PendingUiAction = { actionId: string; alias: string; runId: string; goalVersion: number }
+export type UiActionOutcome = { actionId: string; alias: string; outcome: 'executed' | 'cancelled' | 'expired' | 'superseded' | 'revoked' | 'failed'; detail: string; at: string }
 type TaskCheckpoint = { version: 1; requestKey: string; requestFingerprint?: string; source: TaskSource; sourceRefs: string[];
   contextVersion: number; deletionEpoch: number; authorizedAliases: string[]; loadedSkillIds: string[];
   runId: string | null; stopRequested: 'paused' | 'cancelled' | null; planVersion: number; plan: PlanStep[];
-  ownerId?: number; pendingUiActions?: PendingUiAction[];
+  ownerId?: number; pendingUiActions?: PendingUiAction[]; uiActionOutcomes?: UiActionOutcome[];
   observations: R1TaskInput['observations']; receiptActionIds: string[]; progressBrief: string;
   actions?: Array<{ actionId: string; alias: string; runId: string; fingerprint?: string; callId?: string }>;
   toolReceipts?: TaskToolReceipt[];
@@ -399,6 +400,35 @@ ${source.snippet}
   bindPendingInvalidator(fn: (taskId: string, actionIds: string[], reason: string) => void): void {
     this.pendingInvalidator = fn
   }
+  /**
+   * A cancelled/expired/superseded/failed confirmation is a terminal fact for
+   * the original Task action: it must stop blocking completion, stay visible to
+   * the model as "not executed", and never be retried automatically.
+   */
+  settlePendingUiAction(taskId: string, actionId: string, outcome: UiActionOutcome['outcome'], detail: string): void {
+    const record = this.records.get(taskId)
+    if (!record) return
+    const pending = record.checkpoint.pendingUiActions ?? []
+    const index = pending.findIndex(item => item.actionId === actionId)
+    const outcomes = record.checkpoint.uiActionOutcomes ?? []
+    const existing = outcomes.find(item => item.actionId === actionId)
+    if (index < 0 && existing) return
+    if (index >= 0) record.checkpoint.pendingUiActions = pending.filter(item => item.actionId !== actionId)
+    if (!existing) {
+      const action = (record.checkpoint.actions ?? []).find(item => item.actionId === actionId)
+      const alias = action?.alias ?? 'notes_delete'
+      const tool = (() => { try { return this.assets.toolDefinition(alias).name } catch { return alias } })()
+      outcomes.push({ actionId, alias, outcome, detail: detail.slice(0, 300), at: new Date().toISOString() })
+      record.checkpoint.uiActionOutcomes = outcomes.slice(-20)
+      record.checkpoint.observations.push({ refId: actionId, kind: 'receipt', version: 1,
+        summary: outcome === 'executed' ? `${tool}: 已执行。${detail.slice(0, 220)}`
+          : `${tool}: ${outcome}，未执行。${detail.slice(0, 220)}`, resourcePath: null })
+      if (record.checkpoint.observations.length > 50) record.checkpoint.observations.splice(0, record.checkpoint.observations.length - 50)
+    }
+    record.checkpoint.progressBrief = outcome === 'executed' ? '界面确认已完成，已记录真实回执。'
+      : '界面确认未执行；任务恢复后以这条事实为准，不自动重试。'
+    this.persist(record); this.emit(record, 'updated')
+  }
   /** A UI action found a real stored receipt; reflect it without resuming or replaying work. */
   refreshExternalReceipts(taskId: string): R1Task {
     const record = this.checked(taskId)
@@ -720,8 +750,11 @@ ${source.snippet}
   verifyRecovery(lease: TaskLease): void {
     this.assertLease(lease)
     const record = this.checked(lease.taskId)
+    const notExecuted = new Set((record.checkpoint.uiActionOutcomes ?? [])
+      .filter(item => item.outcome !== 'executed').map(item => item.actionId))
     for (const action of record.checkpoint.actions ?? []) {
       if (action.runId === lease.runId) continue
+      if (notExecuted.has(action.actionId)) continue
       if (!record.checkpoint.receiptActionIds.includes(action.actionId)) throw new Error('TASK_RECEIPT_RECONCILIATION_REQUIRED')
       const canonical = record.checkpoint.toolReceipts?.find(receipt => receipt.actionId === action.actionId)
       if (!canonical || canonical.status === 'unknown') throw new Error('TASK_RECEIPT_RECONCILIATION_REQUIRED')

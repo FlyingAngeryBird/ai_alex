@@ -8,6 +8,7 @@
 | --- | --- | --- | --- |
 | D1 | notes_delete/notes_export：文字＋原生实时语音＋Task＋可信 UI 非阻塞桥；DEC-053；资产 3.5.0/schema 3.2.0 | 代码完成，待审查；真实服务证据受阻 | `86489a9` |
 | D1a | 审查修复：保存框中真实态复核、并发导出单提交、Task 立即等待、remainingReminderIds、导出回执身份 | 代码完成，待正式审查 | `68d3abd` |
+| D1b | 审查修复：取消/过期/替换结算到原Task、删除已提交后关联恢复、同批仅执行到 ui_action | 代码完成，待正式审查 | 本批提交 |
 | D2 | Web 完成合同（有效引用/读取级别/用户明确要求/真实缺口） | 未开始，待 D1 审查 | — |
 
 ## D1 实现
@@ -39,9 +40,18 @@
 - 导出回执身份：`exportItems`/`exportArtifact` 接受 actionId/task/run，回执 JSON 的 actionId/runId 与 ticket、原 task/run 一致；删除回执用显式 SELECT＋UPDATE 关联，不再用 catch 任意数据库失败当重复吞掉。
 - 验证：`r1ItemActions` 16 项（新增并发、对话框撤销/会话变化/Task 变化、keep/cancel 提醒 ID、Artifact 回执身份、Runner 立即等待）；关联 49 项、typecheck 与生产构建通过。按审查要求未重复全量 653 项。
 
+## D1b 审查修复（三个闭环缺口）
+
+- pending 终态：取消（UI/保存框）、TTL 过期、窗口/会话撤销、确认失败都会调用 `onTaskActionSettled→settlePendingUiAction`，从原 Task 的 `pendingUiActions` 移除并写入 `uiActionOutcomes`＋observation（“cancelled/expired/…，未执行”），`verifyRecovery` 对其跳过核对；恢复后可正常继续/发布，不会被 `UI_PENDING` 永久阻塞，也不会自动重试已拒动作。主进程每 30s sweep 过期 pending。
+- 同窗口第二份确认：不再静默替换，返回 `ITEM_ACTION_ALREADY_PENDING`，原 pending 保持有效；同批多个确认由 Runner 只执行到第一个 ui_action。
+- 删除已提交但 Task 关联失败：重试先读原 actionId 的真实回执，存在则不再删除/预览，只重试关联；失败返回 `TASK_RECEIPT_LINK_FAILED`（UI 明确“事项已删除，仅关联失败”），成功则用原结果收敛并恢复通过。
+- 同批依赖动作：Runner 遇到 `ui_action(awaiting_user)` 立即停止该批剩余 call，不执行依赖副作用，随后 `waitForUserAction` 进入等待。
+- 验证：`r1ItemActions` 20 项（含取消结算、TTL sweep、二次确认拒绝、关联失败→恢复、同批停止）；关联 78 项；typecheck 与构建通过。未重复全量。
+- GUI/实包证据仍受阻：headless Electron 不返回 `app.whenReady()`，已记录一次，不再重试、不使用 `.env`。
+
 ## 未完成 / 风险
 
-- 真实 M01「删除→界面确认→Receipt」「导出→保存框→文件」与实包 UI 点击仍待验收；当前运行 alpha.10 不含本批代码，不能归因或替代。
+- 真实 M01「删除→界面确认→Receipt」「导出→保存框→文件」与实包 UI 点击仍待验收；当前运行 alpha.10 不含本批代码，不能归因或替代。状态分层：代码已提交/审查待改/实包待验收。
 - Artifact 导出在本服务内补写 `notes.export` 回执（原页面 artifact 导出无回执）；待 UI/实包验证。
 - D2：Web 完成合同维持现状，不在本批改动。
 - 旧 `scripts/check-task-research.mjs` 仍是未跟踪诊断脚本，保留归属，不覆盖。

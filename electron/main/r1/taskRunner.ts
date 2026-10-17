@@ -81,6 +81,9 @@ export class R1TaskRunner {
         const results = []
         let waitingForUser = false
         for (const call of response.calls) {
+          // Calls after a user-confirmation request may depend on that decision;
+          // stop the batch instead of executing them before the user acts.
+          if (waitingForUser) break
           const output = await this.executor.executeAsync(lease, call.name, JSON.parse(call.arguments), call.call_id, signal)
           results.push({ callId: call.call_id, output })
           const value = output as { kind?: unknown; status?: unknown } | null
