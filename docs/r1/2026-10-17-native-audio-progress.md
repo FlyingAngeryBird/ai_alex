@@ -39,3 +39,17 @@
 源码2f6c8f6；关联4文件27项和生产构建通过，日志`/tmp/seamo-r1-event-compat-tests.log`与`/tmp/seamo-r1-event-compat-build.log`。包含缺回复ID、ASR item隔离、取消隔离、时钟漂移测试。未标真实音频通过，待新预览复测。回退268d7af，SQLite10/资产2.5.1不变。
 
 更新预览已生成于`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-event-compat/Seamo AI R1.app`，源提交2f1d33f（包含2f6c8f6修复与本报告），build-info匹配，codesign完整性通过。旧预览退出快捷键后核对PID82599精确路径并发送SIGTERM，再CUA启动新包；首次窗口超时，随后实际首页正常显示且实时配置已读取。未再次认定钥匙串阻塞；采样未出现前次SecItemCopyMatching调用。已请求用户使用自动会话短句复测，保持麦克风未开启等待用户主动操作。仍未声称声音已恢复。
+
+## DEC-R1-NATIVE-AUDIO-033：真实音频区间与ASR快照
+
+用户反馈仍无声音且自己的字幕严重重复。实际预览诊断：采集/发送均2680包；服务音频38包690832字节、过滤0；renderer缺回复标识38、接收0字节、播放0；服务ASR结束4次，含item_id而无transcript；renderer结束4次均含text。说明时钟积压这次已消除，但032仅关联question_id还不充分；不得把032认定无声已修复。
+
+通过独立Electron后端探测，仅发送合成测试句，不开麦、不读用户历史、不保存/播放音频；只输出字段名/类型、数字计数及峰值。首次使用保存默认音色会话被拒绝，随后采用应用当前人格音色，真实session及合成音频通过。服务audio.started/done有question_id和response_id；中间7个delta只有type/event_id/delta，没有任何问题或回复标识。共114884字节、非零样本57285、峰值11652；该证据仅证明服务非静音PCM，未证明扬声器出声。日志`/tmp/seamo-native-audio-probe-20261017-shape.log`。
+
+修正为以显式audio.started/done区间绑定匿名音频，不借用任意最近文字回复；取消期间仍以旧区间归属过滤迟到音频。ASR增量在真实服务为当前识别假设快照，原先App和兼容层都用追加，产生截图中的整句前缀重复；改为替换当前假设，并优先采用completed.text最终文本，再回退同item快照。用户消息以item_id更新，避免同一完成事件重复添加。只处理新事件，不篡改已保存历史。
+
+关联4文件29项及生产构建通过：匿名音频区间、取消后匿名包隔离、下一段独立归属、ASR快照与最终文本修正。日志`/tmp/seamo-r1-audio-segment-tests.log`、`/tmp/seamo-r1-audio-segment-build.log`。资产2.5.1/SQLite10不变，回退c4cc28b。仍需新版真实收音/出声和字幕复测。
+
+修复后再做同范围真实合成探测：6个音频delta全部获非空归属标识，105740字节、52742个非零样本、峰值10581，session正常结束；日志`/tmp/seamo-native-audio-probe-20261017-normalized.log`。没有麦克风、用户历史或扬声器播放，该结果不能替代实际听感验收。
+
+完整回归86文件538项通过，日志`/tmp/seamo-r1-audio-segment-regression.log`；仍不视为G2/G5或安装验收通过。

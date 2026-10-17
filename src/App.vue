@@ -120,14 +120,17 @@ const nativeConversation = useNativeConversation({
   onError(message) { nativeAutoRequested.value = false; nativeResumeGeneration = null; conversation.disableAutoListen(); conversation.particleState.value = 'idle'; conversationPartialText.value = ''; conversation.addSystemMessage(message) },
   onText(event) {
     if (event.type === 'conversation.item.input_audio_transcription.delta') {
-      conversationPartialText.value += typeof event.delta === 'string' ? event.delta : ''
+      conversationPartialText.value = typeof event.text === 'string' ? event.text : typeof event.delta === 'string' ? event.delta : ''
     } else if (event.type === 'conversation.item.input_audio_transcription.started') {
       conversationPartialText.value = ''
       conversation.particleState.value = 'listening'
     } else if (event.type === 'conversation.item.input_audio_transcription.completed') {
       conversationPartialText.value = ''
       if (typeof event.transcript === 'string' && event.transcript.trim()) {
-        conversation.messages.value.push({ id: String(event.item_id), role: 'user', text: event.transcript, createdAt: Date.now() })
+        const id = String(event.item_id)
+        const existing = conversation.messages.value.find(message => message.id === id && message.role === 'user')
+        if (existing) existing.text = event.transcript
+        else conversation.messages.value.push({ id, role: 'user', text: event.transcript, createdAt: Date.now() })
       }
       conversation.particleState.value = 'thinking'
     } else if (event.type === 'response.output_text.delta' || event.type === 'response.output_text.done') {

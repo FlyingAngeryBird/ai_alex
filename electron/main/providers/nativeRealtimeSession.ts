@@ -18,6 +18,7 @@ export class NativeRealtimeSession {
   private activeResponse: string | null = null
   private questionResponses = new Map<string, string>()
   private transcriptions = new Map<string, string>()
+  private audioSegment: string | null = null
   private finishOpening: ((error?: string) => void) | null = null
   private timeout: ReturnType<typeof setTimeout> | null = null
   constructor(private readonly input: {
@@ -144,15 +145,30 @@ export class NativeRealtimeSession {
       }
       event = { ...event, response_id: id }
     }
+    if (event.type === 'response.output_audio.started') {
+      this.audioSegment = typeof event.response_id === 'string' && event.response_id
+        ? event.response_id : `audio:${randomUUID()}`
+      event = { ...event, response_id: this.audioSegment }
+    } else if (event.type === 'response.output_audio.delta' || event.type === 'response.output_audio.done') {
+      // Real service delta frames contain only type/event_id/delta. Their owner
+      // is the explicit started/done audio interval, never the latest text reply.
+      if ((!event.response_id || typeof event.response_id !== 'string') && this.audioSegment) {
+        event = { ...event, response_id: this.audioSegment }
+      }
+      if (event.type === 'response.output_audio.done') this.audioSegment = null
+    }
     if (typeof event.item_id === 'string' && event.item_id) {
       const id = event.item_id
       if (event.type === 'conversation.item.input_audio_transcription.delta' && typeof event.delta === 'string') {
-        const text = (this.transcriptions.get(id) ?? '') + event.delta
+        // The live Volc service sends the current recognition hypothesis here,
+        // including corrections. It is a snapshot, not an append-only fragment.
+        const text = typeof event.text === 'string' ? event.text : event.delta
         if (text.length > 16000 || this.transcriptions.size >= 256 && !this.transcriptions.has(id)) throw new Error('transcription limit')
         this.transcriptions.set(id, text)
       }
       if (event.type === 'conversation.item.input_audio_transcription.completed') {
-        if (typeof event.transcript !== 'string') event = { ...event, transcript: this.transcriptions.get(id) ?? '' }
+        if (typeof event.transcript !== 'string') event = { ...event,
+          transcript: typeof event.text === 'string' ? event.text : this.transcriptions.get(id) ?? '' }
         this.transcriptions.delete(id)
       }
       if (event.type === 'conversation.item.input_audio_transcription.failed') this.transcriptions.delete(id)
@@ -193,6 +209,7 @@ export class NativeRealtimeSession {
     this.finishOpening?.(code)
     this.pendingCalls.clear(); this.answeredCalls.clear(); this.cancelledResponses.clear(); this.activeResponse = null
     this.questionResponses.clear(); this.transcriptions.clear()
+    this.audioSegment = null
     // Keep error listener installed: terminating an unfinished upgrade can emit error.
     this.socket?.terminate(); this.socket = null
     this.input.onClosed(code)
