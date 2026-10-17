@@ -23,6 +23,17 @@ const draft = (goalVersion = 1) => ({ status: 'completed', goalVersion, replyBri
   receiptActionIds: [], artifacts: [{ kind: 'text', title: '讨论稿', content: '真实生成的内容', baseArtifactId: null,
     baseArtifactVersion: null, sourceRefs: [] }], candidates: [], unresolved: [] })
 describe('R1 TaskSupervisor identity, recovery and result publication', () => {
+  it('rejects a completed web investigation without actual included source receipts even if requiredActions is empty', () => {
+    const { db, supervisor, request } = setup()
+    try {
+      supervisor.accept({ ...request, authorizedAliases: ['read_file', 'web_search', 'web_read_page'], requiredActions: [] })
+      const active = supervisor.claimNext()!
+      const output = { ...draft(), artifacts: [], sourceRefs: [request.sourceMessageId], replyBrief: '凭记忆附一个链接 https://example.org' }
+      expect(() => supervisor.publish(active.lease, output, new R1Artifacts(db))).toThrow('TASK_COMPLETION_WEB_EVIDENCE_MISSING')
+      expect(supervisor.list()[0].status).toBe('running')
+      expect(supervisor.publish(active.lease, { ...output, status: 'partial', replyBrief: '尚未联网核验', unresolved: ['没有实际来源'] }, new R1Artifacts(db)).completionStatus).toBe('partial')
+    } finally { supervisor.close(); db.close() }
+  })
   it('returns accepted idempotently, allows one running task and at most three queued tasks', () => {
     const { db, supervisor, request } = setup()
     try {

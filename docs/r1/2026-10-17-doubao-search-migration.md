@@ -48,3 +48,11 @@ DEC-040：原后台M02和文字M01共用15秒模型请求上限，不能容纳�
 恢复后的真实M02返回ARK_RESPONSE_NOT_COMPLETED，仍无搜索/读页回执。补正DEC-040：分类型处理incomplete_details.reason（输出预算耗尽/内容过滤/其他），仅返回固定错误码，不发布部分函数参数；后台模型输出上限2048→8192（包含思考与回答），硬上限仍16000，无自动重试。此时尚无旧响应reason证据，因此不把预算耗尽写成已确认根因。官方依据：https://docs.volcengine.com/docs/ark/create-model-responses-api?lang=zh 。主会话/后台次数预算和工具权限不变。
 
 最终代码2b16802完整90文件565项通过，构建/临时签名完整性检查通过。修复包在`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha3-search-budget/Seamo AI R1.app`。启动采样停在SecItemCopyMatching/SecKeychainItemCopyContent，已请用户完成钥匙串验证；因此新预算下的原委托继续验收尚未开始，不能称已修复真实完整问答。第一次搜索成功及两次M02失败均保留。
+
+## DEC-R1-WEB-EVIDENCE-041：真实Bad Case的完成门槛与Skill入口修正
+
+用户允许钥匙串后2b16802启动成功并恢复原只读Task；后台在零搜索/读页Receipt、loadedSkillIds为空的情况下发布completed，回答错误地混淆IAM与搜索专用Key，给出未经读取的URL。SQLite与任务结果UI一致复现。此结果判失败，历史证据保留，不能作为真实联网问答通过。
+
+根因：M01委托toolAliases仅web_search/web_read_page，read_file随可选delegation被覆盖，SK02未加载而领域工具隐藏；requiredActions为空时Supervisor没有独立联网来源完成门槛。修正：start/steer始终保留既有受限虚拟read_file支架（只能当前Task材料和批准Skill，不开放宿主文件或新写权限）；已委托web_search/web_read_page的任务，completed必须分别包含真实成功回执以及其返回的来源sourceRef，读页须实际read/partial。无来源或无回执只能partial/needs_input，不因模型写了URL就算完成。允许partial保留真实失败原因。
+
+这落实已有SK02“查询完成须有真实来源、关键结论定位实际已读来源”的合同，不新增Prompt/Skill/工具Schema或模型路由。批准资产2.5.1、SQLite11不变。新用例覆盖domain-only委托保留沙盒读取，requiredActions为空/无回执/只凭模型链接拒绝完成及允许诚实partial。此前误报已完成的历史记录不直接改写，验收报告明确作废，后续以新真实委托验证。

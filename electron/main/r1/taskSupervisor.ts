@@ -678,6 +678,21 @@ ${source.snippet}
     const draft = value as TaskDraft
     if (draft.goalVersion !== record.goalVersion) throw new Error('TASK_CONTEXT_STALE')
     if (draft.status === 'completed' && draft.unresolved.length) throw new Error('TASK_COMPLETION_INCONSISTENT')
+    // A delegated web investigation cannot be completed from model memory.
+    // Enforce evidence independently of M01's optional requiredActions list.
+    if (draft.status === 'completed') {
+      for (const alias of ['web_search', 'web_read_page']) {
+        if (!record.checkpoint.authorizedAliases.includes(alias)) continue
+        const evidence = (record.checkpoint.toolReceipts ?? []).filter(receipt =>
+          receipt.tool === this.assets.toolDefinition(alias).name && receipt.status === 'succeeded' &&
+          draft.receiptActionIds.includes(receipt.actionId) &&
+          (alias === 'web_search' ? (receipt.data.sources as Array<{ sourceRef: string }> ?? [])
+            : [receipt.data.source as { sourceRef: string; readStatus: string }]).some(source => source &&
+              draft.sourceRefs.includes(source.sourceRef) &&
+              (alias !== 'web_read_page' || ['read', 'partial'].includes((source as { readStatus: string }).readStatus))))
+        if (!evidence.length) throw new Error('TASK_COMPLETION_WEB_EVIDENCE_MISSING')
+      }
+    }
     for (const requirement of record.checkpoint.requiredActions ?? []) if (draft.status === 'completed') {
       const actual = (record.checkpoint.toolReceipts ?? []).filter(receipt => receipt.tool === this.assets.toolDefinition(requirement.alias).name &&
         receipt.status === 'succeeded' && draft.receiptActionIds.includes(receipt.actionId))

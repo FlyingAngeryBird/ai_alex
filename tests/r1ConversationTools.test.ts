@@ -20,6 +20,16 @@ function setup(temporary = false) {
   return { db, tasks, source, scope, tools, stale: () => { current = false }, forget: () => { epoch++ } }
 }
 describe('registered main-conversation tool execution', () => {
+  it('keeps the sandboxed Skill reader available for a domain-only web delegation', () => {
+    const s = setup()
+    try {
+      const tools = new R1ConversationTools(s.db, assets, s.tasks, s.scope, ['read_file', 'web_search', 'web_read_page'])
+      expect(tools.execute('start_task', { goal: '查询官方来源', constraints: [], sourceRefs: [],
+        delegation: { toolAliases: ['web_search', 'web_read_page'], requiredActions: [] } }, 'web')).toMatchObject({ status: 'accepted' })
+      const active = s.tasks.claimNext()!
+      expect(s.tasks.authorizedAliases(active.lease)).toEqual(['read_file', 'web_search', 'web_read_page'])
+    } finally { s.tasks.close(); s.db.close() }
+  })
   it('returns real accepted idempotently with program source binding and rejects invented/unsupported grants', () => {
     const s = setup()
     try {
