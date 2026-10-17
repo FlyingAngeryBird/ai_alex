@@ -37,3 +37,5 @@
 定速队列每包以now重新起算，定时器误差累加到500ms后失败。改为保持采样时钟，真实长延迟后重新定速，不突发冲刷。持续1000包且每次定时器晚1ms的用例通过。按住说话未配置提示增加自动会话指引，不改变凭据用途和两条模型路线。当前运行21e027f尚不包含此改动。
 
 源码2f6c8f6；关联4文件27项和生产构建通过，日志`/tmp/seamo-r1-event-compat-tests.log`与`/tmp/seamo-r1-event-compat-build.log`。包含缺回复ID、ASR item隔离、取消隔离、时钟漂移测试。未标真实音频通过，待新预览复测。回退268d7af，SQLite10/资产2.5.1不变。
+
+更新预览已生成于`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-event-compat/Seamo AI R1.app`，源提交2f1d33f（包含2f6c8f6修复与本报告），build-info匹配，codesign完整性通过。旧预览退出快捷键后核对PID82599精确路径并发送SIGTERM，再CUA启动新包；首次窗口超时，随后实际首页正常显示且实时配置已读取。未再次认定钥匙串阻塞；采样未出现前次SecItemCopyMatching调用。已请求用户使用自动会话短句复测，保持麦克风未开启等待用户主动操作。仍未声称声音已恢复。
