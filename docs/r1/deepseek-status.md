@@ -12,6 +12,7 @@
 | D2 | 查询→候选→比较/选择→追问→保存事项/提醒：按被引用证据完成、明确读页要求、核心流程验证；DEC-054 | 开发完成，实包待验收 | `f084fe8` |
 | D3 | 工作稿版本链/续改/撤销/保存/导出；临时保存范围确认；真实播报 announcedAt 审计；DEC-055 | 开发完成，实包待验收 | `3d7332d` |
 | D4 | F08a–f 音源有界复验、死源退避、本地播放/切曲/歌词/降音流程 | 开发完成，实包/资源待验收 | `5c999b4` |
+| D5 | 41项盘点、D1状态统一、alpha.11 集中构建与内部验收包 | 开发已交付，实包待集中验收 | `29a2915`（包源） |
 
 ## D1 实现
 
@@ -42,6 +43,16 @@
 - 导出回执身份：`exportItems`/`exportArtifact` 接受 actionId/task/run，回执 JSON 的 actionId/runId 与 ticket、原 task/run 一致；删除回执用显式 SELECT＋UPDATE 关联，不再用 catch 任意数据库失败当重复吞掉。
 - 验证：`r1ItemActions` 16 项（新增并发、对话框撤销/会话变化/Task 变化、keep/cancel 提醒 ID、Artifact 回执身份、Runner 立即等待）；关联 49 项、typecheck 与生产构建通过。按审查要求未重复全量 653 项。
 
+## D5 集中收口与内部验收包
+
+- 41项逐项盘点见 [R1交付清单](R1-delivery-board.md) 的“D5 41项盘点”；D1–D3 状态统一为开发已交付/实包待验收，不把未跑组合测试列为新开发需求。
+- 核对：Space 输入框守卫、按住说话/失焦收尾、窄窗覆盖层（≤1050/≤760）、Focus 重启恢复为 paused、Task needs_resume、备份/恢复/诊断入口与脱敏、vault 凭据路径均已有实现；未发现新的产品代码缺口。
+- 内部验收包：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha11-d5/`
+  - `Seamo AI R1.app`（397M）、`Seamo-AI-R1-1.0.0-alpha.11-mac-arm64.zip`（148,341,382 字节，SHA256 `74162bd84968640ea671f5d6827d019bc6f1f148f2a0b5b97e9e2cb9c61646b6`）
+  - 包源 `29a2915`；资产 3.5.2、schema 3.2.0、SQLite 12；bundle `com.seamo.ai.r1`；无 `.env`/凭据/用户数据库；本机 ad-hoc 签名，未公证。
+- 已推送 `codex/seamo-r1` 至 origin 并更新 PR #1 交付说明；未合并 main、未创建 Release。
+- 真实 GUI/语音/设备/通知/安装回退与音乐资源仍待验收；外部音乐样本结论只陈述观察事实，不推断版权根因。
+
 ## D4 开发完成（音乐本地闭环与外部资源阻塞）
 
 - 有界复验：netease 200 但无周杰伦原版；kuwo 服务端 400“source is not supported”；joox 命中但资源 URL 503。未发现可修适配缺口，未新增供应商/未改默认源顺序。
@@ -57,7 +68,7 @@
 - F07c/F10：SQLite schema 12 新增 `delivery_announcements`，只在原生播放回执 started/playing/completed/interrupted 时写审计；`announcedAt`=首次真实可听，`completedAt`=完整播完；关联 reminder/followup/focus/task+result 与 responseId/playedMs，requestId 幂等；到期/卡片/生成文本不写审计。勿扰/取消沿用既有撤销，不产生播报记录。
 - 版本：资产 3.5.2、PR03 2.2.2、SQLite 12；工具 schema 3.2.0 不变；DEC-055。
 - 验证：新增 deliveryAudit 3、temporaryPersistence 2、artifactLifecycleFlow 1；关联回归 82 项、typecheck、构建通过；未重复全量。
-- GUI/实包仍受阻，登记为实包待验收；已用 `codex queue` 实际投递一次握手到既有线程。
+- GUI/实包仍受阻，登记为实包待验收；已按批次用 `codex queue` 投递握手与简报。
 
 ## D2 开发完成（查询与生活工具闭环）
 
