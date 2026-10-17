@@ -16,7 +16,7 @@ R1 当前是开发预览：应用 ID `com.seamo.ai.r1`，数据目录 `~/Library
 
 ## 最新预览与验收范围（2026-10-17）
 
-alpha.10（DEC-049）源码`fc162d1`已同步GitHub并打包：资产3.3.0/SQLite11，当前候选上下文及页面/会话共用保存、关联提醒；真实搜索＋M01隔离库两阶段通过，97文件634项通过，实际UI/语音V13未完整验收。普通提醒到期和专注结束短播报已在alpha.7实测6214/3409ms、heard，用户确认两次声音正常。见[candidate记录](2026-10-17-candidate-continuation-progress.md)与[提醒记录](2026-10-17-reminder-delivery-progress.md)。
+alpha.10（DEC-049）源码`fc162d1`已同步GitHub并打包：资产3.3.0/SQLite11，当前候选上下文及页面/会话共用保存、关联提醒；真实搜索＋M01隔离库两阶段通过，97文件634项通过，alpha.10实际窗口已打开，页面后台查询Ark超时、未进入搜索，实际UI/语音V13未通过。普通提醒到期和专注结束短播报已在alpha.7实测6214/3409ms、heard，用户确认两次声音正常。见[candidate记录](2026-10-17-candidate-continuation-progress.md)与[提醒记录](2026-10-17-reminder-delivery-progress.md)。
 
 | 版本 | 源码 | 资产 / SQLite | 验证范围 |
 | --- | --- | --- | --- |
