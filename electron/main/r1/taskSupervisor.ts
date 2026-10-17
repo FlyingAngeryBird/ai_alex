@@ -686,10 +686,10 @@ ${source.snippet}
         const evidence = (record.checkpoint.toolReceipts ?? []).filter(receipt =>
           receipt.tool === this.assets.toolDefinition(alias).name && receipt.status === 'succeeded' &&
           draft.receiptActionIds.includes(receipt.actionId) &&
-          (alias === 'web_search' ? (receipt.data.sources as Array<{ sourceRef: string }> ?? [])
+          (alias === 'web_search' ? (receipt.data.sources as Array<{ sourceRef: string; readStatus?: string }> ?? [])
             : [receipt.data.source as { sourceRef: string; readStatus: string }]).some(source => source &&
               draft.sourceRefs.includes(source.sourceRef) &&
-              (alias !== 'web_read_page' || ['read', 'partial'].includes((source as { readStatus: string }).readStatus))))
+              (alias !== 'web_read_page' || ['read', 'partial'].includes(source.readStatus ?? ''))))
         if (!evidence.length) throw new Error('TASK_COMPLETION_WEB_EVIDENCE_MISSING')
       }
     }
