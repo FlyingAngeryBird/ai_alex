@@ -14,7 +14,7 @@ describe('R1 released prompt assets', () => {
         userAddress: '海', style: '温和而简洁' })
       const assets = loadR1PromptAssets(resolve('r1-assets'))
       const text = assets.compose(saved, modelContext({ personaVersion: saved.version }))
-      expect(assets.releaseId).toBe('seamo-ai-r1-agent-assets-3.4.2')
+      expect(assets.releaseId).toBe('seamo-ai-r1-agent-assets-3.5.0')
       expect(assets.memoryRecallPolicy()).toEqual({ limit: 5, budgetMs: 200 })
       expect(text).toContain('你是Seamo AI应用中的个人语音助手')
       expect(text).toContain('按assistantName称呼自己')
@@ -69,5 +69,11 @@ describe('R1 released prompt assets', () => {
       goalVersion: 1, queuePosition: null, data: {}, errorCode: 'TASK_QUEUE_FULL' })).not.toThrow()
     expect(() => assets.validateToolOutput('notes_export', { kind: 'ui_action', uiActionId: 'ui', status: 'awaiting_user',
       action: 'export', data: { requestedFormat: 'md' } })).not.toThrow()
+    expect(() => assets.validateToolOutput('notes_export', { kind: 'ui_action', uiActionId: 'ui', status: 'awaiting_user',
+      action: 'confirm_item_delete', data: {} })).toThrow('MODEL_TOOL_OUTPUT_OWNER_INVALID')
+    expect(() => assets.validateToolOutput('notes_delete', { kind: 'ui_action', uiActionId: 'ui', status: 'awaiting_user',
+      action: 'export', data: {} })).toThrow('MODEL_TOOL_OUTPUT_OWNER_INVALID')
+    expect(() => assets.validateToolOutput('notes_delete', { kind: 'ui_action', uiActionId: 'ui', status: 'awaiting_user',
+      action: 'confirm_item_delete', data: {} })).not.toThrow()
   })
 })

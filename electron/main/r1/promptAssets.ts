@@ -239,6 +239,8 @@ export function loadR1PromptAssets(root: string): R1PromptAssets {
       const value = input as { kind: string; tool?: string; action?: string; status: string; data: Record<string, unknown> }
       if (value.kind === 'receipt' && value.tool !== tool.name) throw new Error('MODEL_TOOL_OUTPUT_OWNER_INVALID')
       if (value.kind === 'ui_action' && value.action === 'confirm_memory' && !['memory_remember', 'memory_update'].includes(alias)) throw new Error('MODEL_TOOL_OUTPUT_OWNER_INVALID')
+      if (value.kind === 'ui_action' && value.action === 'confirm_item_delete' && alias !== 'notes_delete') throw new Error('MODEL_TOOL_OUTPUT_OWNER_INVALID')
+      if (value.kind === 'ui_action' && value.action === 'export' && alias !== 'notes_export') throw new Error('MODEL_TOOL_OUTPUT_OWNER_INVALID')
       const required = (value.kind === 'task_control' && value.status !== 'failed') ||
         (value.kind === 'receipt' && (value.status === 'succeeded' || Object.keys(value.data).length > 0))
       if (required && !outputValidators.get(alias)!(value.data)) throw new Error('MODEL_TOOL_OUTPUT_DATA_INVALID')

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "3.1.0",
+  "schemaVersion": "3.2.0",
   "businessTools": [
     {
       "name": "memory.recall",
@@ -1556,7 +1556,7 @@
     {
       "name": "notes.delete",
       "alias": "notes_delete",
-      "description": "删除Item前展示关联提醒及版本并要求确认；默认保留提醒，只有用户明确选择才一起取消。",
+      "description": "删除Item前展示关联提醒及版本并要求用户确认；模型调用只发起不可伪造的预览，不执行删除，默认保留提醒，只有用户在界面明确选择才一起取消。",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -1694,7 +1694,7 @@
     {
       "name": "notes.export",
       "alias": "notes_export",
-      "description": "导出明确选中的Items或指定版本Artifact为TXT/MD；先打开用户保存选择，awaiting_user不等于已写出文件。",
+      "description": "导出明确选中的Items或指定版本Artifact为TXT/MD；模型只发起UI动作，保存位置由用户选择；awaiting_user不等于已写出文件。",
       "input_schema": {
         "type": "object",
         "properties": {

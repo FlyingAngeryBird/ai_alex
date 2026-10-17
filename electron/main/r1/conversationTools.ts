@@ -15,14 +15,18 @@ import { bindArtifactEdit, type ArtifactEditingContext, type ArtifactEditProposa
 import { currentCandidateContext, type CandidateContext } from './sessionMode.js'
 import { candidateSaveActionId } from './taskSupervisor.js'
 import { isDeepStrictEqual } from 'node:util'
-import { R1ItemTools, itemMutationAliases } from './itemTools.js'
+import { R1ItemTools, itemMutationAliases, itemActionAliases } from './itemTools.js'
+import type { ItemActionView } from './itemActions.js'
 import { musicAliases, type R1Music } from './music.js'
 import { R1MusicTools } from './musicTools.js'
 import { afterTransactionCommit, inTransaction, type R1Database } from './database.js'
 
 export type ConversationToolScope = { source: SessionMessage; temporary: boolean; timezone: string;
-  realtimeSimpleSearch?: boolean;
+  realtimeSimpleSearch?: boolean; ownerId?: number;
   assertCurrent(): void; persistenceConfirmed: boolean; signal?: AbortSignal; sourceMessages?: SessionMessage[];
+  requestItemAction?(input: { kind: 'delete'; itemId: string; expectedVersion: number } |
+    { kind: 'export'; itemIds: string[]; artifactId: null; artifactVersion: null; format: 'txt' | 'md' } |
+    { kind: 'export'; itemIds: []; artifactId: string; artifactVersion: number; format: 'txt' | 'md' }): ItemActionView;
   selectedArtifact?: ArtifactEditingContext | null;
   selectedCandidate?: CandidateContext | null;
   onMemoryInvalidated?(deletionEpoch: number): void;
@@ -37,7 +41,7 @@ function taskView(task: R1Task) {
 
 /** Tools operate on the actual user turn. The model cannot supply source bodies, mode or confirmation. */
 export class R1ConversationTools {
-  readonly aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', ...memoryToolAliases, 'notes_create', ...itemMutationAliases, ...reminderToolAliases]
+  readonly aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', ...memoryToolAliases, 'notes_create', ...itemMutationAliases, ...itemActionAliases, ...reminderToolAliases]
   memoryMutationReceipt: Record<string, unknown> | null = null
   memoryConfirmation: MemoryConfirmation | null = null
   private readonly memories: R1MemoryTools
@@ -228,6 +232,29 @@ export class R1ConversationTools {
           this.assets.validateToolOutput(alias, receipt); this.scope.assertCurrent()
           return receipt
         })
+      } else if ((itemActionAliases as readonly string[]).includes(alias)) {
+        // Model-initiated delete/export only prepares a trusted renderer action;
+        // disposition, reminder choice and file path never come from the model.
+        if (!this.scope.requestItemAction || !this.scope.ownerId) throw new Error('ITEM_ACTION_UNAVAILABLE')
+        const context = { ownerId: this.scope.ownerId, sessionId: this.scope.source.sessionId,
+          temporary: this.scope.temporary, assertCurrent: this.scope.assertCurrent }
+        if (alias === 'notes_delete') {
+          const itemId = args.itemId as string, expectedVersion = args.expectedVersion as number
+          this.itemTools.observedView(itemId, expectedVersion)
+          const view = this.scope.requestItemAction({ kind: 'delete', itemId, expectedVersion })
+          output = { kind: 'ui_action', uiActionId: view.ticket, status: 'awaiting_user',
+            action: 'confirm_item_delete', data: view.data }
+        } else {
+          if (args.itemIds) for (const itemId of args.itemIds as string[]) this.itemTools.observed(itemId)
+          const view = (args.itemIds as string[]).length
+            ? this.scope.requestItemAction({ kind: 'export', itemIds: args.itemIds as string[],
+              artifactId: null, artifactVersion: null, format: args.format as 'txt' | 'md' })
+            : this.scope.requestItemAction({ kind: 'export', itemIds: [],
+              artifactId: args.artifactId as string, artifactVersion: args.artifactVersion as number,
+              format: args.format as 'txt' | 'md' })
+          output = { kind: 'ui_action', uiActionId: view.ticket, status: 'awaiting_user',
+            action: 'export', data: view.data }
+        }
       } else if ((itemMutationAliases as readonly string[]).includes(alias)) {
         output = inTransaction(this.db, () => {
           const actionId = randomUUID(), result = this.itemTools.execute(alias, args, actionId)
@@ -280,7 +307,8 @@ export class R1ConversationTools {
             sourceMessageId: this.scope.source.messageId, timezone: this.scope.timezone, goal: args.goal as string,
             constraints: args.constraints as string[], authorizedAliases: aliases, requiredActions: delegation?.requiredActions,
             artifactEdit: this.artifactEdit(args.artifactTarget),
-            selectedTrackKey: this.focus?.selectedTrackKey ?? null, complexity: 'complex', persistenceConfirmed: this.scope.persistenceConfirmed })
+            selectedTrackKey: this.focus?.selectedTrackKey ?? null, complexity: 'complex', persistenceConfirmed: this.scope.persistenceConfirmed,
+            ownerId: this.scope.ownerId })
           status = task.queuePosition && task.queuePosition > 0 ? 'queued' : 'accepted'
         } else {
           const current = this.permittedTask(args.taskId as string)

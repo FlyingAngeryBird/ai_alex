@@ -183,7 +183,8 @@
           "type": "string",
           "enum": [
             "export",
-            "confirm_memory"
+            "confirm_memory",
+            "confirm_item_delete"
           ]
         },
         "data": {

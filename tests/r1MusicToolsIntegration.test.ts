@@ -125,7 +125,7 @@ it('requires trusted temporary save confirmation while keeping temporary task bo
       s.executor.execute(lease, 'music_get_state', {}, 'state')
       const playing = s.executor.executeAsync(lease, 'music_play', { trackKey: 'netease:one', expectedVersion: 1 }, 'play')
       await vi.waitFor(() => expect(s.commands.at(-1)?.action).toBe('load')); s.ack(s.commands.at(-1)!)
-      const receipt = await playing
+      const receipt = await playing as import('../electron/main/r1/taskSupervisor.js').TaskToolReceipt
       expect(receipt).toMatchObject({ status: 'succeeded', entityId: 'netease:one' })
       expect(s.tasks.readReceipt(lease, receipt.actionId)).toEqual(receipt)
       expect(await s.executor.executeAsync(lease, 'music_play', { expectedVersion: 1, trackKey: 'netease:one' }, 'play')).toEqual(receipt)

@@ -6,6 +6,7 @@ import ParticleSphere from '@/components/ParticleSphere.vue'
 import R1SettingsPanel from '@/components/R1SettingsPanel.vue'
 import R1MemoryPanel from '@/components/R1MemoryPanel.vue'
 import R1MemoryConfirmationDialog from '@/components/R1MemoryConfirmationDialog.vue'
+import R1ItemActionDialog from '@/components/R1ItemActionDialog.vue'
 import type { MemoryConfirmation } from '../electron/main/r1/memoryConfirmations'
 import R1TaskPanel from '@/components/R1TaskPanel.vue'
 import R1TaskCompletionNotice from '@/components/R1TaskCompletionNotice.vue'
@@ -108,11 +109,15 @@ const realtimeSearch = ref<import('../electron/main/r1/realtimeSearch').Realtime
 const realtimeSearchBusy = computed(() => !!realtimeSearch.value && ['searching', 'reading', 'waiting'].includes(realtimeSearch.value.phase))
 const taskPanel = ref<InstanceType<typeof R1TaskPanel> | null>(null)
 const memoryConfirmation = ref<MemoryConfirmation | null>(null)
+const itemAction = ref<import('../electron/main/r1/itemActions').ItemActionView | null>(null)
+const itemActionBusy = ref(false)
+const itemActionError = ref('')
 const memoryConfirmationBusy = ref(false)
 const memoryConfirmationError = ref('')
 const memoryRevision = ref(0)
 let stopMemoryChanged: (() => void) | null = null
 let stopMemoryConfirmation: (() => void) | null = null
+let stopItemAction: (() => void) | null = null
 let nativeResumeGeneration: number | null = null
 const nativeConversation = useNativeConversation({
   inputConstraints, configureOutput: audioDevices.bindOutput,
@@ -983,6 +988,38 @@ async function prepareMemorySelection(input: { content: string; category: 'profi
   finally { memoryConfirmationBusy.value = false }
 }
 
+async function resolveItemAction(decision: 'delete' | 'export' | 'cancel', disposition?: 'keep' | 'cancel'): Promise<void> {
+  const pending = itemAction.value
+  if (!pending || itemActionBusy.value) return
+  itemActionBusy.value = true; itemActionError.value = ''
+  try {
+    const result = await window.seamoR1.items.resolveAction({ ticket: pending.ticket, decision,
+      ...(disposition ? { reminderDisposition: disposition } : {}) })
+    if (!result.ok) {
+      const code = result.error.code
+      const message = code === 'EXPORT_FILE_WRITTEN_RECEIPT_FAILED' ? '文件已写出，但导出回执未能保存。请检查所选位置，不要重复导出。'
+        : ['ITEM_ACTION_STALE', 'VERSION_CONFLICT', 'REMINDER_CONFIRMATION_STALE'].includes(code) ? '这一项已有新的修改，请关闭后重新提出请求。'
+          : code === 'ITEM_ACTION_EXPIRED' ? '这次确认已过期，请重新提出请求。'
+            : ['ITEM_ACTION_SESSION_CHANGED', 'ITEM_ACTION_TASK_STALE', 'ITEM_ACTION_NOT_FOUND', 'ITEM_ACTION_OWNER_MISMATCH',
+              'TASK_CANCELLED', 'TASK_STEERED', 'TASK_SUSPENDED', 'TASK_CONTEXT_INVALIDATED', 'TEMPORARY_ENDED'].includes(code) ? '这次确认已失效，请重新提出请求。'
+              : decision === 'export' ? '导出未完成，请检查版本和保存位置后重试。' : '删除未完成，请重试；事项仍然保留。'
+      if (['ITEM_ACTION_EXPIRED', 'ITEM_ACTION_SESSION_CHANGED', 'ITEM_ACTION_TASK_STALE', 'ITEM_ACTION_NOT_FOUND', 'ITEM_ACTION_OWNER_MISMATCH',
+        'TASK_CANCELLED', 'TASK_STEERED', 'TASK_SUSPENDED', 'TASK_CONTEXT_INVALIDATED', 'TEMPORARY_ENDED'].includes(code)) {
+        if (itemAction.value?.ticket === pending.ticket) itemAction.value = null
+        conversation.addSystemMessage(message)
+      } else if (itemAction.value?.ticket === pending.ticket) itemActionError.value = message
+      return
+    }
+    if (itemAction.value?.ticket === pending.ticket) itemAction.value = null
+    const data = result.data as { cancelled?: boolean; path?: string }
+    if (data.cancelled) return
+    conversation.addSystemMessage(decision === 'delete' ? '事项已按你的选择删除；关联提醒的去留以刚才的选择为准。'
+      : '已导出你确认的版本。')
+  } catch {
+    if (itemAction.value?.ticket === pending.ticket) itemActionError.value = decision === 'export' ? '导出未完成，请重试。' : '删除未完成，请重试。'
+  } finally { itemActionBusy.value = false }
+}
+
 async function resolveMemoryConfirmation(save: boolean): Promise<void> {
   const pending = memoryConfirmation.value
   if (!pending || memoryConfirmationBusy.value) return
@@ -1070,6 +1107,11 @@ watch(() => ({ notice: reminderNotice.value ? reminderNotice.value.deliveryId ? 
 }, { flush: 'sync' })
 
 onMounted(() => {
+  stopItemAction = window.seamoR1.items.onAction(value => {
+    itemAction.value = value
+    itemActionBusy.value = false
+    itemActionError.value = ''
+  })
   stopMemoryConfirmation = window.seamoR1.memory.onConfirmation(value => {
     memoryConfirmation.value = value; memoryConfirmationError.value = ''
   })
@@ -1125,6 +1167,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   stopMemoryInvalidation?.()
   stopMemoryConfirmation?.()
+  stopItemAction?.()
   stopMemoryChanged?.()
   stopReminderNotice?.()
   uninstallDebugBridge()
@@ -1254,6 +1297,13 @@ onBeforeUnmount(() => {
     <R1MemoryPanel v-if="memoryOpen" :temporary="temporaryMode" :revision="memoryRevision" :interaction-busy="textBusy || conversation.isListening.value || conversation.particleState.value === 'thinking'" @close="closePanels" @continue-topic="handleContinueTopic" @settings="openPanel('settings')" />
     <R1MemoryConfirmationDialog v-if="memoryConfirmation" :key="memoryConfirmation.confirmationId" :confirmation="memoryConfirmation"
       :busy="memoryConfirmationBusy" :error="memoryConfirmationError" @selection="prepareMemorySelection" @confirm="resolveMemoryConfirmation(true)" @cancel="resolveMemoryConfirmation(false)" />
+    <R1ItemActionDialog v-if="itemAction" :key="itemAction.ticket" :action="itemAction.action"
+      :item-title="itemAction.data.item?.title ?? ''" :reminders="itemAction.data.reminders"
+      :items="itemAction.data.items" :artifact-title="itemAction.data.artifact?.title"
+      :format="itemAction.data.format" :busy="itemActionBusy" :error="itemActionError"
+      :expires-at="itemAction.expiresAt" @close="resolveItemAction('cancel')"
+      @keep="resolveItemAction('delete', 'keep')" @cancel-reminders="resolveItemAction('delete', 'cancel')"
+      @export="resolveItemAction('export')" />
     <R1HistoryPanel v-if="historyOpen" :temporary="temporaryMode" :allow-text-interrupt="nativeConversation.active.value && !textBusy"
         :assistant-name="persona?.assistantName || 'Seamo AI'" @close="closePanels" />
     <R1FocusDialog v-if="focusEditorOpen" :active="focus.active.value" :busy="focus.busy.value"

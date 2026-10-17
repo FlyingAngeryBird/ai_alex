@@ -2,7 +2,7 @@ import { createPageReader } from './providers/pageReader.js'
 import { createDoubaoSearchProvider } from './providers/doubaoSearchProvider.js'
 import { registerNativeVoiceHandlers } from './ipc/nativeVoiceHandlers.js'
 import { createNativeSearchHintCache } from './providers/nativeSearchHint.js'
-import { app, BrowserWindow, ipcMain, powerMonitor } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, powerMonitor } from 'electron'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync } from 'node:fs'
@@ -18,6 +18,8 @@ import { registerVoiceHandlers } from './ipc/voiceHandlers.js'
 import { createMainWindowOptions } from './windowOptions.js'
 import { importLegacyJson, openR1Database, type R1Database } from './r1/database.js'
 import { registerR1Handlers } from './ipc/r1Handlers.js'
+import { registerItemActionHandlers } from './ipc/itemActionHandlers.js'
+import { R1ItemActions } from './r1/itemActions.js'
 import { registerCredentialHandlers } from './ipc/credentialHandlers.js'
 import { registerSearchHandlers } from './ipc/searchHandlers.js'
 import { CredentialVault } from './r1/credentials.js'
@@ -80,6 +82,7 @@ let r1Music: R1Music | null = null
 let chatController: { close(): void } | null = null
 let r1Conversations: R1Conversations | null = null
 let memoryConfirmations: R1MemoryConfirmations | null = null
+let itemActions: R1ItemActions | null = null
 let topicSummaries: R1TopicSummaries | null = null
 let automaticMemory: R1AutomaticMemory | null = null
 let dataManagement: R1DataManagement | null = null
@@ -129,6 +132,8 @@ function createMainWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow(
     createMainWindowOptions(join(__dirname, '../preload/index.js'))
   )
+  const ownerId = mainWindow.webContents.id
+  mainWindow.webContents.once('destroyed', () => { itemActions?.revokeOwner(ownerId) })
 
   if (process.env.ELECTRON_RENDERER_URL) {
     void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
@@ -231,7 +236,29 @@ void app.whenReady().then(async () => {
     })
     r1Focus = new R1Focus(r1Database)
     const focusServices = { focus: r1Focus, currentTrackKey: () => r1SessionMode.currentPlayingTrackKey ?? null }
-    const taskTools = new R1TaskToolExecutor(r1Tasks, r1PromptAssets, new R1Items(r1Database), createDoubaoSearchProvider(), createPageReader(), focusServices, r1Music)
+    itemActions = new R1ItemActions(r1Database, new R1Items(r1Database), r1Artifacts, {
+      notify(owner, view) {
+        const target = BrowserWindow.getAllWindows().find(window => !window.isDestroyed() && window.webContents.id === owner)
+        if (target && !target.webContents.isDestroyed()) target.webContents.send('r1.itemAction', view)
+      },
+      choose: async (name, extension) => {
+        const selected = await dialog.showSaveDialog({ defaultPath: name,
+          filters: [{ name: extension === 'md' ? 'Markdown' : '纯文本', extensions: [extension] }] })
+        return selected.canceled ? null : selected.filePath ?? null
+      },
+      isSessionCurrent: context => context.temporary
+        ? r1SessionMode.temporary === true && r1SessionMode.sessionId === context.sessionId
+        : r1SessionMode.temporary !== true,
+      isTaskCurrent: task => {
+        try { const current = r1Tasks!.get(task.taskId)
+          return current.goalVersion === task.goalVersion && !['cancelled', 'failed'].includes(current.status)
+        } catch { return false }
+      },
+      onChanged(change) { for (const window of BrowserWindow.getAllWindows()) window.webContents.send('r1.itemsChanged', change) }
+    })
+    r1Tasks.bindPendingInvalidator((_taskId, actionIds, reason) => { itemActions?.revokePending(actionIds, reason) })
+    registerItemActionHandlers(itemActions)
+    const taskTools = new R1TaskToolExecutor(r1Tasks, r1PromptAssets, new R1Items(r1Database), createDoubaoSearchProvider(), createPageReader(), focusServices, r1Music, itemActions)
     r1TaskRunner = new R1TaskRunner(r1Tasks, r1PromptAssets, taskTools, r1Artifacts,
       createArkResponsesProvider({ timeoutMs: 60_000 }), () => new R1PersonaStore(r1Database!).get())
     r1ConversationDriver = new R1ConversationDriver(r1Database, r1PromptAssets, r1Tasks, createArkResponsesProvider({ timeoutMs: 30_000 }),
@@ -242,7 +269,7 @@ void app.whenReady().then(async () => {
       search: createDoubaoSearchProvider({ resultLimit: r1PromptAssets.realtimeSearchPolicy().candidates, timeoutMs: r1PromptAssets.realtimeSearchPolicy().timeoutMs }), pages: createPageReader(),
       searchHint: createNativeSearchHintCache(),
       configurationRevision: () => vault.revision, focusServices, onMemoryInvalidated: invalidateMemoryContexts,
-      memoryConfirmations, automaticMemory, topicSummaries, artifacts: r1Artifacts, music: r1Music })
+      memoryConfirmations, automaticMemory, topicSummaries, artifacts: r1Artifacts, music: r1Music, itemActions })
     powerMonitor.on('suspend', () => { taskDelivery?.invalidate(); reminderDelivery?.invalidate(); nativeVoice?.close(); automaticMemory?.invalidate(); topicSummaries?.invalidate(); memoryConfirmations?.revokeAutomatic() })
     r1TaskRunner.start()
     registerR1Handlers(r1Database, undefined, r1SessionMode, invalidateMemoryContexts)
@@ -282,9 +309,9 @@ void app.whenReady().then(async () => {
       new R1PersonaStore(r1Database), r1PromptAssets ?? undefined,
       new R1MemoryStore(r1Database), r1SessionMode, (sessionId, temporary) => {
         automaticMemory?.invalidate(); topicSummaries?.invalidate()
-        memoryConfirmations?.revokeAll()
+        memoryConfirmations?.revokeAll(); itemActions?.revokeAll()
         if (temporary) { r1Tasks?.endTemporary(sessionId); r1Artifacts?.endTemporary(sessionId) }
-      }, r1ConversationDriver ?? undefined, invalidateMemoryContexts, memoryConfirmations ?? undefined, automaticMemory ?? undefined, topicSummaries ?? undefined)
+      }, r1ConversationDriver ?? undefined, invalidateMemoryContexts, memoryConfirmations ?? undefined, automaticMemory ?? undefined, topicSummaries ?? undefined, itemActions ?? undefined)
   }
   if (r1Database && !existsSync(configPath)) {
     const persona = r1Database.prepare('SELECT voice_id FROM persona WHERE id = 1')

@@ -186,3 +186,12 @@ DEC-R1-MUSIC-023 补充：沿用原型已有“退出播放”按钮，类型化
 - 安全：渲染层不能指定宿主路径；路径只来自系统保存框。导出不等于删除/完成/新建事项；正文与待办状态如实保留。文件已写但回执失败使用明确错误，不自动重试。
 - 版本：资产3.4.2；模型工具合同/schema3.1.0/SQLite11保持。此批接通页面导出，notes_export语音/Task的非阻塞UI动作仍待接入，不冒充已完成。
 - 验证：真实临时目录TXT/MD内容及字节数/回执、取消、对话框期间版本变化/会话变化/写失败；页面交互单列待验收。回退同DEC-050。
+
+## DEC-R1-ITEM-UI-ACTION-053：删除/导出的可信托管确认
+- 缺口：F06c/F06d 已有领域删除与页面导出，但已注册 notes_delete/notes_export 未接到文字、原生实时语音或 Task；模型既不能自行确认删除，也不能替用户选择保存路径。
+- 合同：notes_delete 保留 itemId/expectedVersion/reminderDisposition/confirmedReminders 必填；后两者仅为低信任提议，主进程每次重读 deletionPreview 并冻结真实 Item 版本与提醒快照，实际去留只来自可信 UI。新增 ui_action.action=`confirm_item_delete`（tool-output schema 升 3.2.0）；调用成功只返回 awaiting_user，用户取消返回 cancelled，成功 data 与原合同一致。notes_export 两个分支（Items / Artifact+version）均只发起 UI 动作，保存框只在用户主动处理时由主进程打开。
+- 程序：pending 存于主进程内存，TTL 复用现有 300s 确认窗口；绑定 owner webContents、会话与可选 task/run/goalVersion。确认时复核 owner、会话/临时模式、过期与真实版本/提醒快照，再调用既有 R1Items.delete / itemExport.exportItems / artifactExport。ticket=actionId，重复点击/重复调用返回同一结果，不重复副作用；文件已写但回执失败保留明确错误且不自动重写。切会话/临时模式、窗口销毁、任务取消/改目标/暂停唤醒失效时撤销 pending。
+- Task：ui_action 不伪装成 succeeded 领域 Receipt；任务等待期间可继续主会话，模型必须以 needs_input/partial 结束，completed 在存在未结算 UI 动作时被拒（TASK_COMPLETION_UI_PENDING）。确认后的真实回执写回原 task/run/action，恢复时先核对并吸收真实回执，不重演删除/导出；取消/改目标不撤销已提交副作用。
+- 版本：资产 3.5.0，PR03 2.2.0、PR04 1.2.0、SK03 1.2.0；工具 schema 3.2.0，SQLite 11 不变。10 Prompt/6 Skill/38+3 工具数量不变。
+- 验证：隔离库关联测试覆盖 owner/ticket、过期、版本/提醒变化、重复确认、取消、Task 等待与恢复；真实服务与实包 UI 分别记录，未实测不标通过。
+- 回退：代码与资产整体退至 2309788；已提交 Item/Reminder/回执与用户数据保留，不重放旧删除或导出。

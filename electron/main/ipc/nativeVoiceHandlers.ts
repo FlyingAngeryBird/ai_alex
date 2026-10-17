@@ -2,6 +2,7 @@ import { focusToolAliases, type FocusToolServices } from '../r1/focusTools.js'
 import { reminderToolAliases } from '../r1/reminderTools.js'
 import { memoryToolAliases, memoryMutationReply } from '../r1/memoryTools.js'
 import type { R1MemoryConfirmations } from '../r1/memoryConfirmations.js'
+import type { R1ItemActions } from '../r1/itemActions.js'
 import { topicConversationContext } from '../r1/topicContext.js'
 import { currentArtifactContext } from '../r1/artifactContext.js'
 import { R1Artifacts } from '../r1/artifacts.js'
@@ -34,6 +35,7 @@ export function registerNativeVoiceHandlers(deps: {
   implementedTaskAliases: readonly string[]; configurationRevision(): number; focusServices?: FocusToolServices;
   onMemoryInvalidated?(deletionEpoch: number): void;
   memoryConfirmations?: R1MemoryConfirmations;
+  itemActions?: R1ItemActions;
   topicSummaries?: R1TopicSummaries
   automaticMemory?: R1AutomaticMemory;
   connect?: ConstructorParameters<typeof NativeRealtimeSession>[0]['connect'];
@@ -162,14 +164,17 @@ export function registerNativeVoiceHandlers(deps: {
           const source = deps.conversations.append({ sessionId, turnId, role: 'user', body: event.transcript, status: 'final' })
           const sourceTurnId = turnId
           tools = new R1ConversationTools(deps.db, deps.assets, deps.tasks, { source, selectedArtifact, selectedCandidate, sourceMessages: deps.conversations.messages(sessionId).slice(-20), temporary, realtimeSimpleSearch: true,
-            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, persistenceConfirmed: false,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, persistenceConfirmed: false, ownerId: sender.id,
             assertCurrent() { assertCurrent(); if (turnId !== sourceTurnId) throw new Error('REALTIME_TOOL_SOURCE_REPLACED') },
             onMemoryInvalidated: deps.onMemoryInvalidated ? epoch => { invalidatedEpoch = epoch } : undefined,
             requestMemoryConfirmation: deps.memoryConfirmations ? (candidate, sensitive) => deps.memoryConfirmations!.offer(candidate, {
               ownerId: sender.id, source, temporary, sensitive, assertCurrent() {
                 assertCurrent(); if (turnId !== sourceTurnId) throw new Error('MEMORY_CONFIRMATION_STALE')
               }
-            }) : undefined }, taskAliases, deps.focusServices, artifacts, deps.music)
+            }) : undefined,
+            requestItemAction: deps.itemActions ? input => deps.itemActions!.offer({ ownerId: sender.id, sessionId,
+              temporary, assertCurrent() { assertCurrent(); if (turnId !== sourceTurnId) throw new Error('ITEM_ACTION_STALE') } }, input) : undefined },
+            taskAliases, deps.focusServices, artifacts, deps.music)
           nativeSkills.forEach(skillId => tools!.loadedSkillIds.add(skillId))
           const generation = inputGeneration
           const owner = searchOwner = { revoked: false, silent: false }

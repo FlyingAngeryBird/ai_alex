@@ -76,6 +76,7 @@ export const exposedChannels = [
   'r1.items.complete',
   'r1.items.deletionPreview',
   'r1.items.delete',
+  'r1.items.resolveAction',
   'r1.reminders.list',
   'r1.reminders.prepareDelivery',
   'r1.reminders.cancelDelivery',
@@ -121,7 +122,9 @@ export const eventChannels = [
   'r1.memoryPolicyChanged',
   'r1.memoryChanged',
   'r1.focusChanged',
-  'r1.taskChanged'
+  'r1.taskChanged',
+  'r1.itemAction',
+  'r1.itemsChanged'
 ] as const
 
 export type ExposedEventChannel = (typeof eventChannels)[number]
@@ -299,7 +302,10 @@ function exposeLingliApi(
       update: (input) => invokeR1('r1.items.update', input),
       complete: (input) => invokeR1('r1.items.complete', input),
       deletionPreview: (itemId) => invokeR1('r1.items.deletionPreview', { itemId }),
-      delete: (input) => invokeR1('r1.items.delete', input)
+      delete: (input) => invokeR1('r1.items.delete', input),
+      resolveAction: (input) => invokeR1('r1.items.resolveAction', input),
+      onAction: (handler) => { const listener = (...args: unknown[]) => handler(args[1] as Parameters<typeof handler>[0]); renderer.on('r1.itemAction', listener); return () => renderer.removeListener('r1.itemAction', listener) },
+      onChanged: (handler) => { const listener = (...args: unknown[]) => handler(args[1] as Parameters<typeof handler>[0]); renderer.on('r1.itemsChanged', listener); return () => renderer.removeListener('r1.itemsChanged', listener) }
     },
     credentials: {
       status: () => invokeR1('r1.credentials.status'),

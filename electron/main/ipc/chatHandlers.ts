@@ -13,6 +13,7 @@ import type { R1PersonaStore } from '../r1/persona.js'
 import type { R1PromptAssets } from '../r1/promptAssets.js'
 import type { R1MemoryStore } from '../r1/memory.js'
 import type { R1MemoryConfirmations } from '../r1/memoryConfirmations.js'
+import type { R1ItemActions } from '../r1/itemActions.js'
 import type { R1TopicSummaries } from '../r1/topicSummaries.js'
 import type { R1AutomaticMemory } from '../r1/automaticMemory.js'
 import type { R1SessionMode } from '../r1/sessionMode.js'
@@ -139,7 +140,8 @@ export function registerChatHandlers(
   onMemoryInvalidated: (deletionEpoch: number) => void = () => undefined,
   memoryConfirmations?: R1MemoryConfirmations,
   automaticMemory?: R1AutomaticMemory,
-  topicSummaries?: R1TopicSummaries
+  topicSummaries?: R1TopicSummaries,
+  itemActions?: R1ItemActions
 ): { close(): void } {
   clearMemory()
   let activeSystemPrompt: string | null = null
@@ -274,6 +276,9 @@ export function registerChatHandlers(
       requestMemoryConfirmation: memoryConfirmations && ownerId ? (candidate, sensitive) => memoryConfirmations.offer(candidate, {
         ownerId, source, temporary, sensitive, assertCurrent() { if (!requestIsCurrent(request)) throw staleError(request) }
       }) : undefined,
+      ownerId,
+      requestItemAction: itemActions && ownerId ? input => itemActions.offer({ ownerId, sessionId: source.sessionId, temporary,
+        assertCurrent() { if (!requestIsCurrent(request)) throw staleError(request) } }, input) : undefined,
       onMemoryInvalidated(deletionEpoch) {
         request.deletionEpoch = deletionEpoch
         activeDeletionEpoch = deletionEpoch

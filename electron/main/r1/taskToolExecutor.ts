@@ -9,6 +9,7 @@ import type { R1Items } from './items.js'
 import { musicAliases, type R1Music } from './music.js'
 import { R1MusicTools } from './musicTools.js'
 import { R1ItemTools, itemMutationAliases } from './itemTools.js'
+import type { R1ItemActions } from './itemActions.js'
 type PlanInput = Parameters<R1TaskSupervisor['updatePlan']>[1]
 
 /** Registered synchronous local tools; no host filesystem, shell or model-controlled authorization. */
@@ -20,8 +21,17 @@ export class R1TaskToolExecutor {
   readonly implementedAliases: readonly string[]
   constructor(private readonly tasks: R1TaskSupervisor, private readonly assets: R1PromptAssets,
     private readonly items?: R1Items, private readonly search?: SearchProvider, private readonly pages?: ReturnType<typeof createPageReader>, private readonly services?: FocusToolServices,
-    private readonly music?: R1Music) {
-    this.implementedAliases = Object.freeze(['read_file', 'write_todos', ...(items ? ['notes_create', ...itemMutationAliases, ...reminderToolAliases] : []), ...(search ? ['web_search'] : []), ...(pages ? ['web_read_page'] : []), ...(services ? focusToolAliases : []), ...(music ? musicAliases : [])])
+    private readonly music?: R1Music, private readonly itemActions?: R1ItemActions) {
+    this.implementedAliases = Object.freeze(['read_file', 'write_todos', ...(items ? ['notes_create', ...itemMutationAliases, ...(itemActions ? ['notes_delete', 'notes_export'] : []), ...reminderToolAliases] : []), ...(search ? ['web_search'] : []), ...(pages ? ['web_read_page'] : []), ...(services ? focusToolAliases : []), ...(music ? musicAliases : [])])
+  }
+  /** The owner renderer that started this task confirms delete/export; the task never self-confirms. */
+  private actionContext(lease: TaskLease) {
+    const source = this.tasks.originalSource(lease)
+    const ownerId = this.tasks.taskOwnerId(lease.taskId)
+    if (!ownerId) throw new Error('TASK_UI_ACTION_OWNER_UNAVAILABLE')
+    return { ownerId, sessionId: source.sessionId, temporary: source.temporary,
+      task: { taskId: lease.taskId, runId: lease.runId, goalVersion: lease.goalVersion },
+      assertCurrent: () => { this.tasks.assertLease(lease) } }
   }
   private itemSession(lease: TaskLease): R1ItemTools {
     let tools = this.itemTools.get(lease.runId)
@@ -56,7 +66,30 @@ export class R1TaskToolExecutor {
     }
     return tools
   }
-  async executeAsync(lease: TaskLease, alias: string, input: unknown, callId?: string, signal?: AbortSignal): Promise<TaskToolReceipt> {
+  async executeAsync(lease: TaskLease, alias: string, input: unknown, callId?: string, signal?: AbortSignal): Promise<TaskToolReceipt | Record<string, unknown>> {
+    if (alias === 'notes_delete' || alias === 'notes_export') {
+      if (!this.itemActions || !this.items) throw new Error('TASK_TOOL_IMPLEMENTATION_UNAVAILABLE')
+      this.tasks.assertLease(lease); this.assets.validateToolInput(alias, input)
+      return this.tasks.executePendingTool(lease, alias, input, actionId => {
+        const context = this.actionContext(lease)
+        if (alias === 'notes_delete') {
+          const args = input as { itemId: string; expectedVersion: number }
+          this.itemSession(lease).observedView(args.itemId, args.expectedVersion)
+          const view = this.itemActions!.offerDelete(context, { itemId: args.itemId,
+            expectedVersion: args.expectedVersion, ticket: actionId })
+          return { kind: 'ui_action', uiActionId: view.ticket, status: 'awaiting_user',
+            action: 'confirm_item_delete', data: view.data }
+        }
+        const args = input as { itemIds: string[]; artifactId: string | null; artifactVersion: number | null; format: 'txt' | 'md' }
+        if (args.itemIds.length) for (const itemId of args.itemIds) this.itemSession(lease).observed(itemId)
+        const view = args.itemIds.length
+          ? this.itemActions!.offerExport(context, { reason: 'model', kind: 'export', itemIds: args.itemIds,
+            artifactId: null, artifactVersion: null, format: args.format }, actionId)
+          : this.itemActions!.offerExport(context, { reason: 'model', kind: 'export', itemIds: [],
+            artifactId: args.artifactId!, artifactVersion: args.artifactVersion!, format: args.format }, actionId)
+        return { kind: 'ui_action', uiActionId: view.ticket, status: 'awaiting_user', action: 'export', data: view.data }
+      }, callId)
+    }
     if ((musicAliases as readonly string[]).includes(alias)) {
       if (!this.music) throw new Error('TASK_TOOL_IMPLEMENTATION_UNAVAILABLE')
       if (['music_get_state', 'music_queue', 'music_favorite', 'music_feedback'].includes(alias)) return this.execute(lease, alias, input, callId)

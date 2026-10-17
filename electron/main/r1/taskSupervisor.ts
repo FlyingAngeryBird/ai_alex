@@ -14,9 +14,11 @@ export type TaskSource = { messageId: string; sessionId: string; turnId: string;
   createdAt: string; timezone: string; temporary: boolean; selectedTrackKey?: string | null }
 type PlanStep = { stepId: string; action: string; dependsOn: string[];
   status: 'pending' | 'running' | 'completed' | 'blocked' | 'cancelled'; successCondition: string }
+type PendingUiAction = { actionId: string; alias: string; runId: string; goalVersion: number }
 type TaskCheckpoint = { version: 1; requestKey: string; requestFingerprint?: string; source: TaskSource; sourceRefs: string[];
   contextVersion: number; deletionEpoch: number; authorizedAliases: string[]; loadedSkillIds: string[];
   runId: string | null; stopRequested: 'paused' | 'cancelled' | null; planVersion: number; plan: PlanStep[];
+  ownerId?: number; pendingUiActions?: PendingUiAction[];
   observations: R1TaskInput['observations']; receiptActionIds: string[]; progressBrief: string;
   actions?: Array<{ actionId: string; alias: string; runId: string; fingerprint?: string; callId?: string }>;
   toolReceipts?: TaskToolReceipt[];
@@ -62,6 +64,7 @@ export class R1TaskSupervisor {
   private suspended = false
   private closed = false
   private pendingEvents: TaskEvent[] | null = null
+  private pendingInvalidator?: (taskId: string, actionIds: string[], reason: string) => void
   private readonly musicOperations = new Map<string, { fingerprint: string; promise: Promise<TaskToolReceipt> }>()
   constructor(private readonly db: R1Database, private readonly assets: R1PromptAssets,
     private readonly deletionEpoch: () => number, private readonly options: {
@@ -77,7 +80,10 @@ export class R1TaskSupervisor {
       const record: RecordTask = { taskId: row.task_id, goal: row.goal, constraints: JSON.parse(row.constraints_json),
         goalVersion: row.goal_version, status: row.status, assetReleaseId: row.asset_release_id,
         budget: JSON.parse(row.budget_json), checkpoint, temporary: false, createdAt: row.created_at }
+      // Confirmation tickets live only in the previous process; a restarted app
+      // must not resurrect a pending delete/export.
       this.records.set(record.taskId, record)
+      if (checkpoint.pendingUiActions?.length) { checkpoint.pendingUiActions = []; this.persist(record) }
       if (['accepted', 'running'].includes(record.status)) {
         record.status = 'needs_resume'; record.checkpoint.stopRequested = null
         record.checkpoint.progressBrief = '应用已重新启动，等待你继续。'
@@ -213,7 +219,7 @@ ${source.snippet}
   }
   accept(input: { requestKey: string; sourceMessageId: string; timezone: string; goal: string;
     constraints: string[]; authorizedAliases: string[]; complexity: 'light' | 'complex'; persistenceConfirmed?: boolean; selectedTrackKey?: string | null;
-    requiredActions?: Array<{ alias: string; minimumCount: number }>; artifactEdit?: ArtifactEditBinding | null }): R1Task {
+    ownerId?: number; requiredActions?: Array<{ alias: string; minimumCount: number }>; artifactEdit?: ArtifactEditBinding | null }): R1Task {
     if (this.closed) throw new Error('TASK_SERVICE_CLOSED')
     if (input.selectedTrackKey !== undefined && input.selectedTrackKey !== null) requireText(input.selectedTrackKey, 160, 'TASK_TRACK_INVALID')
     requireText(input.requestKey, 160, 'TASK_REQUEST_KEY_INVALID')
@@ -222,6 +228,7 @@ ${source.snippet}
     if (!Array.isArray(input.constraints) || input.constraints.length > 50) throw new Error('TASK_CONSTRAINT_INVALID')
     input.constraints.forEach(value => requireText(value, 500, 'TASK_CONSTRAINT_INVALID'))
     if (!['light', 'complex'].includes(input.complexity)) throw new Error('TASK_COMPLEXITY_INVALID')
+    if (input.ownerId !== undefined && (!Number.isSafeInteger(input.ownerId) || input.ownerId < 0)) throw new Error('TASK_OWNER_INVALID')
     if (typeof input.timezone !== 'string' || !input.timezone) throw new Error('TASK_TIMEZONE_INVALID')
     try { new Intl.DateTimeFormat('zh-CN', { timeZone: input.timezone }) } catch { throw new Error('TASK_TIMEZONE_INVALID') }
     this.assets.exposeTools({ channel: 'task', loadedSkillIds: [], authorizedAliases: input.authorizedAliases, temporary: false })
@@ -256,6 +263,7 @@ ${source.snippet}
       checkpoint: { version: 1, requestKey: input.requestKey, requestFingerprint: fingerprint, source, sourceRefs: [source.messageId],
         contextVersion: 1, deletionEpoch: this.deletionEpoch(), authorizedAliases: [...input.authorizedAliases], loadedSkillIds: [],
         initialBudget: this.assets.taskBudget(input.complexity), persistenceConfirmed: input.persistenceConfirmed === true,
+        ownerId: input.ownerId ?? 0, pendingUiActions: [],
         requiredActions: structuredClone(requirements), artifactEdit: structuredClone(input.artifactEdit ?? null),
         runId: null, stopRequested: null, planVersion: 0, plan: [], observations: [{ refId: source.messageId,
           kind: 'source', version: 1, summary: JSON.stringify({ turnId: source.turnId, createdAt: source.createdAt, timezone: source.timezone,
@@ -332,6 +340,7 @@ ${source.snippet}
   beginDecision(lease: TaskLease): R1TaskInput {
     this.assertLease(lease)
     const record = this.checked(lease.taskId)
+    this.adoptExternalReceipts(record)
     const evidence = this.webResult(record)
     record.checkpoint.progressBrief = evidence.candidates.length
       ? `已取得 ${evidence.candidates.length} 个候选，正在核对并整理结果。`
@@ -380,6 +389,87 @@ ${source.snippet}
   }
   authorizedAliases(lease: TaskLease): string[] {
     this.assertLease(lease); return [...this.checked(lease.taskId).checkpoint.authorizedAliases]
+  }
+  /** The renderer that started the task owns its pending confirmations. */
+  taskOwnerId(taskId: string): number { return this.checked(taskId).checkpoint.ownerId ?? 0 }
+  pendingUiActions(taskId: string): PendingUiAction[] {
+    const record = this.checked(taskId)
+    return (record.checkpoint.pendingUiActions ?? []).filter(item => !record.checkpoint.receiptActionIds.includes(item.actionId))
+  }
+  bindPendingInvalidator(fn: (taskId: string, actionIds: string[], reason: string) => void): void {
+    this.pendingInvalidator = fn
+  }
+  /**
+   * A model-requested UI confirmation is not a domain receipt. It consumes a
+   * tool slot, is checkpointed for cancellation, and is returned as ui_action.
+   */
+  executePendingTool(lease: TaskLease, alias: string, input: unknown,
+    prepare: (actionId: string) => Record<string, unknown>, callId?: string): Record<string, unknown> {
+    this.assertLease(lease)
+    this.assets.validateToolInput(alias, input)
+    if (!['notes_delete', 'notes_export'].includes(alias)) throw new Error('TASK_UI_ACTION_UNAVAILABLE')
+    if (callId !== undefined && (typeof callId !== 'string' || !callId || callId.length > 300)) throw new Error('TASK_TOOL_CALL_ID_INVALID')
+    const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object'
+      ? Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right)).map(([key, nested]) => [key, canonical(nested)])) : value
+    const fingerprint = createHash('sha256').update(JSON.stringify(canonical(input))).digest('hex')
+    const actionId = this.consumeTool(lease, alias, callId ? { callId, fingerprint } : undefined)
+    const record = this.checked(lease.taskId)
+    const output = prepare(actionId)
+    this.assets.validateToolOutput(alias, output)
+    record.checkpoint.pendingUiActions ??= []
+    if (!record.checkpoint.pendingUiActions.some(item => item.actionId === actionId)) {
+      if (record.checkpoint.pendingUiActions.length >= 8) throw new Error('TASK_UI_ACTION_LIMIT')
+      record.checkpoint.pendingUiActions.push({ actionId, alias, runId: lease.runId, goalVersion: record.goalVersion })
+      this.persist(record)
+    }
+    return structuredClone(output)
+  }
+  private invalidatePending(record: RecordTask, reason: string): void {
+    const pending = record.checkpoint.pendingUiActions ?? []
+    if (!pending.length) return
+    record.checkpoint.pendingUiActions = []
+    this.persist(record)
+    try { this.pendingInvalidator?.(record.taskId, pending.map(item => item.actionId), reason) } catch { /* committed */ }
+  }
+  /** Confirmed UI actions are real receipts; adopt them before resuming so the run can reconcile them. */
+  private adoptExternalReceipts(record: RecordTask): void {
+    for (const action of record.checkpoint.actions ?? []) {
+      if (record.checkpoint.receiptActionIds.includes(action.actionId)) continue
+      if (!['notes_delete', 'notes_export'].includes(action.alias)) continue
+      const row = this.db.prepare('SELECT status, actual_result_json FROM receipts WHERE action_id = ? AND task_id = ?')
+        .get(action.actionId, record.taskId) as { status: string; actual_result_json: string } | undefined
+      if (!row || row.status !== 'succeeded') continue
+      let receipt: TaskToolReceipt
+      try { receipt = this.externalReceipt(action, JSON.parse(row.actual_result_json)) } catch { continue }
+      record.checkpoint.toolReceipts ??= []
+      if (!record.checkpoint.toolReceipts.some(item => item.actionId === receipt.actionId)) record.checkpoint.toolReceipts.push(receipt)
+      record.checkpoint.receiptActionIds.push(receipt.actionId)
+    }
+    record.checkpoint.pendingUiActions = (record.checkpoint.pendingUiActions ?? [])
+      .filter(item => !record.checkpoint.receiptActionIds.includes(item.actionId))
+  }
+  private externalReceipt(action: { actionId: string; alias: string; runId: string },
+    parsed: unknown): TaskToolReceipt {
+    const tool = this.assets.toolDefinition(action.alias).name
+    const value = parsed as { kind?: string; actionId?: string; tool?: string; data?: Record<string, unknown>;
+      result?: { itemId?: string; receipt?: { entityVersion?: number }; reminderReceipts?: Array<{ detail?: string; entityId?: string }> } }
+    let receipt: TaskToolReceipt
+    if (value?.kind === 'receipt') {
+      receipt = { kind: 'receipt', actionId: value.actionId!, tool: value.tool!, status: 'succeeded',
+        entityId: (value as unknown as TaskToolReceipt).entityId ?? null,
+        entityVersion: (value as unknown as TaskToolReceipt).entityVersion ?? null,
+        data: value.data ?? {}, errorCode: null, retryable: false, runId: action.runId }
+    } else if (value?.result?.itemId) {
+      const reminders = value.result.reminderReceipts ?? []
+      receipt = { kind: 'receipt', actionId: action.actionId, tool, status: 'succeeded', entityId: value.result.itemId,
+        entityVersion: value.result.receipt?.entityVersion ?? null,
+        data: { itemId: value.result.itemId, deleted: true,
+          remainingReminderIds: reminders.filter(reminder => reminder.detail === 'reminder_kept').map(reminder => reminder.entityId),
+          reminderReceipts: reminders }, errorCode: null, retryable: false, runId: action.runId }
+    } else throw new Error('TASK_RECEIPT_RECONCILIATION_REQUIRED')
+    if (receipt.tool !== tool || receipt.actionId !== action.actionId) throw new Error('TASK_RECEIPT_RECONCILIATION_REQUIRED')
+    this.assets.validateToolOutput(action.alias, receipt)
+    return receipt
   }
   steeringEvent(lease: TaskLease): Record<string, unknown> | undefined {
     this.assertLease(lease)
@@ -686,9 +776,14 @@ ${source.snippet}
       return structuredClone(record.checkpoint.result)
     }
     this.assertLease(lease); this.assets.validateStructured('task-draft', value)
+    this.adoptExternalReceipts(record)
     const draft = value as TaskDraft
     if (draft.goalVersion !== record.goalVersion) throw new Error('TASK_CONTEXT_STALE')
     if (draft.status === 'completed' && draft.unresolved.length) throw new Error('TASK_COMPLETION_INCONSISTENT')
+    // A delete/export waiting for the trusted renderer has no domain receipt;
+    // the task cannot claim completion until the user actually decides.
+    if (draft.status === 'completed' && (record.checkpoint.pendingUiActions ?? []).some(item =>
+      !record.checkpoint.receiptActionIds.includes(item.actionId))) throw new Error('TASK_COMPLETION_UI_PENDING')
     // A delegated web investigation cannot be completed from model memory.
     // Enforce evidence independently of M01's optional requiredActions list.
     if (draft.status === 'completed') {
@@ -813,6 +908,7 @@ ${source.snippet}
   cancel(taskId: string, expectedGoalVersion: number): R1Task {
     const record = this.checked(taskId, expectedGoalVersion)
     if (!['accepted', 'running', 'paused', 'needs_resume', 'waiting_input'].includes(record.status)) throw new Error('TASK_INVALID_STATE')
+    this.invalidatePending(record, 'TASK_CANCELLED')
     this.endRun(record, 'cancelled'); record.status = 'cancelled'; record.checkpoint.stopRequested = 'cancelled'
     record.checkpoint.progressBrief = '已取消；已提交的事项和提醒仍保留。'
     this.persist(record); this.emit(record, 'cancelled'); return this.get(taskId)
@@ -824,6 +920,7 @@ ${source.snippet}
     this.source(record.checkpoint.source.messageId)
     if (record.assetReleaseId !== this.assets.releaseId) throw new Error('TASK_ASSET_RELEASE_UNAVAILABLE')
     if (record.checkpoint.deletionEpoch !== this.deletionEpoch()) throw new Error('TASK_CONTEXT_REVALIDATION_REQUIRED')
+    this.adoptExternalReceipts(record)
     let renewedBudget: R1TaskInput['budget'] | null = null
     if (record.budget.decisionsRemaining < 1 || record.budget.activeMsRemaining < 1 || record.checkpoint.budgetStopped) {
       if (!record.checkpoint.budgetStopped || !record.checkpoint.initialBudget) throw new Error('TASK_BUDGET_EXHAUSTED')
@@ -856,6 +953,7 @@ ${source.snippet}
         !Number.isSafeInteger(action.minimumCount) || action.minimumCount < 1 || action.minimumCount > 50)) throw new Error('TASK_REQUIREMENTS_INVALID')
     }
     const previousStatus = record.status
+    this.invalidatePending(record, 'TASK_STEERED')
     this.endRun(record, 'superseded')
     record.goal = input.goal; record.constraints = [...input.constraints]; record.goalVersion++
     if (input.authorizedAliases) {
@@ -882,6 +980,7 @@ ${source.snippet}
   suspend(): void {
     this.suspended = true
     for (const record of this.records.values()) if (['accepted', 'running'].includes(record.status)) {
+      this.invalidatePending(record, 'TASK_SUSPENDED')
       this.endRun(record, 'needs_resume'); record.status = 'needs_resume'; record.checkpoint.stopRequested = null
       record.checkpoint.progressBrief = '运行已中断，等待你继续。'; this.persist(record); this.emit(record, 'needs_resume')
     }
@@ -889,6 +988,7 @@ ${source.snippet}
   wake(): void { this.suspended = false }
   invalidateContext(): void {
     for (const record of this.records.values()) if (!['cancelled', 'succeeded', 'partially_succeeded', 'failed'].includes(record.status)) {
+      this.invalidatePending(record, 'TASK_CONTEXT_INVALIDATED')
       this.endRun(record, 'needs_resume'); record.status = 'needs_resume'; record.checkpoint.contextVersion++
       record.checkpoint.observations = []; record.checkpoint.stopRequested = null
       record.checkpoint.progressBrief = '记忆或授权已变化，需要核对任务条件。'; this.persist(record); this.emit(record, 'needs_resume')
@@ -896,6 +996,7 @@ ${source.snippet}
   }
   endTemporary(sessionId: string): void {
     for (const record of this.records.values()) if (record.temporary && record.checkpoint.source.sessionId === sessionId) {
+      this.invalidatePending(record, 'TEMPORARY_ENDED')
       this.endRun(record, 'cancelled'); this.records.delete(record.taskId)
     }
   }

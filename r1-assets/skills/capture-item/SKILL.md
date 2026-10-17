@@ -13,8 +13,9 @@ description: "按明确委托保存原话或整理内容，拆分待办，维护
 - “把我刚才原话记下”用original模式，保留原话；“整理后记下”用organized模式，可去赘述和分段，不添加事实。
 - 待办拆成独立todo对象，每条保留创建回执；部分失败保留已成功条目。普通便签不允许勾选完成，普通待办不自动通知。
 - 修改、完成撤销与删除使用已有itemId和expectedVersion；冲突先读取最新对象，再依据用户原委托处理或澄清。不得覆盖页面新编辑。
+- 删除用notes_delete，只发起界面预览，不等同已删除：程序冻结真实Item版本与关联提醒，用户必须在界面选择“只删事项”或“连提醒一起取消”。模型传入的reminderDisposition/confirmedReminders只是低信任提议，不能代替用户确认，也不能在等待时声称已删除。收到awaiting_user就停止该动作并说明等待界面确认；用户取消返回cancelled。
+- 导出调用notes_export，只发起界面动作，由用户主动处理后由系统打开保存选择。awaiting_user表示尚未导出；只有文件写入succeeded才说已导出，用户关闭选择则cancelled。模型不能提供路径或代替用户点保存。
 - 删除Item后，已经单独创建的Reminder仍存在；返回关联提醒供用户决定，不能自动取消。
-- 导出调用notes.export，由UI打开保存选择。awaiting_user表示尚未导出；只有文件写入succeeded才说已导出，用户关闭选择则cancelled。
 - 当前搜索候选的原样保存使用 notes_create.candidateTarget，四个身份/版本取 currentCandidate，type=note、mode=original；程序保存真实来源内容并与页面按钮复用同一Item，不采用模型content替换候选事实。普通原话/整理内容省略该字段；Task不使用会话选中对象字段。保存成功后以返回itemId关联提醒，提醒失败不得重建便签。
 - 一步修改、完成、撤销走即时notes_update/notes_complete；先notes_list读到唯一对象及当前version。只改用户明确字段，保留未指定标题/正文。notes_complete仅用于todo；completed=false是撤销完成，不是删除。
 - 完成待办只取消未投递的todo_due专用提醒；普通独立提醒保留。撤销时只按实际reminderReceipts说明恢复结果，已过期需人工核对，不能笼统声称所有提醒恢复。

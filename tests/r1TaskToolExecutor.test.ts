@@ -135,7 +135,7 @@ it.each(['brave', 'doubao'] as const)('runs %s search through the task budget, r
       constraints: [], authorizedAliases: ['read_file', 'web_search'], complexity: 'complex' })
     const active = tasks.claimNext()!
     executor.execute(active.lease, 'read_file', { file_path: '/skills/web-qa/SKILL.md' })
-    const result = await executor.executeAsync(active.lease, 'web_search', { query: '公园' }, 'call-one')
+    const result = await executor.executeAsync(active.lease, 'web_search', { query: '公园' }, 'call-one') as import('../electron/main/r1/taskSupervisor.js').TaskToolReceipt
     expect(result.status).toBe('succeeded')
     const sources = result.data.sources as Array<{ sourceRef: string; readStatus: string }>
     expect(sources[0].readStatus).toBe('not_read')

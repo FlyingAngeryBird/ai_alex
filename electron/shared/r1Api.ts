@@ -132,6 +132,9 @@ export type R1Api = {
     complete(input: MethodInput<'complete'>): Promise<R1Result<MethodOutput<'complete'>>>
     deletionPreview(itemId: string): Promise<R1Result<MethodOutput<'deletionPreview'>>>
     delete(input: MethodInput<'delete'>): Promise<R1Result<MethodOutput<'delete'>>>
+    resolveAction(input: { ticket: string; decision: 'delete' | 'export' | 'cancel'; reminderDisposition?: 'keep' | 'cancel' }): Promise<R1Result<Record<string, unknown>>>
+    onAction(handler: (view: import('../main/r1/itemActions.js').ItemActionView | null) => void): () => void
+    onChanged(handler: (change: { kind: 'deleted' | 'exported'; itemId: string | null; artifactId: string | null }) => void): () => void
   }
   reminders: {
     prepareDelivery(input: import('../main/r1/reminderDelivery.js').ReminderSpeechRequest): Promise<R1Result<import('../main/r1/taskDelivery.js').TaskDeliveryAudio | null>>

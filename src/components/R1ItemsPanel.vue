@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { Bell, Check, FileText, NotebookPen, Plus, Search, Timer, Trash2, X } from 'lucide-vue-next'
+import R1ItemActionDialog from '@/components/R1ItemActionDialog.vue'
 import type { Item, Reminder } from '../../electron/shared/r1Api'
 
 const props = defineProps<{ temporaryMode: boolean }>()
@@ -15,8 +16,10 @@ const message = ref('')
 const editor = ref<{ item: Item | null; kind: 'todo' | 'note'; title: string; body: string } | null>(null)
 const reminderEditor = ref<{ item: Item | null; reminder: Reminder | null; body: string; at: string } | null>(null)
 const deletion = ref<{ item: Item; reminders: { reminderId: string; scheduleVersion: number; status: string }[] } | null>(null)
+const deleteError = ref('')
 const persistAcknowledged = ref(false)
 let stopEvents: (() => void) | null = null
+let stopItemChanges: (() => void) | null = null
 
 const outstanding = computed(() => items.value.filter(item => item.kind === 'todo' && !item.completedAt).length)
 const filtered = computed(() => items.value.filter(item => item.kind === tab.value &&
@@ -168,7 +171,7 @@ async function cancelReminder(reminder: Reminder): Promise<void> {
 }
 async function previewDeletion(item: Item): Promise<void> {
   const result = await window.seamoR1.items.deletionPreview(item.itemId)
-  if (result.ok) deletion.value = result.data
+  if (result.ok) { deletion.value = result.data; deleteError.value = '' }
   else message.value = '关联提醒已变化，请刷新后重试。'
 }
 async function deleteItem(disposition: 'keep' | 'cancel'): Promise<void> {
@@ -183,11 +186,15 @@ async function deleteItem(disposition: 'keep' | 'cancel'): Promise<void> {
     deletion.value = null
     await refresh()
     message.value = disposition === 'keep' ? '事项已删除，关联提醒按确认保留。' : '事项和未到期的关联提醒已取消。'
-  } catch (error) { deletion.value = null; message.value = errorMessage(error, '删除失败，请重新确认。') }
+  } catch (error) { deleteError.value = errorMessage(error, '删除失败，请重新确认。') }
   finally { busy.value = false }
 }
-onMounted(() => { void refresh(); stopEvents = window.seamoR1.reminders.onDue(() => { void refresh() }) })
-onUnmounted(() => stopEvents?.())
+onMounted(() => {
+  void refresh()
+  stopEvents = window.seamoR1.reminders.onDue(() => { void refresh() })
+  stopItemChanges = window.seamoR1.items.onChanged(() => { void refresh() })
+})
+onUnmounted(() => { stopEvents?.(); stopItemChanges?.() })
 </script>
 
 <template>
@@ -261,15 +268,9 @@ onUnmounted(() => stopEvents?.())
       <p v-if="message" role="status">{{ message }}</p>
     </form>
   </div>
-  <div v-if="deletion" class="r1-memory-modal-backdrop" role="presentation" @click.self="deletion = null">
-    <div class="r1-memory-modal r1-items-modal" role="alertdialog" aria-modal="true" aria-label="确认删除事项">
-      <small>YOUR THINGS</small><h3>删除这件事？</h3><p>{{ deletion.item.title }}</p>
-      <p v-if="deletion.reminders.length">关联的 {{ deletion.reminders.length }} 条提醒默认保留；也可主动取消尚未到期的提醒。</p>
-      <div class="r1-memory-dialog-actions"><button type="button" @click="deletion = null">保留事项</button>
-        <button type="button" :disabled="busy" @click="deleteItem('keep')">只删事项</button>
-        <button v-if="deletion.reminders.some(reminder => reminder.status === 'scheduled')" type="button" :disabled="busy" @click="deleteItem('cancel')">连提醒一起取消</button></div>
-    </div>
-  </div>
+  <R1ItemActionDialog v-if="deletion" action="confirm_item_delete" :item-title="deletion.item.title"
+    :reminders="deletion.reminders" :busy="busy" :error="deleteError" @close="deletion = null"
+    @keep="deleteItem('keep')" @cancel-reminders="deleteItem('cancel')" />
 </template>
 
 <style scoped>

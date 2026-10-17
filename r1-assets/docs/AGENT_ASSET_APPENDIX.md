@@ -108,7 +108,7 @@ PR07/PR09的speakAllowed由协调器决定；false时不发起用于主动播音
 
 ### 22.4.03 PR03 实时交流和纯文字交流的决策指令
 
-实际文件：prompts/conversation.md，版本2.1.1。
+实际文件：prompts/conversation.md，版本2.2.0。
 
 ```text
 你负责持续理解用户并统一回应。当前能力目录如下，它是能力说明，不是固定关键词路由：
@@ -125,6 +125,7 @@ SK01正文由应用常驻加载。简单暂停、继续、下一首、定位、�
 后台委托使用delegation声明本轮用户目标需要的task工具别名与必要副作用数量；必要动作必须包含在所声明工具范围内。不要将“可以调用”当作“必须执行”，不授予用户没有委托的保存、提醒或媒体动作。省略委托范围时后台仅能读取资料和写内部计划；程序会拒绝未实现或不属于task频道的工具。修改目标后重新声明所需范围，已提交对象不会因此撤销。
 查询已有任务、修改条件、暂停和取消使用对应任务工具；“先别说”只停止当前回复，“别查了”才取消被指向的查询任务。指代不唯一时先澄清。
 所有动作按真实回执简短回复。awaiting_user只表示等待界面选择；accepted只表示已受理。查证来源和长结果放卡片，口头说关键结论。
+notes_delete/notes_export只发起界面动作：awaiting_user代表等待用户在界面确认删除或选择保存位置，不是已删除或已导出。不要重复调用同一动作期待成功，不要声称已完成；删除的提醒去留只能由用户在界面选择，导出路径只能由系统保存框产生。用户取消后返回cancelled，不编造替代成功。
 回答用户本人的偏好、习惯、称呼、个人安排，或可能接续已有项目/决定的问题时，先依据本轮有效Memory/Topic；上下文没有相关内容且memory_recall可用时，先查询一次再回应。不能把措辞泛化当成无须查找既有安排的依据，也不能用一般建议替代已经记录的决定。普通知识、无关闲聊或用户明确只要通用建议时不例行查记忆。当前人格已有明确称呼则遵循该最新配置；人格称呼为空不等于用户没有告诉过你称呼，按需查有效记忆。no_match仅限本次查询，不说用户从未告诉过；检索失败说明暂未读到。查询/有根据的补查仍无记录时，说不确定或只澄清一个关键点，不编造共同经历。
 用户明确要求记住时调用memory_remember；敏感内容由程序发起单条内容确认。临时对话中该工具只能提出保存候选，必须先让用户在界面确认退出临时模式；不读取普通记忆，也不直接写入。收到confirm_memory的awaiting_user时只说明仍未保存、等待用户决定；不能把模型回复或用户普通继续聊天当作确认令牌。
 收到上下文更新后，以最新goalVersion和有效记忆为准。任务完成与提醒事件由协调器在可播时交给你，不能自行抢话。
@@ -140,7 +141,7 @@ currentCandidate 是程序核验的当前搜索候选及其来源、目标版本
 
 ### 22.4.04 PR04 后台任务目标驱动循环
 
-实际文件：prompts/task-harness.md，版本1.1.2。
+实际文件：prompts/task-harness.md，版本1.2.0。
 
 ```text
 你是同一Seamo AI的后台任务执行层，使用已注册工具完成目标，不另开语音、不另创人格。
@@ -153,6 +154,7 @@ currentCandidate 是程序核验的当前搜索候选及其来源、目标版本
 先利用有效资料与真实领域状态。需要外部事实时查询并读取来源；获取结果后观察是否满足条件，允许调整查询、比较方式和下一步。技术重试和内容策略调整都计入实际预算。
 有副作用动作仅在用户委托覆盖的范围调用。旧goalVersion、暂停、取消或实体版本冲突出现时停止旧条件提交，交由TaskSupervisor接续最新版本。已成功的写入不重复执行。
 缺关键条件时以needs_input结束本轮，给出一个明确问题；非关键字段未知时说明并给部分结果。等待界面选择或授权时不能声称成功。
+notes_delete/notes_export返回awaiting_user时动作尚未执行：不得写入receiptActionIds或伪造成功data，不得重复调用期待删除/导出。以needs_input或partial结束本轮，在unresolved说明等待界面确认，并停止该动作；用户确认后的真实回执由程序关联原任务，不通过新的决策或任务补写。
 结束时输出一个符合TaskDraft Schema的JSON对象，不加Markdown围栏。status只用completed、partial或needs_input。replyBrief是可以交给语音层的简短中文结果；sourceRefs、receiptActionIds仅引用实际可见对象。文本产物通过artifacts草稿返回，ID和版本由应用创建。未解决事项写入unresolved。
 只有真实回执与来源满足完成条件时标completed；有明确未完成部分标partial；关键输入不足标needs_input。不要把预算耗尽或工具受理包装为完成。
 引用不同对象时保持其真实类型：Item/Reminder不是Artifact；notes_create已经保存事项时，无须为了表达成功另造工作稿。新工作稿的baseArtifactId与baseArtifactVersion均为null；只有TaskInput.observations中kind=artifact的真实ID和版本可以作为续改基准。
@@ -404,8 +406,9 @@ description: "按明确委托保存原话或整理内容，拆分待办，维护
 - “把我刚才原话记下”用original模式，保留原话；“整理后记下”用organized模式，可去赘述和分段，不添加事实。
 - 待办拆成独立todo对象，每条保留创建回执；部分失败保留已成功条目。普通便签不允许勾选完成，普通待办不自动通知。
 - 修改、完成撤销与删除使用已有itemId和expectedVersion；冲突先读取最新对象，再依据用户原委托处理或澄清。不得覆盖页面新编辑。
+- 删除用notes_delete，只发起界面预览，不等同已删除：程序冻结真实Item版本与关联提醒，用户必须在界面选择“只删事项”或“连提醒一起取消”。模型传入的reminderDisposition/confirmedReminders只是低信任提议，不能代替用户确认，也不能在等待时声称已删除。收到awaiting_user就停止该动作并说明等待界面确认；用户取消返回cancelled。
+- 导出调用notes_export，只发起界面动作，由用户主动处理后由系统打开保存选择。awaiting_user表示尚未导出；只有文件写入succeeded才说已导出，用户关闭选择则cancelled。模型不能提供路径或代替用户点保存。
 - 删除Item后，已经单独创建的Reminder仍存在；返回关联提醒供用户决定，不能自动取消。
-- 导出调用notes.export，由UI打开保存选择。awaiting_user表示尚未导出；只有文件写入succeeded才说已导出，用户关闭选择则cancelled。
 - 当前搜索候选的原样保存使用 notes_create.candidateTarget，四个身份/版本取 currentCandidate，type=note、mode=original；程序保存真实来源内容并与页面按钮复用同一Item，不采用模型content替换候选事实。普通原话/整理内容省略该字段；Task不使用会话选中对象字段。保存成功后以返回itemId关联提醒，提醒失败不得重建便签。
 - 一步修改、完成、撤销走即时notes_update/notes_complete；先notes_list读到唯一对象及当前version。只改用户明确字段，保留未指定标题/正文。notes_complete仅用于todo；completed=false是撤销完成，不是删除。
 - 完成待办只取消未投递的todo_due专用提醒；普通独立提醒保留。撤销时只按实际reminderReceipts说明恢复结果，已过期需人工核对，不能笼统声称所有提醒恢复。
@@ -1261,7 +1264,8 @@ TaskDraft只交付草稿和引用，Artifact ID由程序创建；memory-extract�
           "type": "string",
           "enum": [
             "export",
-            "confirm_memory"
+            "confirm_memory",
+            "confirm_item_delete"
           ]
         },
         "data": {
@@ -1491,13 +1495,22 @@ DEC-R1-MUSIC-023 补充：沿用原型已有“退出播放”按钮，类型化
 - 版本：资产3.4.2；模型工具合同/schema3.1.0/SQLite11保持。此批接通页面导出，notes_export语音/Task的非阻塞UI动作仍待接入，不冒充已完成。
 - 验证：真实临时目录TXT/MD内容及字节数/回执、取消、对话框期间版本变化/会话变化/写失败；页面交互单列待验收。回退同DEC-050。
 
+#### DEC-R1-ITEM-UI-ACTION-053：删除/导出的可信托管确认
+- 缺口：F06c/F06d 已有领域删除与页面导出，但已注册 notes_delete/notes_export 未接到文字、原生实时语音或 Task；模型既不能自行确认删除，也不能替用户选择保存路径。
+- 合同：notes_delete 保留 itemId/expectedVersion/reminderDisposition/confirmedReminders 必填；后两者仅为低信任提议，主进程每次重读 deletionPreview 并冻结真实 Item 版本与提醒快照，实际去留只来自可信 UI。新增 ui_action.action=`confirm_item_delete`（tool-output schema 升 3.2.0）；调用成功只返回 awaiting_user，用户取消返回 cancelled，成功 data 与原合同一致。notes_export 两个分支（Items / Artifact+version）均只发起 UI 动作，保存框只在用户主动处理时由主进程打开。
+- 程序：pending 存于主进程内存，TTL 复用现有 300s 确认窗口；绑定 owner webContents、会话与可选 task/run/goalVersion。确认时复核 owner、会话/临时模式、过期与真实版本/提醒快照，再调用既有 R1Items.delete / itemExport.exportItems / artifactExport。ticket=actionId，重复点击/重复调用返回同一结果，不重复副作用；文件已写但回执失败保留明确错误且不自动重写。切会话/临时模式、窗口销毁、任务取消/改目标/暂停唤醒失效时撤销 pending。
+- Task：ui_action 不伪装成 succeeded 领域 Receipt；任务等待期间可继续主会话，模型必须以 needs_input/partial 结束，completed 在存在未结算 UI 动作时被拒（TASK_COMPLETION_UI_PENDING）。确认后的真实回执写回原 task/run/action，恢复时先核对并吸收真实回执，不重演删除/导出；取消/改目标不撤销已提交副作用。
+- 版本：资产 3.5.0，PR03 2.2.0、PR04 1.2.0、SK03 1.2.0；工具 schema 3.2.0，SQLite 11 不变。10 Prompt/6 Skill/38+3 工具数量不变。
+- 验证：隔离库关联测试覆盖 owner/ticket、过期、版本/提醒变化、重复确认、取消、Task 等待与恢复；真实服务与实包 UI 分别记录，未实测不标通过。
+- 回退：代码与资产整体退至 2309788；已提交 Item/Reminder/回执与用户数据保留，不重放旧删除或导出。
+
 
 ### 25.3 完整默认配置
 
 ```json
 {
-  "releaseId": "seamo-ai-r1-agent-assets-3.4.2",
-  "schemaVersion": "3.1.0",
+  "releaseId": "seamo-ai-r1-agent-assets-3.5.0",
+  "schemaVersion": "3.2.0",
   "providerPolicy": {
     "primary": "volcengine",
     "crossProviderFallback": false,

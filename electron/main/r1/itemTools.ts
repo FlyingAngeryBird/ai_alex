@@ -1,10 +1,11 @@
 import type { R1Items } from './items.js'
 
 export const itemMutationAliases = ['notes_update', 'notes_complete'] as const
+export const itemActionAliases = ['notes_delete', 'notes_export'] as const
 type Item = ReturnType<R1Items['toolView']>
 /** An ID mentioned by the model is not an observed, versioned Item. */
 export class R1ItemTools {
-  private observed = new Map<string, Item>()
+  private readonly seen = new Map<string, Item>()
   constructor(private readonly items: R1Items, private readonly scope: {
     assertCurrent(): void; requirePersistence(): void
   }) {}
@@ -12,13 +13,23 @@ export class R1ItemTools {
     if (output.status !== 'succeeded') return
     const data = output.data as { item?: Item; items?: Item[] } | undefined
     for (const item of [...(data?.items ?? []), ...(data?.item ? [data.item] : [])]) {
-      if (item.itemId && Number.isSafeInteger(item.version)) this.observed.set(item.itemId, structuredClone(item))
+      if (item.itemId && Number.isSafeInteger(item.version)) this.seen.set(item.itemId, structuredClone(item))
     }
+  }
+  observed(itemId: string): Item {
+    const seen = this.seen.get(itemId)
+    if (!seen) throw new Error('ITEM_NOT_OBSERVED')
+    return seen
+  }
+  observedView(itemId: string, expectedVersion: number): Item {
+    const seen = this.observed(itemId)
+    if (seen.version !== expectedVersion) throw new Error('VERSION_CONFLICT')
+    return seen
   }
   execute(alias: string, args: Record<string, unknown>, actionId: string) {
     this.scope.assertCurrent(); this.scope.requirePersistence()
     const id = args.itemId as string, version = args.expectedVersion as number
-    const seen = this.observed.get(id)
+    const seen = this.seen.get(id)
     if (!seen) throw new Error('ITEM_NOT_OBSERVED')
     if (seen.version !== version) throw new Error('VERSION_CONFLICT')
     // Also compare with SQLite: a page edit after the tool observation wins.
