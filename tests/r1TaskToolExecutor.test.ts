@@ -170,6 +170,8 @@ it('binds page reading to an existing source and exposes persisted search and pa
     executor.execute(active.lease, 'read_file', { file_path: '/skills/web-qa/SKILL.md' })
     await executor.executeAsync(active.lease, 'web_search', { query: '介绍' }, 'search')
     const sourceRef = tasks.get(task.taskId).webResult!.sources[0].sourceRef
+    expect(() => tasks.assertPageSource(active.lease, sourceRef, 'https://example.org/park#chapter')).not.toThrow()
+    expect(() => tasks.assertPageSource(active.lease, sourceRef, 'https://example.org/park?different=true#chapter')).toThrow('TASK_PAGE_SOURCE_INVALID')
     await expect(executor.executeAsync(active.lease, 'web_read_page', { url: 'https://example.org/other', sourceRef, fields: [] }, 'wrong'))
       .resolves.toMatchObject({ status: 'failed', errorCode: 'TASK_PAGE_SOURCE_INVALID' })
     expect(pageRequests).toBe(0)

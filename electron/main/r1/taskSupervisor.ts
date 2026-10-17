@@ -181,7 +181,9 @@ ${source.snippet}
   assertPageSource(lease: TaskLease, sourceRef: string, url: string): void {
     this.assertLease(lease)
     const source = this.webResult(this.checked(lease.taskId)).sources.find(item => item.sourceRef === sourceRef)
-    if (!source || source.url !== url) throw new Error('TASK_PAGE_SOURCE_INVALID')
+    // A fragment selects a section of the same resource; it must never allow
+    // changing the host, path or query bound to the candidate.
+    if (!source || source.url.split('#')[0] !== url.split('#')[0]) throw new Error('TASK_PAGE_SOURCE_INVALID')
   }
   list(temporarySessionId: string | null = null): R1Task[] {
     return [...this.records.values()].filter(record => temporarySessionId

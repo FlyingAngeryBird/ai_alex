@@ -68,3 +68,11 @@ DEC-041后真实复测：M01曾调用旧Task结论再次复述错误入口；新
 源码ea9f64c已推送codex/seamo-r1，包含DEC-041及旧结果回注拒绝、失败回执恢复；90文件568项通过，构建与临时签名完整性通过。`/tmp/seamo-web-evidence-final-tests.log`、`/tmp/seamo-web-evidence-final-build.log`为本批日志。最终开发包`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha3-web-recovery/Seamo AI R1.app`已通过CUA实际启动（包URL核对），问候返回、麦克风未开启，原服务状态保留。
 
 独立搜索/真实Task搜索已通过，动态官方正文读取和完整结论仍未通过。最新失败回执恢复代码已有自动化验证，但尚未在最终包重新完成实际动态页失败后的模型改查；不称全部联网A/V通过。正式签名、公证、音乐源及全量版本验收仍沿原未通过项。
+
+## DEC-R1-PAGE-ANCHOR-042：长文档定位读取
+
+最终恢复包ea9f64c追加只读RFC9110任务00d6601d-b3f4-4fd1-9413-f0de671f33bb：实际SK02加载、web.search成功、3次web.readPage成功但均为同一正文开头20000字（partial），不含POST目标章节，最后预算耗尽返回partial。既有完成保护没有把该链路写成查证成功。发现固定前缀窗口导致模型无法访问长文档后续章节。
+
+补正既有URL读取语义：保留URL片段作为本页章节锚点，按HTML id/name精确匹配容器读取，不把片段当CSS或代码执行；片段不存在/无可读容器时返回固定失败码，不回退到文档开头冒称读取目标。HTTP仍请求同一公开资源，现有DNS/重定向/字节/文本界限不变；sourceRef与source URL保留锚点，防止不同章节证据混成同一页读取。带candidate sourceRef时只允许变化fragment，不允许改变host/path/query。纯文本未支持片段，明确失败。没有增加工具Schema、供应商或模型提示；不能解决登录墙/动态JS正文。
+
+验证：90文件569项回归通过，随后12项读取/来源关联回归通过；构建通过。合成超长文档验证目标在默认20000窗口之外仍可按锚点取得，缺失明确失败；来源query改变仍禁止。真实生产读取器（非模拟网络）对RFC官网：`#section-9.3.1`返回3459字、以“9.3.1. GET”开头；`#section-9.3.3`返回2287字、以“9.3.3. POST”开头。因原HTML达到字节上限仍保留partial，不冒称完整原页已读。日志`/tmp/seamo-page-anchor-real-final.log`；先前未通过构建时的旧dist探测结果不作为此验证证据。此为真实定向读取通过，不等于模型整个查询已完成；端到端目标章节回答仍待最终包复测。

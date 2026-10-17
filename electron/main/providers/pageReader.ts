@@ -76,6 +76,9 @@ async function fetchPublicPage(url: URL, signal: AbortSignal, redirects = 0): Pr
 export function createPageReader(options: { read?: (url: URL, signal: AbortSignal) => Promise<PageBytes>; now?: () => Date } = {}) {
   return { async read(input: { url: string; fields: string[]; sourceRef?: string | null }, signal?: AbortSignal) {
     const url = publicPageUrl(input.url)
+    let fragment = ''
+    try { fragment = decodeURIComponent(new URL(input.url).hash.slice(1)) } catch { throw new PageReadError('PAGE_URL_INVALID') }
+    if (fragment.length > 300) throw new PageReadError('PAGE_URL_INVALID')
     const combined = signal ? AbortSignal.any([signal, AbortSignal.timeout(12000)]) : AbortSignal.timeout(12000)
     const result = await (options.read ?? fetchPublicPage)(url, combined)
     const charset = result.contentType.match(/charset\s*=\s*["']?([^;\s"']+)/i)?.[1] ?? 'utf-8'
@@ -89,7 +92,17 @@ export function createPageReader(options: { read?: (url: URL, signal: AbortSigna
       if (date && date.length <= 80 && Number.isFinite(Date.parse(date))) publishedAt = date
       $('script,style,noscript,iframe,nav,footer,form,[hidden],[aria-hidden="true"]').remove()
       const main = $('main').first(), article = $('article').first()
-      const root = main.length ? main : article.length ? article : $('body')
+      let root: ReturnType<typeof $> = main.length ? main : article.length ? article : $('body')
+      if (fragment) {
+        // Resolve a document anchor as data, never as an executable selector.
+        // This allows bounded reading of a later section instead of repeatedly
+        // returning the beginning of a long page.
+        const target = $('[id],a[name]').filter((_index, element) =>
+          $(element).attr('id') === fragment || $(element).attr('name') === fragment).first()
+        if (!target.length) throw new PageReadError('PAGE_FRAGMENT_NOT_FOUND')
+        root = target.is('section,article,main,div') ? target : target.closest('section,article')
+        if (!root.length) throw new PageReadError('PAGE_FRAGMENT_NOT_READABLE')
+      }
       root.find('p,div,section,article,li,h1,h2,h3,h4,br,tr').append('\n')
       text = root.text()
     }
@@ -97,10 +110,12 @@ export function createPageReader(options: { read?: (url: URL, signal: AbortSigna
     if (!text) throw new PageReadError('PAGE_NO_READABLE_CONTENT')
     const truncated = result.truncated || [...text].length > 20000
     const content = [...text].slice(0, 20000).join(''), accessedAt = (options.now ?? (() => new Date()))().toISOString()
-    const sourceRef = input.sourceRef || `page:${createHash('sha256').update(result.url).digest('hex').slice(0, 24)}`
-    const source: WebSource = { sourceRef, url: result.url, title, publishedAt, accessedAt,
+    if (fragment && result.contentType.startsWith('text/plain')) throw new PageReadError('PAGE_FRAGMENT_NOT_READABLE')
+    const sourceUrl = fragment ? `${result.url.split('#')[0]}#${encodeURIComponent(fragment)}` : result.url
+    const sourceRef = input.sourceRef || `page:${createHash('sha256').update(sourceUrl).digest('hex').slice(0, 24)}`
+    const source: WebSource = { sourceRef, url: sourceUrl, title, publishedAt, accessedAt,
       readStatus: truncated ? 'partial' : 'read', snippet: [...content].slice(0, 2000).join('') }
-    const metadata: Record<string, string | null> = { title, url: result.url, publishedAt }
+    const metadata: Record<string, string | null> = { title, url: sourceUrl, publishedAt }
     return { source, content, truncated, contentHash: createHash('sha256').update(content).digest('hex'),
       fields: input.fields.map(key => ({ key, value: metadata[key] ?? null,
         verification: metadata[key] ? 'verified' : 'unconfirmed', sourceRefs: [sourceRef] })) }
