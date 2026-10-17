@@ -43,14 +43,16 @@
 - 导出回执身份：`exportItems`/`exportArtifact` 接受 actionId/task/run，回执 JSON 的 actionId/runId 与 ticket、原 task/run 一致；删除回执用显式 SELECT＋UPDATE 关联，不再用 catch 任意数据库失败当重复吞掉。
 - 验证：`r1ItemActions` 16 项（新增并发、对话框撤销/会话变化/Task 变化、keep/cancel 提醒 ID、Artifact 回执身份、Runner 立即等待）；关联 49 项、typecheck 与生产构建通过。按审查要求未重复全量 653 项。
 
-## E1 真实应用核心流程（进行中，受钥匙串授权阻塞）
+## E1 真实应用核心流程（进行中；查询→比较→选中→便签+提醒已通过）
 
 - 已操作真实 alpha.11 窗口：Finder/Terminal 启动、截图可用；AppleScript 辅助访问被拒后改用 Electron 本地调试端口（未安装新工具）驱动真实 renderer。
 - 已证：真实开场白；自然查询两次 `ARK_TOOL_SCOPE_OR_SCHEMA_INVALID`；显式“发起后台任务”后 start_task→真实搜索/读页→completed（10 候选/来源）；任务面板并排比较（2 列）、选中第 2 候选；自然追问后真实保存便签「RFC 9110 官方标准」（source_ref 与选中候选一致，正文含真实 URL 与“仅搜索摘要”），并创建关联提醒（1 小时后，scheduled）。
-- 重复保存请求遇 `ARK_REQUEST_TIMEOUT`，数据未重复（仍 1 便签/1 提醒），但“重复保存返回同一事项”的成功回执尚缺。
+- 用户判断：本段“查询→比较→选中→便签+关联提醒”通过；重复保存成功回执与工作稿链未完成。
+- 粗略耗时（alpha.11，非正式性能样本）：自然查询错误约 30s 内可见；显式后台任务发送后约 20–25s 出现受理回复；随后 `progressBrief` 从“正在处理”→“已取得 10 个候选，正在核对并整理结果”，任务约 2 分钟内 completed。可见进展与最终来源，不是长时间无反馈；alpha.12 授权后用同一原始自然问法重测并记录准确时间线。
 - 据此修复并生成 **alpha.12**（`8dd48f0`，资产 3.5.3）：PR03 明确文字频道联网必须 start_task；M01 请求时限 30s→60s；工具调用被拒时仅向主进程记录工具名与原因（无正文/凭据）。
 - alpha.12 启动时出现 macOS 钥匙串授权对话框（“Seamo AI R1 Safe Storage”），需用户输入登录钥匙串密码；当前无 GUI 自动化权限（AppleScript 辅助访问被拒），无法代替用户授权。授权后继续 E1 的重复保存与工作稿流程；TXT/MD 原生保存框同样需要可用的 GUI 输入权限。
 - alpha.12 包：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha12-e1/`，ZIP 148,343,367 字节，SHA256 `7c59d8c082476083eb286b8b2e112fc4b5c4bef920d091ce1e04c7ca7156d821`。
+- 同步：`8dd48f0` 与文档提交已推送（远端 `bcd7943`），PR #1 已更新为 D1–E1 与 alpha.12 说明；无强推、未改远程。
 
 ## D5 集中收口与内部验收包
 
