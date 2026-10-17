@@ -78,8 +78,15 @@ export class NativeRealtimeSession {
     if (this.socket.bufferedAmount > 262144) { this.close('REALTIME_UPLINK_CONGESTED'); throw new NativeRealtimeError('REALTIME_UPLINK_CONGESTED') }
     this.socket.send(JSON.stringify({ event_id: randomUUID(), ...event }))
   }
-  updateBoundary(boundary: R1ModelRequestBoundary): void {
-    this.send({ ...nativeSessionCreate(boundary, this.input.voice), type: 'session.update' })
+  updateBoundary(boundary: R1ModelRequestBoundary, synchronizeContext = true): void {
+    const create = nativeSessionCreate(boundary, this.input.voice)
+    const { instructions, tools } = create.session as Record<string, unknown>
+    // Updating the tool/prompt boundary must not reconfigure the active audio
+    // stream or resend the model/extension initialization during an FC turn.
+    const previous = this.input.boundary.finalize([]).tools
+    if (synchronizeContext || JSON.stringify(previous) !== JSON.stringify(boundary.finalize([]).tools)) {
+      this.send({ type: 'session.update', session: { instructions, tools } })
+    }
     this.input.boundary = boundary
   }
   appendAudio(pcm: Uint8Array): void {
@@ -92,17 +99,33 @@ export class NativeRealtimeSession {
   cancelResponse(): string | null {
     const id = this.activeResponse
     if (id) this.cancelledResponses.add(id)
-    this.send({ type: 'response.cancel' })
+    if (id) this.send({ type: 'response.cancel' })
     this.activeResponse = null
     return id
   }
   returnToolResult(callId: string, result: unknown): void {
-    if (!this.pendingCalls.has(callId)) throw new NativeRealtimeError('REALTIME_TOOL_CALL_UNKNOWN')
-    const text = JSON.stringify(result)
-    if (typeof text !== 'string' || text.length > 65536) throw new NativeRealtimeError('REALTIME_TOOL_RESULT_INVALID')
-    this.send({ type: 'conversation.item.create', items: [{ role: 'tool', call_id: callId,
-      content: [{ type: 'input_text', text }] }] })
-    this.pendingCalls.delete(callId); this.answeredCalls.add(callId)
+    this.returnToolResults([{ callId, result }])
+  }
+  returnToolResults(results: Array<{ callId: string; result: unknown }>): void {
+    const seen = new Set<string>()
+    const items = results.map(({ callId, result }) => {
+      if (!this.pendingCalls.has(callId) || seen.has(callId)) throw new NativeRealtimeError('REALTIME_TOOL_CALL_UNKNOWN')
+      seen.add(callId)
+      const text = JSON.stringify(result)
+      if (typeof text !== 'string' || text.length > 65536) throw new NativeRealtimeError('REALTIME_TOOL_RESULT_INVALID')
+      return { type: 'message', role: 'tool', call_id: callId, content: [{ type: 'input_text', text }] }
+    })
+    if (!items.length || items.length > 6) throw new NativeRealtimeError('REALTIME_TOOL_RESULT_INVALID')
+    this.send({ type: 'conversation.item.create', items })
+    for (const { callId } of results) { this.pendingCalls.delete(callId); this.answeredCalls.add(callId) }
+  }
+  abandonToolCalls(callIds: string[]): void {
+    for (const id of callIds) { this.pendingCalls.delete(id); this.answeredCalls.add(id) }
+  }
+  speakSearchHint(): void {
+    // This is the same native TTS-only event verified by the existing audio
+    // probe. It does not inject a user question or request another LLM turn.
+    this.send({ type: 'speech_text_buffer.commit', text: '我查一下。' })
   }
   private receive(event: NativeRealtimeEvent): void {
     if (event.type === 'response.output_audio.delta') {

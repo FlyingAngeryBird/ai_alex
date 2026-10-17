@@ -22,6 +22,10 @@ import type { R1MemoryStore } from '../r1/memory.js'
 import type { R1Conversations } from '../r1/conversations.js'
 import type { R1TaskSupervisor } from '../r1/taskSupervisor.js'
 import type { R1SessionMode } from '../r1/sessionMode.js'
+import { RealtimeSearchTurn } from '../r1/realtimeSearch.js'
+import type { SearchProvider } from '../providers/searchProvider.js'
+import type { createPageReader } from '../providers/pageReader.js'
+import type { createNativeSearchHintCache } from '../providers/nativeSearchHint.js'
 
 export function registerNativeVoiceHandlers(deps: {
   db: R1Database; assets: R1PromptAssets; persona: R1PersonaStore; memory: R1MemoryStore;
@@ -34,9 +38,13 @@ export function registerNativeVoiceHandlers(deps: {
   connect?: ConstructorParameters<typeof NativeRealtimeSession>[0]['connect'];
   artifacts?: R1Artifacts;
   music?: R1Music;
+  search?: SearchProvider;
+  pages?: ReturnType<typeof createPageReader>;
+  searchHint?: ReturnType<typeof createNativeSearchHintCache>;
 }): { close(code?: string): void } {
-  const sessions = new Map<number, { id: string; session: NativeRealtimeSession; playback(input: Record<string, unknown>): void }>()
-  const aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', ...memoryToolAliases, 'notes_create', ...reminderToolAliases, ...(deps.focusServices ? focusToolAliases : []), ...(deps.music ? musicAliases : [])]
+  const sessions = new Map<number, { id: string; session: NativeRealtimeSession; silenceSearch(): void; playback(input: Record<string, unknown>): void }>()
+  const aliases = ['load_skill', 'start_task', 'get_task', 'steer_task', 'pause_task', 'resume_task', 'cancel_task', ...memoryToolAliases, 'notes_create', ...reminderToolAliases, ...(deps.focusServices ? focusToolAliases : []), ...(deps.music ? musicAliases : []), ...(deps.search && deps.pages ? ['web_search', 'web_read_page'] : [])]
+  const taskAliases = deps.implementedTaskAliases.filter(alias => !['web_search', 'web_read_page'].includes(alias))
   const fail = (code: string) => ({ ok: false, error: { code, message: code } })
   const emit = (owner: WebContents, id: string, event: NativeRealtimeEvent) => {
     if (!owner.isDestroyed()) owner.send('voice.nativeEvent', { ...event, connectionId: id })
@@ -48,6 +56,10 @@ export function registerNativeVoiceHandlers(deps: {
     const activeSessionId = deps.mode.sessionId
     if (!activeSessionId) return fail('REALTIME_SESSION_MISSING')
     const sessionId: string = activeSessionId
+    // Read the released Skill before constructing the native boundary. Keeping
+    // this small read-only Skill resident avoids an extra FC round and a tool
+    // set update in the middle of a time-sensitive search.
+    const nativeSkills = ['SK01', ...(deps.search && deps.pages ? [deps.assets.loadSkill('SK02').skillId] : [])]
     const persona = deps.persona.get(), deletionEpoch = deps.memory.currentDeletionEpoch()
     const revision = deps.configurationRevision(), temporary = deps.mode.temporary
     const artifacts = deps.artifacts ?? new R1Artifacts(deps.db)
@@ -61,6 +73,14 @@ export function registerNativeVoiceHandlers(deps: {
     let tools: R1ConversationTools | null = null
     let invalidatedEpoch: number | null = null
     let turnId = randomUUID(), toolCount = 0
+    let searchTurn: RealtimeSearchTurn | null = null
+    let searchOwner: { revoked: boolean; silent: boolean } | null = null
+    const retainedSearches = new Set<RealtimeSearchTurn>()
+    let visibleSilentOwner: { revoked: boolean; silent: boolean } | null = null
+    let hintAudio: Buffer | null = null
+    const hintAbort = new AbortController()
+    let inputGeneration = 0
+    let responseSeen = false, userSpeaking = false, hintActive = false
     const playback = new NativePlaybackLedger(deps.conversations, sessionId)
     const completedInputs = new Set<string>()
     const sourceTurns = new Map<string, string>()
@@ -84,33 +104,58 @@ export function registerNativeVoiceHandlers(deps: {
         } })
     }
     const context = () => ({ sessionId, sessionGeneration: 1, turnId, currentTime: new Date().toISOString(),
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, temporary, contextVersion: 1,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, temporary, contextVersion: 1, realtimeSimpleSearch: true,
       personaVersion: persona.version, deletionEpoch, selectedEntity: selectedArtifact ? { type: 'artifact', id: selectedArtifact.artifactId, version: selectedArtifact.version } : topicConversationContext(deps.db, deps.mode).selected ?? selectedConversationEntity(deps.mode, deps.tasks), currentArtifact: selectedArtifact, availableToolAliases: [],
-      loadedSkillIds: tools ? [...tools.loadedSkillIds] : ['SK01'],
+      loadedSkillIds: tools ? [...tools.loadedSkillIds] : nativeSkills,
       recentTurns: deps.conversations.modelTurns(sessionId),
       memories: [], topics: topicConversationContext(deps.db, deps.mode).topics, activeTasks: deps.tasks.list(temporary ? sessionId : null).slice(-20).map(task => {
         const { taskId, goalVersion, status, goal } = deps.tasks.modelView(task.taskId)
         return { taskId, goalVersion, status, goal }
       }) })
-    const boundary = () => new R1ModelRequestBoundary(deps.assets, persona, context(), aliases, 'realtime', assertCurrent, toolCount >= 6, deps.implementedTaskAliases)
+    const boundary = () => new R1ModelRequestBoundary(deps.assets, persona, context(), aliases, 'realtime', assertCurrent, toolCount >= 6, taskAliases)
     const destroyed = () => connection.close()
     const connection = new NativeRealtimeSession({ apiKey: process.env.VOLCENGINE_REALTIME_API_KEY ?? '',
       voice: persona.voiceId || process.env.VOLCENGINE_REALTIME_VOICE || '', boundary: boundary(),
       connect: deps.connect,
       onEvent(event) {
         assertCurrent()
+        if (event.type === 'conversation.item.input_audio_transcription.started') {
+          userSpeaking = true
+          // Stop delivery immediately, but wait for the final transcript before
+          // deciding whether this is the explicit stop-speech control.
+          inputGeneration++; visibleSilentOwner = null
+        }
+        if (event.type === 'response.output_text.delta' || event.type === 'response.output_text.done' || event.type === 'response.output_audio.delta') {
+          responseSeen = true; if (!hintActive) searchTurn?.answerStarted()
+        }
+        if (event.type === 'response.output_audio.done') hintActive = false
         const actualSourceTurn = typeof event.question_id === 'string' ? sourceTurns.get(event.question_id) : undefined
         if (actualSourceTurn && typeof event.response_id === 'string') automaticSourceTurns.set(event.response_id, actualSourceTurn)
         playback.receive(event, typeof event.question_id === 'string' ? sourceTurns.get(event.question_id) ?? turnId : turnId)
         if (event.type === 'conversation.item.input_audio_transcription.completed') {
           if (typeof event.item_id !== 'string' || typeof event.transcript !== 'string' || !event.transcript.trim()) return
           if (completedInputs.has(event.item_id)) return
-          completedInputs.add(event.item_id); turnId = randomUUID(); toolCount = 0
+          completedInputs.add(event.item_id)
+          // Exact UI-equivalent transport controls; this does not route Skills
+          // or classify business requests by keywords. Mixed/ambiguous messages
+          // still go through M01 as a new question.
+          const speechOnly = ['先别说', '先别说话', '先不要说', '先不要说话', '暂停播报', '停止播报'].includes(event.transcript.replace(/[\s，。！？,.!?]/g, ''))
+          if (speechOnly && searchTurn && searchOwner) {
+            searchOwner.silent = true; visibleSilentOwner = searchOwner; retainedSearches.add(searchTurn)
+          } else {
+            if (searchOwner) searchOwner.revoked = true
+            searchTurn?.finish('cancelled')
+            for (const retained of retainedSearches) retained.finish('cancelled')
+            retainedSearches.clear()
+          }
+          turnId = randomUUID(); toolCount = 0
+          responseSeen = false; userSpeaking = false; hintActive = false
+          searchTurn = null; searchOwner = null
           deps.memoryConfirmations?.revoke(sender.id)
           sourceTurns.set(event.item_id, turnId)
           const source = deps.conversations.append({ sessionId, turnId, role: 'user', body: event.transcript, status: 'final' })
           const sourceTurnId = turnId
-          tools = new R1ConversationTools(deps.db, deps.assets, deps.tasks, { source, selectedArtifact, sourceMessages: deps.conversations.messages(sessionId).slice(-20), temporary,
+          tools = new R1ConversationTools(deps.db, deps.assets, deps.tasks, { source, selectedArtifact, sourceMessages: deps.conversations.messages(sessionId).slice(-20), temporary, realtimeSimpleSearch: true,
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, persistenceConfirmed: false,
             assertCurrent() { assertCurrent(); if (turnId !== sourceTurnId) throw new Error('REALTIME_TOOL_SOURCE_REPLACED') },
             onMemoryInvalidated: deps.onMemoryInvalidated ? epoch => { invalidatedEpoch = epoch } : undefined,
@@ -118,7 +163,30 @@ export function registerNativeVoiceHandlers(deps: {
               ownerId: sender.id, source, temporary, sensitive, assertCurrent() {
                 assertCurrent(); if (turnId !== sourceTurnId) throw new Error('MEMORY_CONFIRMATION_STALE')
               }
-            }) : undefined }, deps.implementedTaskAliases, deps.focusServices, artifacts, deps.music)
+            }) : undefined }, taskAliases, deps.focusServices, artifacts, deps.music)
+          nativeSkills.forEach(skillId => tools!.loadedSkillIds.add(skillId))
+          const generation = inputGeneration
+          const owner = searchOwner = { revoked: false, silent: false }
+          if (deps.search && deps.pages) searchTurn = new RealtimeSearchTurn(sourceTurnId, {
+            assets: deps.assets, search: deps.search, reader: deps.pages,
+            assertCurrent() { assertCurrent(); if (owner.revoked) throw new Error('REALTIME_TOOL_SOURCE_REPLACED') },
+            emit(state) {
+              if (generation === inputGeneration || visibleSilentOwner === owner) emit(sender, id, state)
+              if (generation === inputGeneration && state.hint && !owner.silent && !responseSeen && !userSpeaking && hintAudio) {
+                responseSeen = true
+                const responseId = `search-hint:${randomUUID()}`
+                for (const event of [
+                  { type: 'response.output_text.done', response_id: responseId, text: '我查一下。' },
+                  { type: 'response.output_audio.delta', response_id: responseId, delta: hintAudio.toString('base64') },
+                  { type: 'response.output_audio.done', response_id: responseId }
+                ]) { playback.receive(event, sourceTurnId); emit(sender, id, event) }
+              }
+            },
+            save(receipt) {
+              if (!temporary) deps.db.prepare('INSERT OR IGNORE INTO receipts(action_id,entity_id,entity_version,status,actual_result_json,created_at) VALUES (?,?,?,?,?,?)')
+                .run(receipt.actionId as string, null, null, receipt.status as string, JSON.stringify(receipt), new Date().toISOString())
+            }
+          })
           connection.updateBoundary(boundary())
         }
         emit(sender, id, event)
@@ -127,17 +195,29 @@ export function registerNativeVoiceHandlers(deps: {
       onToolCalls(calls) {
         assertCurrent()
         if (!tools || toolCount + calls.length > 6) { connection.close('REALTIME_TOOL_SOURCE_OR_BUDGET_INVALID'); return }
-        const ownerTools = tools, sourceTurn = turnId
+        const ownerTools = tools, sourceTurn = turnId, generation = inputGeneration, ownerSearch = searchTurn
         toolCount += calls.length
         void (async () => {
         const results = []
-        for (const call of calls) {
+        // Search/page operations are read-only and use a shared concurrency gate.
+        // Skill loading remains a separate decision, enforced by the boundary.
+        const execute = async (call: typeof calls[number]) => {
           if (sourceTurn !== turnId || tools !== ownerTools) throw new Error('REALTIME_TOOL_SOURCE_REPLACED')
-          const result = await ownerTools.executeAsync(call.name, call.arguments, call.callId)
-          results.push({ callId: call.callId, result })
+          const result = ['web_search', 'web_read_page'].includes(call.name) && ownerSearch
+            ? await ownerSearch.execute(call.name, call.arguments, call.callId)
+            : await ownerTools.executeAsync(call.name, call.arguments, call.callId)
+          return { callId: call.callId, result }
+        }
+        for (let index = 0; index < calls.length;) {
+          const call = calls[index]
+          if (['web_search', 'web_read_page'].includes(call.name)) {
+            const reads = []
+            while (index < calls.length && ['web_search', 'web_read_page'].includes(calls[index].name)) reads.push(calls[index++])
+            results.push(...await Promise.all(reads.map(execute)))
+          } else { results.push(await execute(call)); index++ }
           if (ownerTools.memoryMutationReceipt) {
             // Do not ask a cloud session containing revoked facts to generate the acknowledgement.
-            const reply = memoryMutationReply(result), responseId = randomUUID()
+            const reply = memoryMutationReply(results.at(-1)!.result), responseId = randomUUID()
             deps.conversations.append({ sessionId, turnId, responseId, role: 'assistant', body: reply, status: 'generated' })
             emit(sender, id, { type: 'response.output_text.done', response_id: responseId, text: reply })
             connection.close('MEMORY_CONTEXT_REFRESH_REQUIRED')
@@ -145,23 +225,39 @@ export function registerNativeVoiceHandlers(deps: {
             return
           }
         }
-        if (sourceTurn !== turnId || tools !== ownerTools) throw new Error('REALTIME_TOOL_SOURCE_REPLACED')
-        connection.updateBoundary(boundary())
-        for (const result of results) connection.returnToolResult(result.callId, result.result)
-        })().catch(() => connection.close('REALTIME_CONTEXT_REFRESH_REQUIRED'))
+        if (sourceTurn !== turnId || tools !== ownerTools || inputGeneration !== generation) throw new Error('REALTIME_TOOL_SOURCE_REPLACED')
+        connection.updateBoundary(boundary(), false)
+        connection.returnToolResults(results)
+        })().catch(() => {
+          if (sourceTurn !== turnId || inputGeneration !== generation) { connection.abandonToolCalls(calls.map(call => call.callId)); return }
+          connection.close('REALTIME_CONTEXT_REFRESH_REQUIRED')
+        })
       },
       onClosed(code) {
+        hintAbort.abort()
+        searchTurn?.finish('cancelled')
+        for (const retained of retainedSearches) retained.finish('cancelled')
         try { assertCurrent(); playback.interruptPending() } catch { /* Revoked or ended context cannot publish a late partial. */ }
         if (sessions.get(sender.id)?.id === id) sessions.delete(sender.id)
         sender.removeListener('destroyed', destroyed)
         emit(sender, id, { type: 'closed', code, diagnostics: connection.getDiagnostics() })
       }
     })
-    sessions.set(sender.id, { id, session: connection, playback(input) {
+    sessions.set(sender.id, { id, session: connection, silenceSearch() {
+      if (searchTurn && searchOwner) {
+        inputGeneration++; searchOwner.silent = true; visibleSilentOwner = searchOwner; retainedSearches.add(searchTurn)
+      }
+    }, playback(input) {
       assertCurrent(); playback.playback(input)
       if (input.status === 'completed') extractMemory(input.responseId)
     } }); sender.once('destroyed', destroyed)
-    try { await connection.open(); return { ok: true, data: { connectionId: id } } }
+    try {
+      await connection.open()
+      if (deps.searchHint) void deps.searchHint({ voice: persona.voiceId || process.env.VOLCENGINE_REALTIME_VOICE || '', configurationRevision: revision,
+        boundary: new R1ModelRequestBoundary(deps.assets, persona, context(), [], 'realtime', assertCurrent), signal: hintAbort.signal })
+        .then(buffer => { if (!hintAbort.signal.aborted) hintAudio = buffer }).catch(() => undefined)
+      return { ok: true, data: { connectionId: id } }
+    }
     catch (error) { connection.close(); return fail(error instanceof Error ? error.message : 'REALTIME_START_FAILED') }
   })
   for (const action of ['Audio', 'Mute', 'Cancel', 'Stop', 'Playback'] as const) {
@@ -177,7 +273,7 @@ export function registerNativeVoiceHandlers(deps: {
         else if (action === 'Mute') {
           if (typeof input.muted !== 'boolean') return fail('REALTIME_INPUT_INVALID')
           active.session.setMuted(input.muted)
-        } else if (action === 'Cancel') active.session.cancelResponse()
+        } else if (action === 'Cancel') { active.silenceSearch(); active.session.cancelResponse() }
         else { active.session.close(); return { ok: true, data: { diagnostics: active.session.getDiagnostics() } } }
         return { ok: true, data: null }
       } catch { active.session.close('REALTIME_COMMAND_FAILED'); return fail('REALTIME_COMMAND_FAILED') }

@@ -1,6 +1,7 @@
 import { createPageReader } from './providers/pageReader.js'
 import { createDoubaoSearchProvider } from './providers/doubaoSearchProvider.js'
 import { registerNativeVoiceHandlers } from './ipc/nativeVoiceHandlers.js'
+import { createNativeSearchHintCache } from './providers/nativeSearchHint.js'
 import { app, BrowserWindow, powerMonitor } from 'electron'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -217,6 +218,8 @@ void app.whenReady().then(async () => {
     nativeVoice = registerNativeVoiceHandlers({ db: r1Database, assets: r1PromptAssets,
       persona: new R1PersonaStore(r1Database), memory, conversations: r1Conversations,
       tasks: r1Tasks, mode: r1SessionMode, implementedTaskAliases: taskTools.implementedAliases,
+      search: createDoubaoSearchProvider({ resultLimit: r1PromptAssets.realtimeSearchPolicy().candidates, timeoutMs: r1PromptAssets.realtimeSearchPolicy().timeoutMs }), pages: createPageReader(),
+      searchHint: createNativeSearchHintCache(),
       configurationRevision: () => vault.revision, focusServices, onMemoryInvalidated: invalidateMemoryContexts,
       memoryConfirmations, automaticMemory, topicSummaries, artifacts: r1Artifacts, music: r1Music })
     powerMonitor.on('suspend', () => { nativeVoice?.close(); automaticMemory?.invalidate(); topicSummaries?.invalidate(); memoryConfirmations?.revokeAutomatic() })

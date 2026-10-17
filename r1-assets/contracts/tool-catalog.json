@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "2.5.1",
+  "schemaVersion": "3.0.0",
   "businessTools": [
     {
       "name": "memory.recall",
@@ -567,7 +567,7 @@
     {
       "name": "web.search",
       "alias": "web_search",
-      "description": "搜索本任务需要的公开事实；query不包含无关私人对话。计入查询预算，返回可追溯候选来源。",
+      "description": "Search public facts needed for the current question. In realtime: at most three searches including follow-ups and retries, top three summaries each, sharing an eight-second deadline with page reads. Stop when evidence is sufficient. Task channel uses its task budget.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -611,7 +611,8 @@
         "SK02"
       ],
       "contexts": [
-        "task"
+        "task",
+        "realtime"
       ],
       "output_schema": "schemas/tool-output.schema.json",
       "output_data_schema": {
@@ -824,7 +825,8 @@
         "SK02"
       ],
       "contexts": [
-        "task"
+        "task",
+        "realtime"
       ],
       "output_schema": "schemas/tool-output.schema.json",
       "output_data_schema": {

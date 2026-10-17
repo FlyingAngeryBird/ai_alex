@@ -6,9 +6,13 @@
 
 官方协议核对（2026-10-17）：
 
+
+
+
 - [Custom独立API](https://docs.volcengine.com/docs/Networkedsearch/Networkedsearch-2?lang=zh)：POST `https://open.feedcoopapi.com/search_api/web_search`，搜索专用Bearer Key，`SearchType=web`；返回`Result.WebResults`，包含标题、链接、片段、相关摘要及可选发布时间。单次Query为1–100字符，可能在服务端截断。
 - [计费及Key隔离](https://docs.volcengine.com/docs/Networkedsearch/Onlinesearchproductbilling?lang=zh)：搜索订阅和按量后付费使用不同Key；须在联网搜索控制台配置对应服务，不自动复用Ark模型Key。
 - [方舟托管搜索](https://docs.volcengine.com/docs/ark/web-search?lang=en)：Responses的`web_search`/`sources=["doubao"]`是另一种集成方式，本批不启用该托管工具，不绕过现有工具曝光、执行和回执边界。
+
 
 预期可消除Brave支付依赖，并保留查询、比较、改条件、候选选择、保存和提醒流程。尚无同题对照证据，不能声称准确率更高、费用更低或延迟更短。实际效果取决于召回来源、网页可读性、模型综合及使用次数。
 
@@ -35,19 +39,30 @@
 
 源码和开发包可回退alpha.2的9017bf8（开发标签`r1-preview-1.0.0-alpha.2-build2`）。数据库和批准资产版本一致，密钥原值保留；回退旧R1代码不复活被清理/遗忘的数据。由于用户Brave支付条件不具备，回退不代表Brave真实搜索可用。
 
-## 真实联调与 DEC-R1-SEARCH-040
+真实联调与 DEC-R1-SEARCH-040
 
 用户保存搜索专用Key后，alpha.3实际点击查询“火山引擎 豆包搜索 Custom 官方文档”，返回9条有URL候选，首项为火山官方Custom接口文档，查询时间、摘要与仅搜索摘要标识正确显示。由此证明当前搜索鉴权与一次真实检索可用，尚不代表全量语义/费用/延迟验收。
 
+
 真实主会话发送只查询、不保存/不创建提醒的官方Key入口问题后，M01受理并创建只读委托；任务`2fe9d98c-59d8-482f-94cc-e7b6cc870cdf`在M02请求阶段报`ARK_REQUEST_TIMEOUT`，状态partially_succeeded。该次尚无搜索/读页成功回执，不冒称查证完成。主会话受理成功也说明此前启动超时不是持续鉴权失败。
+
 
 DEC-040：原后台M02和文字M01共用15秒模型请求上限，不能容纳当前真实模型的较长决策；仅将任务模型单次请求界限设为60秒、文字及连接检测30秒，仍保留调用方取消、目标/上下文校验、整体任务预算及并发隔离，不自动重试或增加工具次数。新增长界限下取消后迟到结果拒绝用例。此变更提高允许等待上限，不构成性能达标结论。
 
+
+
 同时修正独立查询页：输入上限与Custom100字匹配，展示适配器实际收到的页面日期，缺失仍显示未知；此前固定显示未知会隐藏已有发布时间。批准资产/工具合同和数据库版本不变。
+
+
 
 恢复后的真实M02返回ARK_RESPONSE_NOT_COMPLETED，仍无搜索/读页回执。补正DEC-040：分类型处理incomplete_details.reason（输出预算耗尽/内容过滤/其他），仅返回固定错误码，不发布部分函数参数；后台模型输出上限2048→8192（包含思考与回答），硬上限仍16000，无自动重试。此时尚无旧响应reason证据，因此不把预算耗尽写成已确认根因。官方依据：https://docs.volcengine.com/docs/ark/create-model-responses-api?lang=zh 。主会话/后台次数预算和工具权限不变。
 
+
+
+
 最终代码2b16802完整90文件565项通过，构建/临时签名完整性检查通过。修复包在`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha3-search-budget/Seamo AI R1.app`。启动采样停在SecItemCopyMatching/SecKeychainItemCopyContent，已请用户完成钥匙串验证；因此新预算下的原委托继续验收尚未开始，不能称已修复真实完整问答。第一次搜索成功及两次M02失败均保留。
+
+
 
 ## DEC-R1-WEB-EVIDENCE-041：真实Bad Case的完成门槛与Skill入口修正
 
@@ -63,16 +78,28 @@ DEC-041后真实复测：M01曾调用旧Task结论再次复述错误入口；新
 
 来源绑定失败现移入executeReadTool的校验执行区，仍在任何HTTP读取前拒绝，形成固定错误码的failed Receipt，允许模型观察失败后按预算改查；不在异常处直接终止整个Task。回归验证不匹配URL时实际页面请求数为0、随后正确来源仍可读取。官方动态页面可读性仍为待验/能力限制，未增加浏览器登录、第三方抓取供应商或伪造正文回执。
 
+
 ## 最终交付检查点
 
 源码ea9f64c已推送codex/seamo-r1，包含DEC-041及旧结果回注拒绝、失败回执恢复；90文件568项通过，构建与临时签名完整性通过。`/tmp/seamo-web-evidence-final-tests.log`、`/tmp/seamo-web-evidence-final-build.log`为本批日志。最终开发包`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha3-web-recovery/Seamo AI R1.app`已通过CUA实际启动（包URL核对），问候返回、麦克风未开启，原服务状态保留。
 
+
+
 独立搜索/真实Task搜索已通过，动态官方正文读取和完整结论仍未通过。最新失败回执恢复代码已有自动化验证，但尚未在最终包重新完成实际动态页失败后的模型改查；不称全部联网A/V通过。正式签名、公证、音乐源及全量版本验收仍沿原未通过项。
+
+
 
 ## DEC-R1-PAGE-ANCHOR-042：长文档定位读取
 
+
 最终恢复包ea9f64c追加只读RFC9110任务00d6601d-b3f4-4fd1-9413-f0de671f33bb：实际SK02加载、web.search成功、3次web.readPage成功但均为同一正文开头20000字（partial），不含POST目标章节，最后预算耗尽返回partial。既有完成保护没有把该链路写成查证成功。发现固定前缀窗口导致模型无法访问长文档后续章节。
 
+
+
 补正既有URL读取语义：保留URL片段作为本页章节锚点，按HTML id/name精确匹配容器读取，不把片段当CSS或代码执行；片段不存在/无可读容器时返回固定失败码，不回退到文档开头冒称读取目标。HTTP仍请求同一公开资源，现有DNS/重定向/字节/文本界限不变；sourceRef与source URL保留锚点，防止不同章节证据混成同一页读取。带candidate sourceRef时只允许变化fragment，不允许改变host/path/query。纯文本未支持片段，明确失败。没有增加工具Schema、供应商或模型提示；不能解决登录墙/动态JS正文。
+
+
+
+
 
 验证：90文件569项回归通过，随后12项读取/来源关联回归通过；构建通过。合成超长文档验证目标在默认20000窗口之外仍可按锚点取得，缺失明确失败；来源query改变仍禁止。真实生产读取器（非模拟网络）对RFC官网：`#section-9.3.1`返回3459字、以“9.3.1. GET”开头；`#section-9.3.3`返回2287字、以“9.3.3. POST”开头。因原HTML达到字节上限仍保留partial，不冒称完整原页已读。日志`/tmp/seamo-page-anchor-real-final.log`；先前未通过构建时的旧dist探测结果不作为此验证证据。此为真实定向读取通过，不等于模型整个查询已完成；端到端目标章节回答仍待最终包复测。

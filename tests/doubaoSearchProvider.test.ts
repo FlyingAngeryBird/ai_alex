@@ -80,3 +80,13 @@ it('forwards caller cancellation in the bounded request signal', async () => {
   controller.abort()
   await expect(createDoubaoSearchProvider({ key: () => 'test', fetcher: fetcher as typeof fetch }).search('q', controller.signal)).rejects.toMatchObject({ code: 'SEARCH_NETWORK_FAILED' })
 })
+
+it('requests only the configured top three results for realtime even when upstream overreturns', async () => {
+  const fetcher = vi.fn(async (_url: unknown, init?: RequestInit) => {
+    expect(JSON.parse(String(init?.body)).Count).toBe(3)
+    return reply(Array.from({ length: 10 }, (_, i) => ({ Title: `source ${i}`, Url: `https://example.org/${i}`, Summary: 'summary' })))
+  })
+  const p = createDoubaoSearchProvider({ key: () => 'synthetic', fetcher: fetcher as typeof fetch, resultLimit: 3, timeoutMs: 8000 })
+  expect((await p.search('query')).candidates.map(c => c.title)).toEqual(['source 0', 'source 1', 'source 2'])
+  expect(fetcher).toHaveBeenCalledTimes(1)
+})

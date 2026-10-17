@@ -99,6 +99,8 @@ const speechPlayer = createAssistantSpeech({
   onPurposeChange: purpose => { speechPurpose.value = purpose }
 })
 const nativeAutoRequested = ref(false)
+const realtimeSearch = ref<import('../electron/main/r1/realtimeSearch').RealtimeSearchState | null>(null)
+const realtimeSearchBusy = computed(() => !!realtimeSearch.value && ['searching', 'reading', 'waiting'].includes(realtimeSearch.value.phase))
 const taskPanel = ref<InstanceType<typeof R1TaskPanel> | null>(null)
 const memoryConfirmation = ref<MemoryConfirmation | null>(null)
 const memoryConfirmationBusy = ref(false)
@@ -120,9 +122,15 @@ const nativeConversation = useNativeConversation({
   },
   onError(message) { nativeAutoRequested.value = false; nativeResumeGeneration = null; conversation.disableAutoListen(); conversation.particleState.value = 'idle'; conversationPartialText.value = ''; conversation.addSystemMessage(message) },
   onText(event) {
+    if (event.type === 'search.state') {
+      realtimeSearch.value = event as unknown as import('../electron/main/r1/realtimeSearch').RealtimeSearchState
+      if (['ready', 'timeout', 'cancelled', 'failed'].includes(realtimeSearch.value.phase) && !nativeConversation.userSpeaking.value) conversation.particleState.value = 'idle'
+      return
+    }
     if (event.type === 'conversation.item.input_audio_transcription.delta') {
       conversationPartialText.value = typeof event.text === 'string' ? event.text : typeof event.delta === 'string' ? event.delta : ''
     } else if (event.type === 'conversation.item.input_audio_transcription.started') {
+      realtimeSearch.value = null
       conversationPartialText.value = ''
       conversation.particleState.value = 'listening'
     } else if (event.type === 'conversation.item.input_audio_transcription.completed') {
@@ -146,6 +154,7 @@ const nativeConversation = useNativeConversation({
   }
 })
 watch(assistantAudioPlaying, active => { if (!active) void resumeNativeAfterText() })
+watch(nativeConversation.active, active => { if (!active) realtimeSearch.value = null })
 watch(() => preferences.value.value, (next, previous) => { if (next && previous && next.inputDeviceId !== previous.inputDeviceId) handleInputDeviceLost(true) })
 watch(() => preferences.value.value?.outputDeviceId ?? null, () => { void audioDevices.routeOutputs() })
 watch(() => [preferences.value.value?.doNotDisturb, preferences.value.value?.proactiveSpeechEnabled], () => speechPlayer.policyChanged())
@@ -399,6 +408,7 @@ function uninstallDebugBridge(): void {
 }
 
 const particleState = computed<ParticleState>(() => {
+  if (realtimeSearchBusy.value && !nativeConversation.userSpeaking.value && !assistantAudioPlaying.value) return 'thinking'
   if (assistantAudioPlaying.value && music.viewMode.value === 'conversation') {
     return 'speaking'
   }
@@ -415,6 +425,7 @@ const particleState = computed<ParticleState>(() => {
 })
 
 const conversationPanelState = computed<ParticleState>(() => {
+  if (realtimeSearchBusy.value && !nativeConversation.userSpeaking.value && !assistantAudioPlaying.value) return 'thinking'
   return assistantAudioPlaying.value ? 'speaking' : conversation.particleState.value
 })
 
@@ -1146,6 +1157,7 @@ onBeforeUnmount(() => {
           :state="conversationPanelState"
           :partial-text="conversationPartialText"
           :temporary-mode="temporaryMode"
+          :search-state="realtimeSearch"
           @open-history="openPanel('history')"
           @open-search="openPanel('search')"
           @start-chat="composer?.focusInput()"

@@ -17,6 +17,7 @@ import { R1MusicTools } from './musicTools.js'
 import { afterTransactionCommit, inTransaction, type R1Database } from './database.js'
 
 export type ConversationToolScope = { source: SessionMessage; temporary: boolean; timezone: string;
+  realtimeSimpleSearch?: boolean;
   assertCurrent(): void; persistenceConfirmed: boolean; signal?: AbortSignal; sourceMessages?: SessionMessage[];
   selectedArtifact?: ArtifactEditingContext | null;
   onMemoryInvalidated?(deletionEpoch: number): void;
@@ -239,6 +240,7 @@ export class R1ConversationTools {
         if (alias === 'start_task') {
           this.checkSources(args.sourceRefs as string[])
           const delegation = args.delegation as Delegation | undefined
+          if (this.scope.realtimeSimpleSearch && delegation?.toolAliases.some(alias => ['web_search', 'web_read_page'].includes(alias))) throw new Error('REALTIME_SEARCH_USE_IMMEDIATE_TOOLS')
           // Skill/source reading is the existing sandboxed task scaffold. A
           // domain-only delegation must not hide the only way to load its Skill.
           const aliases = [...new Set(['read_file', ...(delegation?.toolAliases ?? ['write_todos'])])]
@@ -273,6 +275,7 @@ export class R1ConversationTools {
             const patch = args.patch as { goal: string | null; addConstraints: string[]; removeConstraints: string[] }
             if (!this.tasks.contextIsCurrent(current.taskId) && patch.goal === null) throw new Error('TASK_CONTEXT_REVALIDATION_REQUIRED')
             const delegation = args.delegation as Delegation | undefined
+            if (this.scope.realtimeSimpleSearch && (delegation?.toolAliases.some(alias => ['web_search', 'web_read_page'].includes(alias)) || this.tasks.authority(current.taskId).authorizedAliases.some(alias => ['web_search', 'web_read_page'].includes(alias)))) throw new Error('REALTIME_SEARCH_USE_IMMEDIATE_TOOLS')
             const aliases = [...new Set(['read_file', ...(delegation?.toolAliases ?? ['write_todos'])])]
             if (aliases.some(alias => !this.implementedTaskAliases.includes(alias))) throw new Error('TASK_TOOL_IMPLEMENTATION_UNAVAILABLE')
             if (this.scope.temporary && aliases.some(alias => this.assets.toolDefinition(alias).effect === 'write') && !this.scope.persistenceConfirmed) throw new Error('TEMPORARY_SAVE_CONFIRMATION_REQUIRED')
@@ -286,6 +289,7 @@ export class R1ConversationTools {
             task = this.tasks.pause(current.taskId, args.expectedGoalVersion as number)
             status = task.status === 'running' ? 'pause_requested' : 'paused'
           } else if (alias === 'resume_task') {
+            if (this.scope.realtimeSimpleSearch && this.tasks.authority(current.taskId).authorizedAliases.some(alias => ['web_search', 'web_read_page'].includes(alias))) throw new Error('REALTIME_SEARCH_USE_IMMEDIATE_TOOLS')
             task = this.tasks.resume(current.taskId, args.expectedGoalVersion as number)
             status = task.queuePosition && task.queuePosition > 0 ? 'queued' : 'accepted'
           } else {

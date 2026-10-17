@@ -22,11 +22,15 @@ function pageDate(value: unknown): string | null {
 }
 
 export function createDoubaoSearchProvider(options: {
-  fetcher?: typeof fetch; key?: () => string | undefined; now?: () => Date
+  fetcher?: typeof fetch; key?: () => string | undefined; now?: () => Date;
+  resultLimit?: number; timeoutMs?: number
 } = {}): SearchProvider {
   const fetcher = options.fetcher ?? fetch
   const key = options.key ?? (() => process.env.DOUBAO_SEARCH_API_KEY)
   const now = options.now ?? (() => new Date())
+  const resultLimit = options.resultLimit ?? 10, timeoutMs = options.timeoutMs ?? 12_000
+  if (!Number.isInteger(resultLimit) || resultLimit < 1 || resultLimit > 10 ||
+    !Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 12_000) throw new Error('SEARCH_POLICY_INVALID')
   return {
     async search(input, signal) {
       const query = validateSearchQuery(input)
@@ -40,9 +44,9 @@ export function createDoubaoSearchProvider(options: {
         response = await fetcher(endpoint, {
           method: 'POST', redirect: 'error',
           headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify({ Query: query, SearchType: 'web', Count: 10,
+          body: JSON.stringify({ Query: query, SearchType: 'web', Count: resultLimit,
             Filter: { NeedContent: false, NeedUrl: true }, QueryControl: { QueryRewrite: false } }),
-          signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(12_000)]) : AbortSignal.timeout(12_000)
+          signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs)
         })
       } catch { throw new SearchProviderError('SEARCH_NETWORK_FAILED') }
       if (response.status === 401 || response.status === 403) throw new SearchProviderError('SEARCH_AUTH_FAILED')
@@ -74,7 +78,7 @@ export function createDoubaoSearchProvider(options: {
           title: [...item.Title.trim()].slice(0, 300).join(''), url,
           snippet: typeof summary === 'string' ? [...summary.trim()].slice(0, 1200).join('') : '',
           query, queriedAtUtc, pageDate: pageDate(item.PublishTime), readDepth: 'search_summary' })
-        if (candidates.length >= 10) break
+        if (candidates.length >= resultLimit) break
       }
       // ResultCount describes this response, not an authoritative total. No
       // pagination/"more available" promise without an upstream indicator.

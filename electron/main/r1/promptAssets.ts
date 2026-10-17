@@ -29,6 +29,7 @@ export type R1PromptAssets = {
   schemaVersion: string
   summaryWindow(): { recentTurnLimit: number; triggerFraction: number; requestTimeoutMs: number }
   musicPolicy(): { resourceAttempts: number; deviceTimeoutMs: number }
+  realtimeSearchPolicy(): { queries: number; candidates: number; timeoutMs: number; snippetCodePoints: number; pages: number; concurrency: number; pageCodePoints: number }
   toolAliases: readonly string[]
   compose(persona: R1Persona, context: Record<string, unknown>, mode?: 'textOnly' | 'realtime'): string
   composeTask(persona: R1Persona, taskInput: Record<string, unknown>): R1CompiledPrompt
@@ -206,6 +207,14 @@ export function loadR1PromptAssets(root: string): R1PromptAssets {
     },
     summaryWindow: () => ({ recentTurnLimit: runtime.context.recentTurnLimit, triggerFraction: runtime.context.summaryTriggerFraction, requestTimeoutMs: runtime.limits.summaryRequestTimeoutMs }),
     musicPolicy: () => ({ resourceAttempts: runtime.limits.musicResourceAttempts, deviceTimeoutMs: runtime.limits.connectTimeoutMs }),
+    realtimeSearchPolicy() {
+      const limits = runtime.limits
+      const policy = { queries: limits.realtimeSearchQueries, candidates: limits.realtimeSearchCandidates,
+        timeoutMs: limits.realtimeSearchTimeoutMs, snippetCodePoints: limits.realtimeSearchSnippetCodePoints,
+        pages: limits.realtimeSearchPages, concurrency: limits.realtimeSearchConcurrency, pageCodePoints: limits.realtimeSearchPageCodePoints }
+      if (policy.queries !== 3 || policy.candidates !== 3 || policy.timeoutMs !== 8000 || policy.snippetCodePoints !== 600 || policy.pages !== 2 || policy.concurrency !== 2 || policy.pageCodePoints !== 4000) throw new Error('REALTIME_SEARCH_POLICY_INVALID')
+      return policy
+    },
     taskBudget(complexity) {
       if (!['light', 'complex'].includes(complexity)) throw new Error('TASK_COMPLEXITY_INVALID')
       const limits = runtime.limits

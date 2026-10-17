@@ -65,3 +65,91 @@ it('destroys the revoked native context and creates a fresh registered boundary 
     expect(conversations.messages(mode.sessionId)).toHaveLength(2)
   } finally { controller.close(); tasks.close(); db.close() }
 })
+
+it('routes native search tool results back to the same call IDs, emits bounded evidence and discards interrupted work', async () => {
+  state.handlers.clear()
+  vi.stubEnv('VOLCENGINE_REALTIME_API_KEY', 'synthetic'); vi.stubEnv('VOLCENGINE_REALTIME_VOICE', 'synthetic_voice')
+  const db = openR1Database(':memory:'), conversations = new R1Conversations(db), memory = new R1MemoryStore(db)
+  const assets = loadR1PromptAssets(resolve('r1-assets')), tasks = new R1TaskSupervisor(db, assets, () => memory.currentDeletionEpoch())
+  const mode = { temporary: false, sessionId: conversations.start() }, sender = Object.assign(new EventEmitter(), { id: 2, isDestroyed: () => false, send: vi.fn() })
+  const socket = new Socket()
+  let finish!: (value: unknown) => void
+  const search = vi.fn(async () => new Promise<any>(resolve => { finish = resolve }))
+  const controller = registerNativeVoiceHandlers({ db, assets, conversations, memory, tasks, mode,
+    persona: new R1PersonaStore(db), configurationRevision: () => 1, implementedTaskAliases: ['read_file', 'web_search', 'web_read_page'],
+    search: { search }, pages: { read: vi.fn() }, connect() { queueMicrotask(() => socket.emit('open')); return socket as unknown as WebSocket } })
+  const tool = (call_id: string, name: string, args: unknown) => socket.event({ type: 'response.function_call_arguments.done', items: [{ call_id, name, arguments: JSON.stringify(args) }] })
+  try {
+    expect(await state.handlers.get('voice.nativeStart')!({ sender }, { connectionId: randomUUID() })).toMatchObject({ ok: true })
+    socket.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'q1', transcript: '查一下天气' })
+    tool('load', 'load_skill', { skillId: 'SK02' })
+    await vi.waitFor(() => expect(socket.sent.filter(e => e.type === 'conversation.item.create')).toHaveLength(1))
+    tool('search1', 'web_search', { query: 'Shanghai weather 2026-10-17' })
+    expect(search).toHaveBeenCalledTimes(1)
+    expect(sender.send).toHaveBeenCalledWith('voice.nativeEvent', expect.objectContaining({ type: 'search.state', phase: 'searching' }))
+    finish({ query: 'weather', queriedAtUtc: '2026-10-17T05:00:00Z', candidates: [], moreResultsAvailable: false })
+    await vi.waitFor(() => expect(socket.sent.filter(e => e.type === 'conversation.item.create')).toHaveLength(2))
+    const returned = socket.sent.filter(e => e.type === 'conversation.item.create').at(-1) as { items: Array<{ call_id: string; content: Array<{ text: string }> }> }
+    expect(returned.items[0].call_id).toBe('search1')
+    expect(returned.items[0]).toMatchObject({ type: 'message', role: 'tool' })
+    expect(JSON.parse(returned.items[0].content[0].text)).toMatchObject({ tool: 'web.search', status: 'succeeded' })
+    socket.event({ type: 'response.output_text.done', response_id: 'answer1', text: '未查到天气信息' })
+    expect(sender.send).toHaveBeenCalledWith('voice.nativeEvent', expect.objectContaining({ type: 'search.state', phase: 'ready' }))
+    socket.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'q2', transcript: '再查一下' })
+    tool('load2', 'load_skill', { skillId: 'SK02' })
+    await vi.waitFor(() => expect(socket.sent.filter(e => e.type === 'conversation.item.create')).toHaveLength(3))
+    tool('search2', 'web_search', { query: 'new query' })
+    expect(search).toHaveBeenCalledTimes(2)
+    socket.event({ type: 'conversation.item.input_audio_transcription.started', item_id: 'q3' })
+    socket.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'q3', transcript: '别查了，聊别的' })
+    finish({ query: 'stale', queriedAtUtc: '2026-10-17T05:00:00Z', candidates: [], moreResultsAvailable: false })
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(socket.sent.filter(e => e.type === 'conversation.item.create')).toHaveLength(3)
+    expect(socket.terminate).not.toHaveBeenCalled()
+    expect(tasks.list()).toHaveLength(0)
+    const stored = db.prepare("SELECT actual_result_json FROM receipts WHERE actual_result_json LIKE '%web.search%'").all()
+    expect(stored).toHaveLength(1)
+    socket.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'q4', transcript: '重新查一下天气' })
+    tool('load4', 'load_skill', { skillId: 'SK02' })
+    await vi.waitFor(() => expect(socket.sent.filter(e => e.type === 'conversation.item.create')).toHaveLength(4))
+    tool('search4', 'web_search', { query: 'weather' })
+    expect(search).toHaveBeenCalledTimes(3)
+    socket.event({ type: 'conversation.item.input_audio_transcription.started', item_id: 'q5' })
+    socket.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'q5', transcript: '先别说。' })
+    finish({ query: 'weather', queriedAtUtc: '2026-10-17T05:00:00Z', candidates: [], moreResultsAvailable: false })
+    await vi.waitFor(() => expect(db.prepare("SELECT actual_result_json FROM receipts WHERE actual_result_json LIKE '%web.search%'").all()).toHaveLength(2))
+    // Stop-speech retains the read receipt but never returns it for old speech.
+    expect(socket.sent.filter(e => e.type === 'conversation.item.create')).toHaveLength(4)
+    expect(socket.terminate).not.toHaveBeenCalled()
+  } finally { controller.close(); tasks.close(); db.close() }
+})
+
+it('plays a cached hint locally after 1.5 seconds without injecting TTS into the pending FC connection', async () => {
+  vi.useFakeTimers(); state.handlers.clear()
+  vi.stubEnv('VOLCENGINE_REALTIME_API_KEY', 'synthetic'); vi.stubEnv('VOLCENGINE_REALTIME_VOICE', 'synthetic_voice')
+  const db = openR1Database(':memory:'), conversations = new R1Conversations(db), memory = new R1MemoryStore(db)
+  const assets = loadR1PromptAssets(resolve('r1-assets')), tasks = new R1TaskSupervisor(db, assets, () => memory.currentDeletionEpoch())
+  const mode = { temporary: false, sessionId: conversations.start() }, sender = Object.assign(new EventEmitter(), { id: 3, isDestroyed: () => false, send: vi.fn() })
+  const socket = new Socket(); let finish!: (value: any) => void
+  const controller = registerNativeVoiceHandlers({ db, assets, conversations, memory, tasks, mode,
+    persona: new R1PersonaStore(db), configurationRevision: () => 1, implementedTaskAliases: [],
+    search: { search: () => new Promise(resolve => { finish = resolve }) }, pages: { read: vi.fn() },
+    searchHint: async () => Buffer.from([1, 0, 2, 0]),
+    connect() { queueMicrotask(() => socket.emit('open')); return socket as unknown as WebSocket } })
+  const tool = (id: string, name: string, args: unknown) => socket.event({ type: 'response.function_call_arguments.done', items: [{ call_id: id, name, arguments: JSON.stringify(args) }] })
+  try {
+    await state.handlers.get('voice.nativeStart')!({ sender }, { connectionId: randomUUID() })
+    await vi.advanceTimersByTimeAsync(0)
+    socket.event({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'q', transcript: '查询天气' })
+    tool('load', 'load_skill', { skillId: 'SK02' }); await vi.advanceTimersByTimeAsync(0)
+    tool('query', 'web_search', { query: 'weather' }); await vi.advanceTimersByTimeAsync(1500)
+    expect(sender.send).toHaveBeenCalledWith('voice.nativeEvent', expect.objectContaining({ type: 'response.output_audio.delta', response_id: expect.stringMatching(/^search-hint:/) }))
+    expect(socket.sent.some(e => e.type === 'speech_text_buffer.commit')).toBe(false)
+    finish({ query: 'weather', queriedAtUtc: '2026-10-17T05:00:00Z', candidates: [], moreResultsAvailable: false })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(socket.sent.filter(e => e.type === 'conversation.item.create')).toHaveLength(2)
+    socket.event({ type: 'response.output_text.done', response_id: 'final', text: '未查到可靠信息' })
+    expect(sender.send).toHaveBeenCalledWith('voice.nativeEvent', expect.objectContaining({ type: 'search.state', phase: 'ready' }))
+    expect(socket.terminate).not.toHaveBeenCalled()
+  } finally { controller.close(); tasks.close(); db.close(); vi.useRealTimers() }
+})

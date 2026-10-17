@@ -386,6 +386,10 @@
           "type": "null"
         }
       ]
+    },
+    "realtimeSimpleSearch": {
+      "type": "boolean",
+      "description": "原生实时语音仅允许一次简单查询；由程序提供，不能转后台扩大搜索。"
     }
   },
   "required": [

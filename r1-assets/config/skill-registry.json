@@ -1,5 +1,5 @@
 {
-  "releaseId": "seamo-ai-r1-agent-assets-2.5.1",
+  "releaseId": "seamo-ai-r1-agent-assets-3.0.0",
   "entries": [
     {
       "skillId": "SK01",
@@ -22,7 +22,7 @@
       "skillId": "SK02",
       "name": "web-qa",
       "legacyKey": "web_qa",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "description": "搜索和读取公开信息，核对时效事实、比较候选并在用户改条件后调整查询。适用于需要外部证据的问题；不登录、购买或预约。",
       "path": "skills/web-qa/SKILL.md",
       "resourcePaths": [
