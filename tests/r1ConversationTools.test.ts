@@ -30,6 +30,22 @@ describe('registered main-conversation tool execution', () => {
       expect(s.tasks.authorizedAliases(active.lease)).toEqual(['read_file', 'web_search', 'web_read_page'])
     } finally { s.tasks.close(); s.db.close() }
   })
+  it('keeps task authority and side-effect thresholds unchanged when optional delegation fields are omitted', () => {
+    const s = setup()
+    try {
+      const tools = new R1ConversationTools(s.db, assets, s.tasks, s.scope,
+        ['read_file', 'write_todos', 'web_search', 'web_read_page', 'notes_create'])
+      expect(tools.execute('start_task', { goal: '只读查询', constraints: [], sourceRefs: [],
+        delegation: {} }, 'delegation-empty')).toMatchObject({ status: 'accepted' })
+      const active = s.tasks.claimNext()!
+      // Omitted delegation fields never default to domain write tools.
+      expect(s.tasks.authorizedAliases(active.lease)).toEqual(['read_file', 'write_todos'])
+      expect(s.tasks.authority(active.lease.taskId).authorizedAliases).toEqual(['read_file', 'write_todos'])
+      expect(tools.execute('start_task', { goal: '写入事项', constraints: [], sourceRefs: [],
+        delegation: { requiredActions: [{ alias: 'notes_create', minimumCount: 1 }] } }, 'required-without-scope'))
+        .toMatchObject({ status: 'failed', errorCode: 'TASK_REQUIREMENTS_INVALID' })
+    } finally { s.tasks.close(); s.db.close() }
+  })
   it('refuses to return a legacy completed web conclusion with no actual web receipts', () => {
     const s = setup()
     let reopened: R1TaskSupervisor | undefined
