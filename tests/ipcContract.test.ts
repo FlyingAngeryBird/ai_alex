@@ -17,6 +17,7 @@ describe('IPC contract', () => {
       'chat.streamMessage',
       'chat.setTemporary',
   'chat.stopResponse',
+  'r1.session.temporaryPersistence',
       'config.get',
       'config.update',
       'music.addSearchHistory',

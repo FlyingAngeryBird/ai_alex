@@ -9,7 +9,7 @@ import { R1Artifacts } from '../r1/artifacts.js'
 import { musicAliases, type R1Music } from '../r1/music.js'
 import type { R1TopicSummaries } from '../r1/topicSummaries.js'
 import type { R1AutomaticMemory } from '../r1/automaticMemory.js'
-import { selectedConversationEntity, currentCandidateContext } from '../r1/sessionMode.js'
+import { selectedConversationEntity, currentCandidateContext, temporaryPersistenceAllowed } from '../r1/sessionMode.js'
 import { itemMutationAliases } from '../r1/itemTools.js'
 import { ipcMain, type WebContents } from 'electron'
 import { NativePlaybackLedger } from '../r1/nativePlayback.js'
@@ -164,7 +164,7 @@ export function registerNativeVoiceHandlers(deps: {
           const source = deps.conversations.append({ sessionId, turnId, role: 'user', body: event.transcript, status: 'final' })
           const sourceTurnId = turnId
           tools = new R1ConversationTools(deps.db, deps.assets, deps.tasks, { source, selectedArtifact, selectedCandidate, sourceMessages: deps.conversations.messages(sessionId).slice(-20), temporary, realtimeSimpleSearch: true,
-            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, persistenceConfirmed: false, ownerId: sender.id,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, persistenceConfirmed: temporaryPersistenceAllowed(deps.mode), ownerId: sender.id,
             assertCurrent() { assertCurrent(); if (turnId !== sourceTurnId) throw new Error('REALTIME_TOOL_SOURCE_REPLACED') },
             onMemoryInvalidated: deps.onMemoryInvalidated ? epoch => { invalidatedEpoch = epoch } : undefined,
             requestMemoryConfirmation: deps.memoryConfirmations ? (candidate, sensitive) => deps.memoryConfirmations!.offer(candidate, {

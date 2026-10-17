@@ -8,6 +8,7 @@ import type { R1TaskSupervisor, TaskEvent } from './taskSupervisor.js'
 import { randomUUID } from 'node:crypto'
 import type { R1Conversations } from './conversations.js'
 import { NativePlaybackLedger } from './nativePlayback.js'
+import type { R1DeliveryAudit } from './deliveryAudit.js'
 
 export type TaskDeliveryRequest = { taskId: string; goalVersion: number; resultId: string; requestId: string }
 export type TaskDeliveryAudio = { text: string; audio: ArrayBuffer; mimeType: 'audio/wav'; responseId: string }
@@ -20,12 +21,13 @@ export class R1TaskDelivery {
   private seen = new Set<string>()
   private active = new Map<number, { requestId: string; abort: AbortController }>()
   private playback = new Map<string, { owner: number; ledger: NativePlaybackLedger; responseId: string;
-    started: boolean; check(): unknown; timer: ReturnType<typeof setTimeout> }>()
+    taskId: string; resultId: string; started: boolean; check(): unknown; timer: ReturnType<typeof setTimeout> }>()
   constructor(private readonly options: {
     assets: R1PromptAssets; tasks: Pick<R1TaskSupervisor, 'list' | 'contextIsCurrent'>; conversations: R1Conversations;
     provider: ReturnType<typeof createArkResponsesProvider>; persona(): R1Persona; preferences(): AppPreferences;
     scope(): { temporary: boolean; sessionId?: string | null }; configurationRevision(): number;
     synthesize(input: { text: string; voice: string; boundary: R1ModelRequestBoundary; signal: AbortSignal }): Promise<ArrayBuffer>
+    audit?: R1DeliveryAudit
   }) {}
   observe(event: TaskEvent): void {
     for (const key of this.eligible.keys()) if (JSON.parse(key)[0] === event.task.taskId &&
@@ -63,6 +65,8 @@ export class R1TaskDelivery {
       try { receipt.check() } catch { this.cancel(owner, input.requestId); return }
     }
     receipt.ledger.playback({ responseId: receipt.responseId, playedUntilMs: input.playedUntilMs, status: input.status })
+    this.options.audit?.record({ kind: 'task_result', taskId: receipt.taskId, resultId: receipt.resultId },
+      { requestId: input.requestId, responseId: receipt.responseId, status: input.status, playedUntilMs: input.playedUntilMs })
     if (input.status === 'started') receipt.started = true
     if (input.status === 'completed' || input.status === 'interrupted') { clearTimeout(receipt.timer); this.playback.delete(input.requestId) }
   }
@@ -131,7 +135,8 @@ export class R1TaskDelivery {
       const playbackCheck = () => current(true)
       const timer = setTimeout(() => this.cancel(owner, request.requestId), 60000)
       timer.unref?.()
-      this.playback.set(request.requestId, { owner, ledger, responseId, started: false, check: playbackCheck, timer })
+      this.playback.set(request.requestId, { owner, ledger, responseId, taskId: task.taskId,
+        resultId: result.resultId, started: false, check: playbackCheck, timer })
       return { text, audio, mimeType: 'audio/wav', responseId }
     } finally {
       clearTimeout(timeout)

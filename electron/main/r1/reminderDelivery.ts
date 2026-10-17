@@ -11,6 +11,7 @@ import type { createArkResponsesProvider, ArkModelBoundary } from '../providers/
 import { R1ModelRequestBoundary } from './modelBoundary.js'
 import { NativePlaybackLedger } from './nativePlayback.js'
 import type { TaskDeliveryAudio, TaskDeliveryPlayback } from './taskDelivery.js'
+import type { DeliveryAuditSubject, R1DeliveryAudit } from './deliveryAudit.js'
 
 export type ReminderSpeechRequest = { deliveryId: string; requestId: string }
 type Delivery = { deliveryId: string; reminderId: string | null; focusId: string | null; speakAllowed: boolean;
@@ -23,11 +24,12 @@ export class R1ReminderDelivery {
   private seen = new Set<string>()
   private active = new Map<number, { requestId: string; controller: AbortController }>()
   private playback = new Map<string, { owner: number; started: boolean; ledger: NativePlaybackLedger;
-    responseId: string; check(): void; timer: ReturnType<typeof setTimeout> }>()
+    responseId: string; subject: DeliveryAuditSubject; check(): void; timer: ReturnType<typeof setTimeout> }>()
   constructor(private readonly options: { db: R1Database; assets: R1PromptAssets; conversations: R1Conversations;
     scope(): R1SessionMode; preferences(): AppPreferences; persona(): R1Persona; configurationRevision(): number;
     provider: ReturnType<typeof createArkResponsesProvider>;
     synthesize(input: { text: string; voice: string; boundary: R1ModelRequestBoundary; signal: AbortSignal }): Promise<ArrayBuffer>
+    audit?: R1DeliveryAudit
   }) {}
   private offer(key: string, input: Omit<Delivery, 'deliveryId' | 'speakAllowed'>, valid: () => boolean): string | null {
     if (this.seen.has(key)) return null
@@ -83,6 +85,8 @@ export class R1ReminderDelivery {
     if (!receipt.started && ['playing', 'completed'].includes(input.status)) throw new Error('NOTICE_PLAYBACK_NOT_STARTED')
     if (input.status !== 'interrupted') { try { receipt.check() } catch { this.cancel(owner, input.requestId); return } }
     receipt.ledger.playback({ responseId: receipt.responseId, status: input.status, playedUntilMs: input.playedUntilMs })
+    this.options.audit?.record(receipt.subject, { requestId: input.requestId, responseId: receipt.responseId,
+      status: input.status, playedUntilMs: input.playedUntilMs })
     if (input.status === 'started') receipt.started = true
     if (['completed', 'interrupted'].includes(input.status)) { clearTimeout(receipt.timer); this.playback.delete(input.requestId) }
   }
@@ -132,7 +136,11 @@ export class R1ReminderDelivery {
         response_id: responseId, delta: wav.subarray(offset, offset + 48000).toString('base64') }, request.requestId)
       ledger.receive({ type: 'response.output_audio.done', response_id: responseId }, request.requestId)
       const expiry = setTimeout(() => this.cancel(owner, request.requestId), 60000); expiry.unref?.()
-      this.playback.set(request.requestId, { owner, ledger, responseId, started: false, check: () => check(true), timer: expiry })
+      const subject: DeliveryAuditSubject = {
+        kind: input.deliveryKind === 'focus_completed' ? 'focus_completed' : input.deliveryKind === 'missed' ? 'missed_reminder'
+          : input.deliveryKind === 'follow_up' ? 'follow_up' : 'reminder',
+        reminderId: input.reminderId, focusId: input.focusId }
+      this.playback.set(request.requestId, { owner, ledger, responseId, subject, started: false, check: () => check(true), timer: expiry })
       return { responseId, text, audio, mimeType: 'audio/wav' }
     } finally {
       clearTimeout(timer); controller.abort()

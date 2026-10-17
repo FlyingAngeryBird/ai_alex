@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-export const R1_SCHEMA_VERSION = 11
+export const R1_SCHEMA_VERSION = 12
 
 export type R1Database = DatabaseSync
 
@@ -396,6 +396,27 @@ export function openR1Database(databasePath: string): R1Database {
         DROP TABLE messages; ALTER TABLE messages_v11 RENAME TO messages;
         CREATE INDEX messages_session_time ON messages(session_id,created_at);
         PRAGMA user_version=11`)
+    })
+  }
+  if (migratedVersion < 12) {
+    inTransaction(db, () => {
+      db.exec(`CREATE TABLE IF NOT EXISTS delivery_announcements (
+        request_id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        reminder_id TEXT,
+        focus_id TEXT,
+        task_id TEXT,
+        result_id TEXT,
+        response_id TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('started','playing','completed','interrupted')),
+        played_ms INTEGER NOT NULL,
+        announced_at TEXT,
+        completed_at TEXT,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS delivery_announcements_subject
+        ON delivery_announcements(kind, reminder_id, focus_id, task_id)`)
+      db.exec('PRAGMA user_version=12')
     })
   }
   return db

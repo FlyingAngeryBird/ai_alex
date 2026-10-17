@@ -203,3 +203,12 @@ DEC-R1-MUSIC-023 补充：沿用原型已有“退出播放”按钮，类型化
 - 版本：资产 3.5.1，PR03 2.2.1、PR04 1.2.1；工具 schema 3.2.0、SQLite11、10 Prompt/6 Skill/38+3 工具数量不变。
 - 验证：纯搜索引用来源可 completed；仅候选来源引用可 completed；无关来源/未列回执被拒；明确 requiredActions 读页时搜索-only 只能 partial；get_task 搜索-only 结果可返回。真实模型/实包验收另记。
 - 回退：代码与资产整体退至 7c40ca8；已保存事项、提醒、回执与用户数据保留，不重放外部查询。
+
+## DEC-R1-DELIVERY-AUDIT-055：临时保存范围确认与真实播报审计
+- 缺口（F04e）：临时对话中文字/语音保存事项或提醒时，`persistenceConfirmed` 固定为 false，程序只能拒绝，用户没有可信确认入口；页面复选框未连接主进程状态。
+- 临时保存：新增类型化 `r1.session.temporaryPersistence`（读取/设置），`R1SessionMode.temporaryPersistenceConfirmed` 仅存内存；事项面板复选框负责可信确认，切换临时/普通会话或结束会话即清零。文字与原生实时会话的 scope 使用同一判定，未确认仍返回 `TEMPORARY_SAVE_CONFIRMATION_REQUIRED`，不交给模型推断授权。
+- 播报审计（F07c/F10）：新增 SQLite `delivery_announcements`（schema 12），仅在原生播放回执 `started/playing/completed/interrupted` 时写入；`announced_at` 表示首次真实可听回执，`completed_at` 表示完整播完，到期/卡片/生成文本不写审计。记录 reminder/focus/task+result 关联、responseId、played_ms；取消/勿扰不产生记录，重复回执按 requestId 幂等更新。
+- 规则：不把“到期”或卡片出现当已播音；勿扰、停止、切会话、睡眠恢复沿用现有撤销与检查点；已有用户听到提醒/专注的真实证据保留，不重测。
+- 版本：资产 3.5.2、PR03 2.2.2；工具 schema 3.2.0 不变，SQLite 12（11→12 新增审计表，升级前快照沿用既有机制）。
+- 验证：审计表状态/时间/关联、未 started 不得 completed、提醒/专注/任务三种来源；临时确认 IPC 读写与 M01 scope 生效；资产校验与构建。
+- 回退：代码与资产整体退至 f084fe8，并保留 schema11 升级前快照；不删除已有消息/事项/回执。

@@ -1,8 +1,13 @@
 import type { R1TaskSupervisor } from './taskSupervisor.js'
 export type R1SessionMode = { temporary: boolean; sessionId?: string | null; currentPlayingTrackKey?: string | null;
+  /** Explicit trusted acknowledgement that temporary-session Items/Reminders may persist. */
+  temporaryPersistenceConfirmed?: boolean;
   selectedArtifact?: { artifactId: string; version: number; selection: import('./artifacts.js').ArtifactRange | null } | null;
   selectedTopic?: { topicId: string; version: number } | null;
   selectedCandidate?: { taskId: string; goalVersion: number; candidateId: string; candidateVersion: number } | null }
+export function temporaryPersistenceAllowed(mode: R1SessionMode | undefined): boolean {
+  return mode?.temporary === true && mode.temporaryPersistenceConfirmed === true
+}
 export function currentCandidateContext(mode: R1SessionMode | undefined, tasks?: R1TaskSupervisor) {
   const selected = mode?.selectedCandidate
   if (!selected || !tasks) return null

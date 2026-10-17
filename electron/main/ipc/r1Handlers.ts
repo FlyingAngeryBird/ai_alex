@@ -67,6 +67,14 @@ export function registerR1Handlers(db: R1Database, ipc: IpcMainLike = ipcMain,
   ipc.handle('r1.history.messages', action<{ sessionId: string }>((payload) =>
     { if (sessionMode.temporary) throw new Error('HISTORY_UNAVAILABLE_IN_TEMPORARY_SESSION')
       return history.messages(payload.sessionId) }))
+  ipc.handle('r1.session.temporaryPersistence', (_event, payload) => {
+    try {
+      if (payload !== undefined && (!payload || typeof payload !== 'object' || Array.isArray(payload) ||
+        typeof (payload as { confirmed?: unknown }).confirmed !== 'boolean')) throw new Error('INVALID_TEMPORARY_PERSISTENCE')
+      if (payload) sessionMode.temporaryPersistenceConfirmed = (payload as { confirmed: boolean }).confirmed
+      return { ok: true, data: { confirmed: sessionMode.temporary === true && sessionMode.temporaryPersistenceConfirmed === true } }
+    } catch (error) { return failure(error) }
+  })
   ipc.handle('r1.items.list', () => ({ ok: true, data: items.list() }))
   ipc.handle('r1.items.export', async (_event, payload) => {
     try {

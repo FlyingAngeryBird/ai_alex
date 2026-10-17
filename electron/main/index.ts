@@ -20,6 +20,7 @@ import { importLegacyJson, openR1Database, type R1Database } from './r1/database
 import { registerR1Handlers } from './ipc/r1Handlers.js'
 import { registerItemActionHandlers } from './ipc/itemActionHandlers.js'
 import { R1ItemActions } from './r1/itemActions.js'
+import { R1DeliveryAudit } from './r1/deliveryAudit.js'
 import { registerCredentialHandlers } from './ipc/credentialHandlers.js'
 import { registerSearchHandlers } from './ipc/searchHandlers.js'
 import { CredentialVault } from './r1/credentials.js'
@@ -208,12 +209,13 @@ void app.whenReady().then(async () => {
       // Keep local pages usable. The vault retains its failure state, blocks saves
       // that could overwrite unreadable secrets, and can retry through settings.
     }
-    taskDelivery = new R1TaskDelivery({ assets: r1PromptAssets, tasks: r1Tasks, conversations: r1Conversations,
+    const deliveryAudit = new R1DeliveryAudit(r1Database)
+    taskDelivery = new R1TaskDelivery({ audit: deliveryAudit, assets: r1PromptAssets, tasks: r1Tasks, conversations: r1Conversations,
       provider: createArkResponsesProvider({ timeoutMs: 12000, thinking: 'disabled' }), persona: () => new R1PersonaStore(r1Database!).get(),
       preferences: () => preferences.get(), scope: () => ({ temporary: r1SessionMode.temporary, sessionId: r1SessionMode.sessionId }),
       configurationRevision: () => vault.revision, synthesize: synthesizeNativeAnnouncement })
     registerTaskDeliveryHandlers(taskDelivery, ipcMain)
-    reminderDelivery = new R1ReminderDelivery({ db: r1Database, assets: r1PromptAssets, conversations: r1Conversations,
+    reminderDelivery = new R1ReminderDelivery({ audit: deliveryAudit, db: r1Database, assets: r1PromptAssets, conversations: r1Conversations,
       scope: () => ({ ...r1SessionMode }), preferences: () => preferences.get(), persona: () => new R1PersonaStore(r1Database!).get(),
       configurationRevision: () => vault.revision, provider: createArkResponsesProvider({ timeoutMs: 12000, thinking: 'disabled' }),
       synthesize: synthesizeNativeAnnouncement })

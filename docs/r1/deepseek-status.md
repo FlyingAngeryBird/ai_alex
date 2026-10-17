@@ -10,6 +10,7 @@
 | D1a | 审查修复：保存框中真实态复核、并发导出单提交、Task 立即等待、remainingReminderIds、导出回执身份 | 代码完成，待正式审查 | `68d3abd` |
 | D1b | 审查修复：取消/过期/替换结算到原Task、删除已提交后关联恢复、同批仅执行到 ui_action | 代码完成，待正式审查 | `7c40ca8` |
 | D2 | 查询→候选→比较/选择→追问→保存事项/提醒：按被引用证据完成、明确读页要求、核心流程验证；DEC-054 | 开发完成，实包待验收 | `f084fe8` |
+| D3 | 工作稿版本链/续改/撤销/保存/导出；临时保存范围确认；真实播报 announcedAt 审计；DEC-055 | 开发完成，实包待验收 | 本批提交 |
 
 ## D1 实现
 
@@ -39,6 +40,15 @@
 - `remainingReminderIds` 改为由真实删除回执（`reminder_kept`）生成，与恢复路径一致。
 - 导出回执身份：`exportItems`/`exportArtifact` 接受 actionId/task/run，回执 JSON 的 actionId/runId 与 ticket、原 task/run 一致；删除回执用显式 SELECT＋UPDATE 关联，不再用 catch 任意数据库失败当重复吞掉。
 - 验证：`r1ItemActions` 16 项（新增并发、对话框撤销/会话变化/Task 变化、keep/cancel 提醒 ID、Artifact 回执身份、Runner 立即等待）；关联 49 项、typecheck 与生产构建通过。按审查要求未重复全量 653 项。
+
+## D3 开发完成（工作稿、临时模式、播报审计）
+
+- F09：核对既有能力并用 `tests/artifactLifecycleFlow.test.ts` 验证同一 Artifact 的版本链：范围续改 v1→v2、撤销 v3、以 v3 保存为同一 Item（再保存更新同一 itemId 到 v2）、导出已确认版本字节一致；陈旧版本续改/导出均 VERSION_CONFLICT 且不写文件。未重写编辑器/页面。
+- F04/F04e：新增 `r1.session.temporaryPersistence` 类型化 IPC 与 `R1SessionMode.temporaryPersistenceConfirmed`（仅内存，切临时/普通或结束会话清零）；事项面板复选框成为可信确认入口；文字与原生实时 scope 共用 `temporaryPersistenceAllowed`，未确认仍拒绝写入，不交给模型推断授权。PR03 补充临时保存说明。
+- F07c/F10：SQLite schema 12 新增 `delivery_announcements`，只在原生播放回执 started/playing/completed/interrupted 时写审计；`announcedAt`=首次真实可听，`completedAt`=完整播完；关联 reminder/followup/focus/task+result 与 responseId/playedMs，requestId 幂等；到期/卡片/生成文本不写审计。勿扰/取消沿用既有撤销，不产生播报记录。
+- 版本：资产 3.5.2、PR03 2.2.2、SQLite 12；工具 schema 3.2.0 不变；DEC-055。
+- 验证：新增 deliveryAudit 3、temporaryPersistence 2、artifactLifecycleFlow 1；关联回归 82 项、typecheck、构建通过；未重复全量。
+- GUI/实包仍受阻，登记为实包待验收；已用 `codex queue` 实际投递一次握手到既有线程。
 
 ## D2 开发完成（查询与生活工具闭环）
 

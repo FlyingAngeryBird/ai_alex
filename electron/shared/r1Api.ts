@@ -124,6 +124,9 @@ export type R1Api = {
     stop(input: FocusCommand): Promise<R1Result<ReturnType<R1Focus['stop']>>>
     onChanged(handler: (event: FocusEvent) => void): () => void
   }
+  session: {
+    temporaryPersistence(input?: { confirmed: boolean }): Promise<R1Result<{ confirmed: boolean }>>
+  }
   items: {
     export(input: import('../main/r1/itemExport.js').ItemExportInput): Promise<R1Result<Awaited<ReturnType<typeof import('../main/r1/itemExport.js').exportItems>>>>
     list(): Promise<R1Result<Item[]>>

@@ -14,6 +14,7 @@ export const exposedChannels = [
   'chat.streamMessage',
   'chat.setTemporary',
   'chat.stopResponse',
+  'r1.session.temporaryPersistence',
   'config.get',
   'config.update',
   'music.addSearchHistory',
@@ -294,6 +295,9 @@ function exposeLingliApi(
         renderer.on('r1.focusChanged', listener)
         return () => renderer.removeListener('r1.focusChanged', listener)
       }
+    },
+    session: {
+      temporaryPersistence: input => invokeR1('r1.session.temporaryPersistence', input)
     },
     items: {
       export: input => invokeR1('r1.items.export', input),

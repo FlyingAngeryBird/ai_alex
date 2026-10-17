@@ -189,8 +189,25 @@ async function deleteItem(disposition: 'keep' | 'cancel'): Promise<void> {
   } catch (error) { deleteError.value = errorMessage(error, '删除失败，请重新确认。') }
   finally { busy.value = false }
 }
+async function loadTemporaryPersistence(): Promise<void> {
+  if (!props.temporaryMode) { persistAcknowledged.value = false; return }
+  try {
+    const result = await window.seamoR1.session.temporaryPersistence()
+    persistAcknowledged.value = result.ok ? result.data.confirmed : false
+  } catch { persistAcknowledged.value = false }
+}
+async function acknowledgePersistence(confirmed: boolean): Promise<void> {
+  persistAcknowledged.value = confirmed
+  try {
+    const result = await window.seamoR1.session.temporaryPersistence({ confirmed })
+    persistAcknowledged.value = result.ok ? result.data.confirmed : false
+    if (!result.ok) message.value = '保存范围确认未生效，请重试。'
+    else if (confirmed) message.value = '已确认：在这段临时对话里保存的事项和提醒会独立保留。'
+  } catch { persistAcknowledged.value = false; message.value = '保存范围确认未生效，请重试。' }
+}
 onMounted(() => {
   void refresh()
+  void loadTemporaryPersistence()
   stopEvents = window.seamoR1.reminders.onDue(() => { void refresh() })
   stopItemChanges = window.seamoR1.items.onChanged(() => { void refresh() })
 })
@@ -204,8 +221,9 @@ onUnmounted(() => { stopEvents?.(); stopItemChanges?.() })
     <div class="r1-basic-content">
       <div class="r1-items-summary"><span>{{ outstanding }} 件待办</span>
         <button type="button" @click="openItem()"><Plus :size="14" />新建</button></div>
-      <label v-if="temporaryMode" class="r1-items-temporary"><input v-model="persistAcknowledged" type="checkbox" />
-        我确认：在这里保存的事项和提醒会留在设备上，退出临时对话后仍保留。</label>
+      <label v-if="temporaryMode" class="r1-items-temporary"><input :checked="persistAcknowledged" type="checkbox"
+        @change="acknowledgePersistence(($event.target as HTMLInputElement).checked)" />
+        我确认：在临时对话里保存的事项和提醒会留在设备上，退出临时对话后仍保留。</label>
       <label class="r1-items-search"><Search :size="15" />
         <input v-model="query" placeholder="找一件事" aria-label="搜索事项" /></label>
       <div class="r1-items-tabs" role="tablist" aria-label="事项分类">

@@ -14,6 +14,7 @@ import type { R1PromptAssets } from '../r1/promptAssets.js'
 import type { R1MemoryStore } from '../r1/memory.js'
 import type { R1MemoryConfirmations } from '../r1/memoryConfirmations.js'
 import type { R1ItemActions } from '../r1/itemActions.js'
+import { temporaryPersistenceAllowed } from '../r1/sessionMode.js'
 import type { R1TopicSummaries } from '../r1/topicSummaries.js'
 import type { R1AutomaticMemory } from '../r1/automaticMemory.js'
 import type { R1SessionMode } from '../r1/sessionMode.js'
@@ -167,6 +168,7 @@ export function registerChatHandlers(
     responseController?.abort(); responseController = new AbortController(); responseGeneration++
   }
   function endCurrentSession(): void {
+    if (sessionMode) sessionMode.temporaryPersistenceConfirmed = false
     if (conversations && sessionId) {
       onSessionEnded(sessionId, temporary)
       conversations.end(sessionId)
@@ -271,7 +273,8 @@ export function registerChatHandlers(
       .filter(message => message.text.trim())
       .map(message => ({ role: message.role as 'user' | 'assistant', content: message.text }))
     return conversationDriver!.reply({ messages: sharedMessages.length ? sharedMessages : messages, context: { ...context,
-      recentTurns: conversations!.modelTurns(source.sessionId) }, scope: { source, sourceMessages: conversations!.messages(source.sessionId).slice(-20), temporary, timezone: context.timezone as string, persistenceConfirmed: false,
+      recentTurns: conversations!.modelTurns(source.sessionId) }, scope: { source, sourceMessages: conversations!.messages(source.sessionId).slice(-20), temporary, timezone: context.timezone as string,
+      persistenceConfirmed: temporaryPersistenceAllowed(sessionMode),
       signal: request.signal, assertCurrent() { if (!requestIsCurrent(request)) throw staleError(request) },
       requestMemoryConfirmation: memoryConfirmations && ownerId ? (candidate, sensitive) => memoryConfirmations.offer(candidate, {
         ownerId, source, temporary, sensitive, assertCurrent() { if (!requestIsCurrent(request)) throw staleError(request) }
@@ -302,7 +305,7 @@ export function registerChatHandlers(
     sessionEpoch += 1
     endCurrentSession()
     temporary = enabled
-    if (sessionMode) { sessionMode.selectedCandidate = null; sessionMode.selectedTopic = null; sessionMode.selectedArtifact = null }
+    if (sessionMode) { sessionMode.temporaryPersistenceConfirmed = false; sessionMode.selectedCandidate = null; sessionMode.selectedTopic = null; sessionMode.selectedArtifact = null }
     if (sessionMode) sessionMode.temporary = enabled
     sessionId = conversations.start(temporary)
     if (sessionMode) sessionMode.sessionId = sessionId

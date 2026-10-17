@@ -14,6 +14,10 @@ R1 当前是开发预览：应用 ID `com.seamo.ai.r1`，数据目录 `~/Library
 
 2026-10-13 已在现有公开仓库建立远端 `main`（当前指向原 GitHub 旧版提交 `b85da0c`）、`codex/seamo-r1` 和两个旧版标签；原 `feature/lingli-mvp` 保留。R1 开发差异见草稿 PR [#1](https://github.com/FlyingAngeryBird/ai_alex/pull/1)。`main` 只接收后续已验收版本，开发提交不会自动合并。
 
+## 开发分支增量（2026-10-17 D1–D3）
+
+`codex/seamo-r1` 已包含 D1 事项删除/导出可信 UI 桥（DEC-053）、D2 查询→候选→保存/提醒完成合同（DEC-054）、D3 临时保存确认与播报审计（DEC-055）。当前源码资产 3.5.2、工具 schema 3.2.0、SQLite 12；实包仍待集中验收，alpha.10 安装包不含这些提交。
+
 ## 最新预览与验收范围（2026-10-17）
 
 alpha.10（DEC-049）源码`fc162d1`已同步GitHub并打包：资产3.3.0/SQLite11，当前候选上下文及页面/会话共用保存、关联提醒；真实搜索＋M01隔离库两阶段通过，97文件634项通过，alpha.10实际窗口已打开，页面后台查询Ark超时、未进入搜索，实际UI/语音V13未通过。普通提醒到期和专注结束短播报已在alpha.7实测6214/3409ms、heard，用户确认两次声音正常。见[candidate记录](2026-10-17-candidate-continuation-progress.md)与[提醒记录](2026-10-17-reminder-delivery-progress.md)。
