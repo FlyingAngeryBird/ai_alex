@@ -144,3 +144,25 @@ it('recalls only real valid memories through the registered tool and excludes fo
   try { expect(() => temp.tools.execute('memory_recall', { query: '无糖茶' }, 'temporary')).toThrow('MODEL_TOOL_NOT_EXPOSED') }
   finally { temp.tasks.close(); temp.db.close() }
 })
+
+  it('returns a search-only completed result when its real web receipt is cited', () => {
+    const s = setup()
+    let reopened: R1TaskSupervisor | undefined
+    try {
+      const task = s.tasks.accept({ requestKey: 'search-only', sourceMessageId: s.source.messageId, timezone: 'Asia/Shanghai',
+        goal: '查 RFC 9110', constraints: [], authorizedAliases: ['web_search', 'web_read_page'], complexity: 'complex' })
+      s.tasks.claimNext()
+      s.tasks.close()
+      const row = s.db.prepare('SELECT checkpoint_json FROM agent_tasks WHERE task_id=?').get(task.taskId) as { checkpoint_json: string }
+      const checkpoint = JSON.parse(row.checkpoint_json)
+      checkpoint.result = { resultId: 'search-only-result', goalVersion: 1, completionStatus: 'completed',
+        replyBrief: 'RFC 9110 是当前 HTTP 语义标准（仅搜索摘要）。', sourceRefs: ['source:c1'], artifacts: [], unresolved: [],
+        candidateRefs: ['c1'], entityReceipts: [{ actionId: 'search-action', tool: 'web.search', status: 'succeeded',
+          entityId: null, summary: 'web.search' }] }
+      s.db.prepare("UPDATE agent_tasks SET status='succeeded',checkpoint_json=? WHERE task_id=?").run(JSON.stringify(checkpoint), task.taskId)
+      reopened = new R1TaskSupervisor(s.db, assets, () => 0)
+      const tools = new R1ConversationTools(s.db, assets, reopened, s.scope, ['read_file', 'web_search', 'web_read_page'])
+      expect(tools.execute('get_task', { taskId: task.taskId }, 'get-search-only'))
+        .toMatchObject({ status: 'succeeded', data: { task: { status: 'succeeded' } } })
+    } finally { reopened?.close(); s.tasks.close(); s.db.close() }
+  })

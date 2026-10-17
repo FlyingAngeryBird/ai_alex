@@ -317,8 +317,10 @@ export class R1ConversationTools {
             // Do not feed such legacy results back to M01 as verified success.
             if (current.status === 'succeeded' && current.result) {
               const required = this.tasks.authority(current.taskId).authorizedAliases.filter(value => ['web_search', 'web_read_page'].includes(value))
-              if (required.some(value => !current.result!.entityReceipts.some(receipt =>
-                receipt.tool === this.assets.toolDefinition(value).name && receipt.status === 'succeeded'))) {
+              // Any real web receipt cited by the published result is enough; a
+              // search-only answer is valid and a page read is not mandatory.
+              if (required.length && !current.result.entityReceipts.some(receipt =>
+                required.some(value => receipt.tool === this.assets.toolDefinition(value).name) && receipt.status === 'succeeded')) {
                 throw new Error('TASK_COMPLETION_WEB_EVIDENCE_MISSING')
               }
             }

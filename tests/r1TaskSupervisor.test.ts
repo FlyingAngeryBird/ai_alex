@@ -181,3 +181,75 @@ describe('R1 TaskSupervisor identity, recovery and result publication', () => {
     } finally { supervisor.close(); db.close() }
   })
 })
+
+function webSetup() {
+  const db = openR1Database(':memory:')
+  const conversation = new R1Conversations(db)
+  const sessionId = conversation.start()
+  const source = conversation.append({ sessionId, turnId: 'turn', role: 'user', body: '查一下 RFC 9110 官方标准', status: 'final' })
+  const supervisor = new R1TaskSupervisor(db, assets, () => 0)
+  const now = new Date().toISOString()
+  const candidate = { candidateId: 'c1', title: 'RFC 9110: HTTP Semantics', url: 'https://www.rfc-editor.org/rfc/rfc9110.html',
+    snippet: 'HTTP semantics specification', query: 'RFC 9110', queriedAtUtc: now, pageDate: '2022-06-01', readDepth: 'search_summary' as const }
+  const search = { async search() { return { query: 'RFC 9110', queriedAtUtc: now, moreResultsAvailable: false, candidates: [candidate] } } }
+  const executor = new R1TaskToolExecutor(supervisor, assets, undefined, search)
+  return { db, supervisor, source, executor, candidate }
+}
+const webDraft = (actionId: string, overrides: Record<string, unknown> = {}) => ({ status: 'completed', goalVersion: 1,
+  replyBrief: 'RFC 9110 是当前的 HTTP 语义标准。', sourceRefs: ['source:c1'], receiptActionIds: [actionId],
+  artifacts: [], candidates: [{ candidateId: 'c1', label: 'RFC 9110: HTTP Semantics',
+    summary: 'HTTP semantics specification', sourceRefs: ['source:c1'] }], unresolved: [], ...overrides })
+
+describe('web completion contract', () => {
+  it('completes from a cited search summary without forcing an authorized page read', async () => {
+    const s = webSetup()
+    try {
+      const task = s.supervisor.accept({ requestKey: 'web', sourceMessageId: s.source.messageId, timezone: 'Asia/Shanghai',
+        goal: '查 RFC 9110', constraints: [], authorizedAliases: ['read_file', 'web_search', 'web_read_page'], complexity: 'complex' })
+      const active = s.supervisor.claimNext()!
+      s.executor.execute(active.lease, 'read_file', { file_path: '/skills/web-qa/SKILL.md' }, 'skill')
+      const receipt = await s.executor.executeAsync(active.lease, 'web_search', { query: 'RFC 9110' }, 'call')
+      expect(receipt.status).toBe('succeeded')
+      const result = s.supervisor.publish(active.lease, webDraft((receipt as { actionId: string }).actionId), new R1Artifacts(s.db))
+      expect(result.completionStatus).toBe('completed')
+      expect(s.supervisor.get(task.taskId).status).toBe('succeeded')
+    } finally { s.supervisor.close(); s.db.close() }
+  })
+  it('accepts evidence cited only through a candidate and rejects unrelated or unlisted sources', async () => {
+    const s = webSetup()
+    try {
+      const task = s.supervisor.accept({ requestKey: 'web-2', sourceMessageId: s.source.messageId, timezone: 'Asia/Shanghai',
+        goal: '查 RFC 9110', constraints: [], authorizedAliases: ['read_file', 'web_search', 'web_read_page'], complexity: 'complex' })
+      const active = s.supervisor.claimNext()!
+      s.executor.execute(active.lease, 'read_file', { file_path: '/skills/web-qa/SKILL.md' }, 'skill')
+      const receipt = await s.executor.executeAsync(active.lease, 'web_search', { query: 'RFC 9110' }, 'call')
+      const actionId = (receipt as { actionId: string }).actionId
+      expect(() => s.supervisor.publish(active.lease, webDraft(actionId, { sourceRefs: [], candidates: [{ candidateId: 'c1',
+        label: 'RFC 9110', summary: 'HTTP semantics specification', sourceRefs: ['source:c1'] }] }), new R1Artifacts(s.db)))
+        .not.toThrow()
+      // A second task cannot complete by citing a source it never received.
+      const other = s.supervisor.accept({ requestKey: 'web-3', sourceMessageId: s.source.messageId, timezone: 'Asia/Shanghai',
+        goal: '另一个查询', constraints: [], authorizedAliases: ['read_file', 'web_search'], complexity: 'complex' })
+      const otherActive = s.supervisor.claimNext()!
+      expect(() => s.supervisor.publish(otherActive.lease, webDraft(actionId, { sourceRefs: ['source:unrelated'] }), new R1Artifacts(s.db)))
+        .toThrow('TASK_COMPLETION_WEB_EVIDENCE_MISSING')
+      expect(s.supervisor.get(other.taskId).status).toBe('running')
+    } finally { s.supervisor.close(); s.db.close() }
+  })
+  it('still requires a real page read when the user explicitly required one', async () => {
+    const s = webSetup()
+    try {
+      s.supervisor.accept({ requestKey: 'web-read', sourceMessageId: s.source.messageId, timezone: 'Asia/Shanghai',
+        goal: '读 RFC 9110 原文核验', constraints: [], authorizedAliases: ['read_file', 'web_search', 'web_read_page'],
+        complexity: 'complex', requiredActions: [{ alias: 'web_read_page', minimumCount: 1 }] })
+      const active = s.supervisor.claimNext()!
+      s.executor.execute(active.lease, 'read_file', { file_path: '/skills/web-qa/SKILL.md' }, 'skill')
+      const receipt = await s.executor.executeAsync(active.lease, 'web_search', { query: 'RFC 9110' }, 'call')
+      expect(() => s.supervisor.publish(active.lease, webDraft((receipt as { actionId: string }).actionId), new R1Artifacts(s.db)))
+        .toThrow('TASK_COMPLETION_REQUIRED_RECEIPT_MISSING')
+      const partial = s.supervisor.publish(active.lease, webDraft((receipt as { actionId: string }).actionId,
+        { status: 'partial', unresolved: ['未读取原文'] }), new R1Artifacts(s.db))
+      expect(partial.completionStatus).toBe('partial')
+    } finally { s.supervisor.close(); s.db.close() }
+  })
+})

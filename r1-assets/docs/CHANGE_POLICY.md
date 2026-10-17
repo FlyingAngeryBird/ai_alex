@@ -195,3 +195,11 @@ DEC-R1-MUSIC-023 补充：沿用原型已有“退出播放”按钮，类型化
 - 版本：资产 3.5.0，PR03 2.2.0、PR04 1.2.0、SK03 1.2.0；工具 schema 3.2.0，SQLite 11 不变。10 Prompt/6 Skill/38+3 工具数量不变。
 - 验证：隔离库关联测试覆盖 owner/ticket、过期、版本/提醒变化、重复确认、取消、Task 等待与恢复；真实服务与实包 UI 分别记录，未实测不标通过。
 - 回退：代码与资产整体退至 2309788；已提交 Item/Reminder/回执与用户数据保留，不重放旧删除或导出。
+
+## DEC-R1-WEB-COMPLETION-054：按被引用证据完成，不强制读页
+- 原因：DEC-041/052 的完成校验要求所有已授权 web 工具都有成功回执，导致仅取得搜索摘要的合法回答被判失败，也为满足校验而无谓读页；授权被当成义务。
+- 规则：completed 至少需要一条本任务真实成功且在 TaskDraft.receiptActionIds 中出现的 web 回执，其返回来源与草稿实际引用（sourceRefs、产物来源、候选来源）相交；读页回执的来源读取级别须为 read/partial。无关成功来源不能充当完成证据；无证据只可 partial/failed。仅摘要完成必须在 replyBrief 说明，不得称读过全文。用户明确要求原文/全文核验时，在 delegation.requiredActions 声明 web_read_page（唯一允许作为必要项的只读动作），仍由既有 requiredActions 门槛在 completed 前校验；普通查询不声明。
+- 兼容：M01 get_task 对旧结果的兜底改为“至少一条被引用的成功 web 回执”，不再要求所有已授权 web 工具都成功；schema/SQLite 不变。
+- 版本：资产 3.5.1，PR03 2.2.1、PR04 1.2.1；工具 schema 3.2.0、SQLite11、10 Prompt/6 Skill/38+3 工具数量不变。
+- 验证：纯搜索引用来源可 completed；仅候选来源引用可 completed；无关来源/未列回执被拒；明确 requiredActions 读页时搜索-only 只能 partial；get_task 搜索-only 结果可返回。真实模型/实包验收另记。
+- 回退：代码与资产整体退至 7c40ca8；已保存事项、提醒、回执与用户数据保留，不重放外部查询。

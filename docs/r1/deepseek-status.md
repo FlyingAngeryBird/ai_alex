@@ -40,6 +40,14 @@
 - 导出回执身份：`exportItems`/`exportArtifact` 接受 actionId/task/run，回执 JSON 的 actionId/runId 与 ticket、原 task/run 一致；删除回执用显式 SELECT＋UPDATE 关联，不再用 catch 任意数据库失败当重复吞掉。
 - 验证：`r1ItemActions` 16 项（新增并发、对话框撤销/会话变化/Task 变化、keep/cancel 提醒 ID、Artifact 回执身份、Runner 立即等待）；关联 49 项、typecheck 与生产构建通过。按审查要求未重复全量 653 项。
 
+## D2 开发完成（查询与生活工具闭环）
+
+- A 完成合同：`publish` 的 completed 不再要求所有已授权 web 工具都有回执；改为至少一条本任务真实成功且在 `receiptActionIds` 中的 web 回执，其返回来源与草稿实际引用（sourceRefs/产物/候选）相交；读页回执须 read/partial；无关成功来源不能充当完成证据。`get_task` 对旧结果的兜底同步改为“至少一条被引用成功 web 回执”。用户明确要求原文/全文时，`delegation.requiredActions` 允许声明 `web_read_page`（唯一可作为必要项的只读动作），仍由既有 requiredActions 门槛在 completed 前校验；普通查询不声明。资产 3.5.1，PR03 2.2.1/PR04 1.2.1，DEC-054。
+- B 用户流程：复用既有 R1WebResult 并排比较/选中/来源读取级别/保存候选/加提醒与 `currentCandidate` 上下文，未另设计界面；新增 `tests/r1QueryFlow.test.ts` 覆盖搜索摘要完成→选第2候选→自然追问注入候选→保存同一候选→关联提醒→重复保存同 Item ID。
+- C 验证：`r1QueryFlow` 1 项；`r1TaskSupervisor` 新增 3 项（搜索-only 完成、候选引用、明确读页只能 partial）；`r1ConversationTools` 新增搜索-only get_task；关联 89 项、typecheck、生产构建通过。未重复全量。
+- 语义边界：改条件=新 goalVersion，按 DEC-049 旧候选失配，需重新选择；未改目标时同一候选可保存并建提醒。
+- 实包/GUI 仍受阻（headless Electron 不进入 whenReady），本批只登记“实包待验收”，不重试、不使用 `.env`。
+
 ## D1b 审查修复（三个闭环缺口）
 
 - pending 终态：取消（UI/保存框）、TTL 过期、窗口/会话撤销、确认失败都会调用 `onTaskActionSettled→settlePendingUiAction`，从原 Task 的 `pendingUiActions` 移除并写入 `uiActionOutcomes`＋observation（“cancelled/expired/…，未执行”），`verifyRecovery` 对其跳过核对；恢复后可正常继续/发布，不会被 `UI_PENDING` 永久阻塞，也不会自动重试已拒动作。主进程每 30s sweep 过期 pending。

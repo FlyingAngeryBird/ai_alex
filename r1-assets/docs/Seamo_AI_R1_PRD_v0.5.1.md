@@ -1775,7 +1775,7 @@ PR07/PR09的speakAllowed由协调器决定；false时不发起用于主动播音
 
 ### 22.4.03 PR03 实时交流和纯文字交流的决策指令
 
-实际文件：prompts/conversation.md，版本2.2.0。
+实际文件：prompts/conversation.md，版本2.2.1。
 
 ```text
 你负责持续理解用户并统一回应。当前能力目录如下，它是能力说明，不是固定关键词路由：
@@ -1790,6 +1790,7 @@ SK01正文由应用常驻加载。简单暂停、继续、下一首、定位、�
 其他频道的联网查证、候选比较、工作产物生成或需要多步观察的组合目标调用start_task，传递目标、条件和必要来源；受理后可继续交流，不等整个任务完成。
 明确曲名或歌手的一次点歌使用即时音乐工具：先加载 SK05，读取 music_get_state 并通过 music_search 获取真实 trackKey，再用所见 playerVersion 调用 music_play。状态查询与搜索可同批提出，依赖它们的播放必须等待回执。场景候选比较或其他多步组合音乐目标仍可启动后台任务。后台委托若需要改变播放状态，工具范围包含 music_get_state 以取得版本；requiredActions 仅用于写入/媒体副作用，不把 music_search 等只读工具填进去。需要引用本轮来源时使用 AppContext.turnId 或实际来源 messageId，不能编造标识。
 后台委托使用delegation声明本轮用户目标需要的task工具别名与必要副作用数量；必要动作必须包含在所声明工具范围内。不要将“可以调用”当作“必须执行”，不授予用户没有委托的保存、提醒或媒体动作。省略委托范围时后台仅能读取资料和写内部计划；程序会拒绝未实现或不属于task频道的工具。修改目标后重新声明所需范围，已提交对象不会因此撤销。
+后台联网任务按证据需要读页，不因已授权而强制读页：搜索摘要足以回答时直接完成，普通查询不在requiredActions声明读取。只有用户明确要求原文/全文核验，或摘要不足、来源互相矛盾必须核对正文时，才使用web_read_page；用户明确要求读原文时，在delegation.requiredActions声明web_read_page至少1次（这是唯一可作为必要项的只读动作），程序会在completed前校验实际成功回执。回答必须按实际读取级别说明“仅搜索摘要/已读部分页面/已读页面”，不能把摘要说成读过全文；证据不足时说明缺口并保留部分结果。
 查询已有任务、修改条件、暂停和取消使用对应任务工具；“先别说”只停止当前回复，“别查了”才取消被指向的查询任务。指代不唯一时先澄清。
 所有动作按真实回执简短回复。awaiting_user只表示等待界面选择；accepted只表示已受理。查证来源和长结果放卡片，口头说关键结论。
 notes_delete/notes_export只发起界面动作：awaiting_user代表等待用户在界面确认删除或选择保存位置，不是已删除或已导出。不要重复调用同一动作期待成功，不要声称已完成；删除的提醒去留只能由用户在界面选择，导出路径只能由系统保存框产生。用户取消后返回cancelled，不编造替代成功。
@@ -1808,7 +1809,7 @@ currentCandidate 是程序核验的当前搜索候选及其来源、目标版本
 
 ### 22.4.04 PR04 后台任务目标驱动循环
 
-实际文件：prompts/task-harness.md，版本1.2.0。
+实际文件：prompts/task-harness.md，版本1.2.1。
 
 ```text
 你是同一Seamo AI的后台任务执行层，使用已注册工具完成目标，不另开语音、不另创人格。
@@ -1824,6 +1825,7 @@ currentCandidate 是程序核验的当前搜索候选及其来源、目标版本
 notes_delete/notes_export返回awaiting_user时动作尚未执行：不得写入receiptActionIds或伪造成功data，不得重复调用期待删除/导出。以needs_input或partial结束本轮，在unresolved说明等待界面确认，并停止该动作；用户确认后的真实回执由程序关联原任务，不通过新的决策或任务补写。
 结束时输出一个符合TaskDraft Schema的JSON对象，不加Markdown围栏。status只用completed、partial或needs_input。replyBrief是可以交给语音层的简短中文结果；sourceRefs、receiptActionIds仅引用实际可见对象。文本产物通过artifacts草稿返回，ID和版本由应用创建。未解决事项写入unresolved。
 只有真实回执与来源满足完成条件时标completed；有明确未完成部分标partial；关键输入不足标needs_input。不要把预算耗尽或工具受理包装为完成。
+联网完成门槛：completed必须引用至少一条本任务真实成功的web回执（搜索或读页）所返回的来源；只引用实际出现在草稿sourceRefs、候选或产物来源中的对象，无关的成功来源不能充当证据。仅有搜索摘要可以completed，但replyBrief要如实说明“仅摘要，未读全文”；只有实际read/partial的页面才能称为读过正文或核验原文。用户明确要求读原文而尚未读到时只能partial/needs_input。requiredActions中的web_read_page必须有对应实际成功回执。
 引用不同对象时保持其真实类型：Item/Reminder不是Artifact；notes_create已经保存事项时，无须为了表达成功另造工作稿。新工作稿的baseArtifactId与baseArtifactVersion均为null；只有TaskInput.observations中kind=artifact的真实ID和版本可以作为续改基准。
 receiptActionIds使用TaskInput.validReceiptActionIds或实际工具回执中的actionId，不能使用协议call_id、entityId或Item/Reminder/Artifact ID代替。内部读取的回执可不作为用户结果列出，已执行的领域写入回执不能遗漏；程序资料中的requiredActions必须有对应实际成功回执才可标completed。
 调用工具时使用协议原生的tool call，不同时把动作写进JSON正文。最终JSON仅用于结构化结果发布，不直接触发新的领域写操作。
@@ -3171,12 +3173,20 @@ DEC-R1-MUSIC-023 补充：沿用原型已有“退出播放”按钮，类型化
 - 验证：隔离库关联测试覆盖 owner/ticket、过期、版本/提醒变化、重复确认、取消、Task 等待与恢复；真实服务与实包 UI 分别记录，未实测不标通过。
 - 回退：代码与资产整体退至 2309788；已提交 Item/Reminder/回执与用户数据保留，不重放旧删除或导出。
 
+#### DEC-R1-WEB-COMPLETION-054：按被引用证据完成，不强制读页
+- 原因：DEC-041/052 的完成校验要求所有已授权 web 工具都有成功回执，导致仅取得搜索摘要的合法回答被判失败，也为满足校验而无谓读页；授权被当成义务。
+- 规则：completed 至少需要一条本任务真实成功且在 TaskDraft.receiptActionIds 中出现的 web 回执，其返回来源与草稿实际引用（sourceRefs、产物来源、候选来源）相交；读页回执的来源读取级别须为 read/partial。无关成功来源不能充当完成证据；无证据只可 partial/failed。仅摘要完成必须在 replyBrief 说明，不得称读过全文。用户明确要求原文/全文核验时，在 delegation.requiredActions 声明 web_read_page（唯一允许作为必要项的只读动作），仍由既有 requiredActions 门槛在 completed 前校验；普通查询不声明。
+- 兼容：M01 get_task 对旧结果的兜底改为“至少一条被引用的成功 web 回执”，不再要求所有已授权 web 工具都成功；schema/SQLite 不变。
+- 版本：资产 3.5.1，PR03 2.2.1、PR04 1.2.1；工具 schema 3.2.0、SQLite11、10 Prompt/6 Skill/38+3 工具数量不变。
+- 验证：纯搜索引用来源可 completed；仅候选来源引用可 completed；无关来源/未列回执被拒；明确 requiredActions 读页时搜索-only 只能 partial；get_task 搜索-only 结果可返回。真实模型/实包验收另记。
+- 回退：代码与资产整体退至 7c40ca8；已保存事项、提醒、回执与用户数据保留，不重放外部查询。
+
 
 ### 25.3 完整默认配置
 
 ```json
 {
-  "releaseId": "seamo-ai-r1-agent-assets-3.5.0",
+  "releaseId": "seamo-ai-r1-agent-assets-3.5.1",
   "schemaVersion": "3.2.0",
   "providerPolicy": {
     "primary": "volcengine",

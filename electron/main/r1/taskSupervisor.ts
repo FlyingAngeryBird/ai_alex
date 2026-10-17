@@ -236,7 +236,10 @@ ${source.snippet}
     const requirements = input.requiredActions ?? []
     if (!Array.isArray(requirements) || requirements.length > 20 || new Set(requirements.map(action => action.alias)).size !== requirements.length ||
       requirements.some(action => !input.authorizedAliases.includes(action.alias) || !Number.isSafeInteger(action.minimumCount) ||
-        action.minimumCount < 1 || action.minimumCount > 50 || !['write', 'media', 'ui_then_write'].includes(this.assets.toolDefinition(action.alias).effect))) throw new Error('TASK_REQUIREMENTS_INVALID')
+        action.minimumCount < 1 || action.minimumCount > 50 ||
+        // An explicit full-text request is the one read that may be mandatory;
+        // other reads stay optional so search summaries can answer.
+        (action.alias !== 'web_read_page' && !['write', 'media', 'ui_then_write'].includes(this.assets.toolDefinition(action.alias).effect)))) throw new Error('TASK_REQUIREMENTS_INVALID')
     // The original request remains immutable even when the current goal/source changes.
     const fingerprint = createHash('sha256').update(JSON.stringify({ sourceMessageId: input.sourceMessageId,
       timezone: input.timezone, goal: input.goal, constraints: input.constraints,
@@ -855,20 +858,24 @@ ${source.snippet}
     // the task cannot claim completion until the user actually decides.
     if (draft.status === 'completed' && (record.checkpoint.pendingUiActions ?? []).some(item =>
       !record.checkpoint.receiptActionIds.includes(item.actionId))) throw new Error('TASK_COMPLETION_UI_PENDING')
-    // A delegated web investigation cannot be completed from model memory.
-    // Enforce evidence independently of M01's optional requiredActions list.
-    if (draft.status === 'completed') {
-      for (const alias of ['web_search', 'web_read_page']) {
-        if (!record.checkpoint.authorizedAliases.includes(alias)) continue
-        const evidence = (record.checkpoint.toolReceipts ?? []).filter(receipt =>
-          receipt.tool === this.assets.toolDefinition(alias).name && receipt.status === 'succeeded' &&
-          draft.receiptActionIds.includes(receipt.actionId) &&
-          (alias === 'web_search' ? (receipt.data.sources as Array<{ sourceRef: string; readStatus?: string }> ?? [])
-            : [receipt.data.source as { sourceRef: string; readStatus: string }]).some(source => source &&
-              draft.sourceRefs.includes(source.sourceRef) &&
-              (alias !== 'web_read_page' || ['read', 'partial'].includes(source.readStatus ?? ''))))
-        if (!evidence.length) throw new Error('TASK_COMPLETION_WEB_EVIDENCE_MISSING')
-      }
+    // A delegated web investigation cannot be completed from model memory, but
+    // authorization is not an obligation to read every page: any cited, real
+    // receipt (search summary or page) can support completion. Only sources
+    // actually cited by this draft count; unrelated successes cannot vouch for it.
+    if (draft.status === 'completed' && ['web_search', 'web_read_page'].some(alias =>
+      record.checkpoint.authorizedAliases.includes(alias))) {
+      const cited = new Set<string>([...draft.sourceRefs, ...draft.artifacts.flatMap(artifact => artifact.sourceRefs),
+        ...draft.candidates.flatMap(candidate => candidate.sourceRefs)])
+      const webTools = new Set([this.assets.toolDefinition('web_search').name, this.assets.toolDefinition('web_read_page').name])
+      const evidence = (record.checkpoint.toolReceipts ?? []).filter(receipt => receipt.status === 'succeeded' &&
+        webTools.has(receipt.tool) && draft.receiptActionIds.includes(receipt.actionId)).some(receipt => {
+        const sources = receipt.tool === this.assets.toolDefinition('web_search').name
+          ? (receipt.data.sources as Array<{ sourceRef: string; readStatus?: string }> ?? [])
+          : [receipt.data.source as { sourceRef: string; readStatus?: string } | undefined]
+        return sources.some(source => source && cited.has(source.sourceRef) &&
+          (receipt.tool !== this.assets.toolDefinition('web_read_page').name || ['read', 'partial'].includes(source.readStatus ?? '')))
+      })
+      if (!evidence) throw new Error('TASK_COMPLETION_WEB_EVIDENCE_MISSING')
     }
     for (const requirement of record.checkpoint.requiredActions ?? []) if (draft.status === 'completed') {
       const actual = (record.checkpoint.toolReceipts ?? []).filter(receipt => receipt.tool === this.assets.toolDefinition(requirement.alias).name &&
