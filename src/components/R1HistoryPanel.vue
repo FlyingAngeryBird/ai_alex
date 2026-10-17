@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { ChevronDown, ChevronUp, History, Search, X } from 'lucide-vue-next'
 import type { HistorySession, SessionMessage } from '../../electron/main/r1/conversations'
+import type { CleanupPreview } from '../../electron/main/r1/dataManagement'
+import R1CleanupDialog from './R1CleanupDialog.vue'
 
 const props = defineProps<{ temporary: boolean; assistantName: string }>()
 const emit = defineEmits<{ close: [] }>()
@@ -14,6 +16,8 @@ const selectedId = ref<string | null>(null)
 const messages = ref<SessionMessage[]>([])
 const messagesLoading = ref(false)
 const error = ref('')
+const deletePreview = ref<CleanupPreview | null>(null), deleting = ref(false)
+let disposed = false
 let listRevision = 0
 let messageRevision = 0
 
@@ -65,6 +69,30 @@ async function selectSession(sessionId: string): Promise<void> {
   } finally { if (revision === messageRevision) messagesLoading.value = false }
 }
 onMounted(load)
+async function prepareDelete(sessionId: string): Promise<void> {
+  if (deleting.value || props.temporary) return
+  deleting.value = true; error.value = ''
+  try {
+    const result = await window.seamoR1.data.prepareCleanup({ scopes: ['history'], sessionId })
+    if (disposed) return
+    if (!result.ok) { error.value = '删除预览未能准备，请重试。'; return }
+    deletePreview.value = result.data
+  } catch { if (!disposed) error.value = '删除预览未能准备，请重试。' }
+  finally { if (!disposed) deleting.value = false }
+}
+function cancelDelete(): void { deletePreview.value = null; void window.seamoR1.data.cancelRestore().catch(() => undefined) }
+async function confirmDelete(): Promise<void> {
+  if (!deletePreview.value || deleting.value) return
+  deleting.value = true; error.value = ''
+  try {
+    const result = await window.seamoR1.data.confirmCleanup({ ticket: deletePreview.value.ticket, confirmed: true })
+    if (disposed) return
+    if (!result.ok) { error.value = '数据已变化或确认已过期，请取消后重新预览。'; return }
+    deletePreview.value = null
+  } catch { if (!disposed) error.value = '删除未完成，请重试。' }
+  finally { if (!disposed) deleting.value = false }
+}
+onBeforeUnmount(() => { disposed = true; listRevision++; messageRevision++; if (deletePreview.value) cancelDelete() })
 watch(query, () => { page.value = 0; void load() })
 watch(() => props.temporary, () => { page.value = 0; void load() })
 </script>
@@ -89,6 +117,7 @@ watch(() => props.temporary, () => { page.value = 0; void load() })
               <small>{{ dateLabel(session.lastMessageAt) }} · {{ session.messageCount }} 条消息</small></span>
             <ChevronUp v-if="selectedId === session.sessionId" :size="16" /><ChevronDown v-else :size="16" /></button>
           <template v-if="selectedId === session.sessionId">
+            <button type="button" class="r1-history-delete" :disabled="deleting" @click="prepareDelete(session.sessionId)">删除这段对话…</button>
             <p v-if="messagesLoading" role="status">正在打开对话…</p>
             <article v-for="message in messages" :key="message.messageId" class="r1-history-message" :class="message.role">
               <div><small>{{ message.role === 'user' ? '你' : message.role === 'assistant' ? assistantName : '系统' }}</small>
@@ -101,6 +130,7 @@ watch(() => props.temporary, () => { page.value = 0; void load() })
       </template>
     </div>
   </aside>
+  <R1CleanupDialog v-if="deletePreview" :preview="deletePreview" :busy="deleting" :error="error" @cancel="cancelDelete" @confirm="confirmDelete" />
 </template>
 
 <style scoped>
@@ -113,4 +143,5 @@ watch(() => props.temporary, () => { page.value = 0; void load() })
 .r1-history-title span{min-width:0}.r1-history-title strong{display:block;color:#d8dccf;font-size:13px;font-weight:400;line-height:1.7;overflow-wrap:anywhere}.r1-history-title small{display:block;margin-top:7px;color:#71867a;font-size:10px}.r1-history-title svg{flex:none}
 .r1-history-message{padding:15px 0!important}.r1-history-message div{display:flex;align-items:center;justify-content:space-between;gap:10px}.r1-history-message small,.r1-history-message time{color:#778e80!important;font-size:10px}.r1-history-message p{margin:9px 0 0;color:#bacbbd;font-size:12px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere}.r1-history-message.user p{color:#e0e5d9}
 .r1-history-error{font-size:12px;line-height:1.7;color:#d9a596}.r1-history-error button{border:0;background:none;color:var(--r1-aqua);font-size:11px}
+.r1-history-delete{margin-top:12px;border:1px solid var(--r1-line);border-radius:5px;padding:6px 10px;background:none;color:#d9a596;font-size:11px}
 </style>

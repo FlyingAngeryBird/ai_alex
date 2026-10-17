@@ -27,6 +27,7 @@ export function registerDataHandlers(data: R1DataManagement, db: R1Database, opt
   const busy = new Set<number>(), observed = new Set<number>(), generations = new Map<number, number>()
   const cancel = (owner: number) => { generations.set(owner, (generations.get(owner) ?? 0) + 1); data.cancel(owner) }
   const codes = new Set(['DATA_MAINTENANCE_BUSY', 'DATA_PREVIEW_CANCELLED', 'DATA_PREVIEW_EXPIRED', 'DATA_CONFIRMATION_REQUIRED',
+    'DATA_SCOPE_REQUIRED', 'SESSION_NOT_FOUND',
     'DATA_CHANGED_REVIEW_AGAIN', 'BACKUP_ALREADY_EXISTS', 'BACKUP_SCHEMA_UNSUPPORTED', 'BACKUP_INTEGRITY_FAILED', 'BACKUP_RELATIONS_INVALID'])
   const fail = (error: unknown) => ({ ok: false, error: { code: error && typeof error === 'object' && 'code' in error && error.code === 'EEXIST' ? 'BACKUP_ALREADY_EXISTS' : error instanceof Error && codes.has(error.message) ? error.message : 'DATA_OPERATION_FAILED', message: '操作未完成，当前数据保留。' } })
   const handle = (channel: string, action: (event: Event, input?: unknown) => unknown) => ipc.handle(channel, async (event, input) => {
@@ -37,6 +38,16 @@ export function registerDataHandlers(data: R1DataManagement, db: R1Database, opt
     try { return { ok: true, data: await action(event, input) } } catch (error) { return fail(error) } finally { busy.delete(owner) }
   })
   handle('r1.data.summary', () => data.summary())
+  handle('r1.data.prepareCleanup', (event, input) => data.prepareCleanup(event.sender.id, input))
+  handle('r1.data.confirmCleanup', (event, input) => {
+    const receipt = data.confirmCleanup(event.sender.id, input as { ticket: string; confirmed: true })
+    options.requestRestart(); return receipt
+  })
+  handle('r1.data.exportCleanupBackup', async event => {
+    const path = await dialogs.save('backup')
+    if (!path || event.sender.isDestroyed()) return { cancelled: true }
+    await data.exportCleanupBackup(path); return { cancelled: false, fileName: basename(path) }
+  })
   handle('r1.data.exportBackup', async event => {
     const path = await dialogs.save('backup')
     if (!path || event.sender.isDestroyed()) return { cancelled: true }

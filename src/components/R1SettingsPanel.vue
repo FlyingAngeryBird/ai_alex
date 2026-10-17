@@ -59,6 +59,7 @@ const emit = defineEmits<{
   previewVoice: [voiceId: string]
   credentialsChanged: [status: CredentialStatus]
   openHistory: []
+  showWelcome: []
 }>()
 
 const assistantName = ref('Seamo AI')
@@ -266,6 +267,7 @@ async function clearCredential(field: CredentialField): Promise<void> {
     <header><div><small>SEAMO / PERSONAL SPACE</small><h2>偏好设置</h2></div>
       <button type="button" aria-label="关闭侧栏" @click="emit('close')"><X :size="19" /></button></header>
     <div class="r1-basic-content">
+      <button type="button" class="r1-welcome-link" @click="emit('showWelcome')">查看首次使用说明</button>
       <section class="r1-settings-section">
         <h3>与你交流的方式</h3>
         <label for="r1-assistant-name">助手称呼</label>

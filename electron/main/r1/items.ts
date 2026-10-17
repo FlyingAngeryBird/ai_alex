@@ -378,6 +378,16 @@ export class R1Items {
     })
   }
 
+  markMissed(reminderId: string, expectedScheduleVersion: number): boolean {
+    return inTransaction(this.db, () => {
+      const reminder = reminderById(this.db, reminderId)
+      if (reminder.schedule_version !== expectedScheduleVersion || reminder.status !== 'scheduled') return false
+      this.db.prepare("INSERT OR IGNORE INTO deliveries(delivery_id,reminder_id,schedule_version,channel,status,created_at) VALUES(?,?,?,'in_app','missed',?)")
+        .run(randomUUID(), reminderId, expectedScheduleVersion, new Date().toISOString())
+      return this.db.prepare("UPDATE reminders SET status='missed',delivery_status='missed',updated_at=? WHERE reminder_id=? AND schedule_version=? AND status='scheduled'")
+        .run(new Date().toISOString(),reminderId,expectedScheduleVersion).changes > 0
+    })
+  }
   deliver(reminderId: string, expectedScheduleVersion: number, channel: 'in_app'):
     { delivered: boolean; reminder: Reminder } {
     return inTransaction(this.db, () => {

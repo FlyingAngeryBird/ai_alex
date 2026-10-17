@@ -8,6 +8,9 @@
     "electronPackage": "42.5.0"
   },
   "checks": [
+    { "id": "alpha2-isolated-onboarding-and-cleanup-ui", "status": "passed", "checkedDate": "2026-10-17", "evidence": "Production entry with empty isolated data; first-use dialog and skip observed with mic off and memory disabled. One synthetic conversation and independent note seeded only in isolated DB. UI preview/cancel kept history; confirm stopped/relaunched production main, cleanup-outcome succeeded; history empty, note retained and cleanup-backup export entry visible. Music-only range preview/cancel also observed.", "scope": "local isolated UI and real SQLite mutation/relaunch, not user production deletion, model workflow or all A/V acceptance" },
+    { "id": "alpha2-code-regression", "status": "passed", "checkedDate": "2026-10-17", "evidence": "89 files / 553 tests, build and registered-asset checks passed. SQLite11 migration keeps message identity/order and non-reusing sequence; cleanup guards before confirmation and after service drain; older-backup forgetting suppression retained.", "scope": "automated code verification, not complete product acceptance" },
+    { "id": "developer-id-signing", "status": "not_run", "reason": "Local keychain inspection found zero valid codesigning identities. notarytool installed, but no Developer ID/notarization credentials verified; preview remains ad-hoc only." },
     { "id": "baseline-build", "status": "passed", "evidence": "npm run build; R1 snapshot worktree" },
     { "id": "baseline-unit", "status": "passed", "evidence": "npm test; 31 files / 203 tests" },
     { "id": "asset-static", "status": "passed", "evidence": "validate_assets.py and check_contract_examples.py; fixture only" },

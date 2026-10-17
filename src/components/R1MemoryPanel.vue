@@ -161,7 +161,8 @@ async function showSources(memoryId: string): Promise<void> {
   try {
     const result = await window.seamoR1.memory.sources(memoryId)
     if (result.ok) sources.value = { ...sources.value, [memoryId]: result.data }
-    else message.value = '来源暂时无法读取。'
+    else message.value = result.error.code === 'MEMORY_SOURCE_UNAVAILABLE'
+      ? '原始来源已不可查看；独立记忆仍保留，清理历史不会自动忘记记忆。' : '来源暂时无法读取。'
   } catch {
     message.value = '来源暂时无法读取。'
   }

@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-export const R1_SCHEMA_VERSION = 10
+export const R1_SCHEMA_VERSION = 11
 
 export type R1Database = DatabaseSync
 
@@ -381,6 +381,21 @@ export function openR1Database(databasePath: string): R1Database {
       const columns = new Set((db.prepare('PRAGMA table_info(app_preferences)').all() as { name: string }[]).map(row => row.name))
       if (!columns.has('reduced_motion')) db.exec('ALTER TABLE app_preferences ADD COLUMN reduced_motion INTEGER NOT NULL DEFAULT 0 CHECK(reduced_motion IN (0,1))')
       db.exec('PRAGMA user_version=10')
+    })
+  }
+  if (migratedVersion < 11) {
+    inTransaction(db, () => {
+      // A cleared history must not reuse rowids below a deletion/context cutoff.
+      db.exec(`CREATE TABLE messages_v11 (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT, message_id TEXT NOT NULL UNIQUE,
+        session_id TEXT NOT NULL REFERENCES sessions(session_id), turn_id TEXT NOT NULL, response_id TEXT,
+        role TEXT NOT NULL CHECK(role IN ('user','assistant','system')), body TEXT NOT NULL,
+        status TEXT NOT NULL, played_until_ms INTEGER, created_at TEXT NOT NULL);
+        INSERT INTO messages_v11(sequence,message_id,session_id,turn_id,response_id,role,body,status,played_until_ms,created_at)
+          SELECT rowid,message_id,session_id,turn_id,response_id,role,body,status,played_until_ms,created_at FROM messages ORDER BY rowid;
+        DROP TABLE messages; ALTER TABLE messages_v11 RENAME TO messages;
+        CREATE INDEX messages_session_time ON messages(session_id,created_at);
+        PRAGMA user_version=11`)
     })
   }
   return db

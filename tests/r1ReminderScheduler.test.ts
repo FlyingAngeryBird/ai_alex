@@ -88,3 +88,33 @@ describe('R1 reminder scheduler', () => {
     } finally { db.close() }
   })
 })
+
+describe('R1 missed reminders after startup or wake',()=>{
+ it('groups reminders missed within 24 hours once and silently lists older reminders',()=>{
+  const db=openR1Database(':memory:'),show=vi.fn(),broadcast=vi.fn(),items=new R1Items(db)
+  vi.useFakeTimers();const start=Date.now()
+  try{
+   const old=items.createReminder({actionId:'old',linkPurpose:'independent',body:'过期合成提醒',dueAtUtc:new Date(start+1000).toISOString(),timezone:'Asia/Shanghai'}).reminder
+   const a=items.createReminder({actionId:'recent-a',linkPurpose:'independent',body:'近期一',dueAtUtc:new Date(start+25*3600000).toISOString(),timezone:'Asia/Shanghai'}).reminder
+   const b=items.createReminder({actionId:'recent-b',linkPurpose:'independent',body:'近期二',dueAtUtc:new Date(start+26*3600000).toISOString(),timezone:'Asia/Shanghai'}).reminder
+   vi.setSystemTime(start+27*3600000)
+   const scheduler=new ReminderScheduler(db,{isSupported:()=>true,show},{broadcast},()=>true)
+   scheduler.recoverMissed();scheduler.recoverMissed();scheduler.tick()
+   expect(show).toHaveBeenCalledTimes(1)
+   expect(broadcast).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({recoveredCount:2,silent:true,systemRequested:true}))
+   expect(items.listReminders().find(r=>r.reminderId===old.reminderId)).toMatchObject({status:'missed',deliveryStatus:'missed'})
+   for(const id of [a.reminderId,b.reminderId])expect(items.listReminders().find(r=>r.reminderId===id)).toMatchObject({status:'due',deliveryStatus:'system_requested'})
+   expect(db.prepare('SELECT COUNT(*) AS n FROM deliveries').get()).toMatchObject({n:3})
+  }finally{vi.useRealTimers();db.close()}
+ })
+ it('emits a one-time followup with its kind and never replays a cancelled schedule',()=>{
+  const db=openR1Database(':memory:'),items=new R1Items(db),broadcast=vi.fn()
+  vi.useFakeTimers();const start=Date.now()
+  try{
+   items.createReminder({actionId:'followup',linkPurpose:'independent',kind:'followup',body:'合成回访',dueAtUtc:new Date(start+1000).toISOString(),timezone:'Asia/Shanghai'})
+   const scheduler=new ReminderScheduler(db,{isSupported:()=>false,show:vi.fn()},{broadcast})
+   vi.setSystemTime(start+1500);scheduler.tick();scheduler.tick()
+   expect(broadcast).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({kind:'followup'}))
+  }finally{vi.useRealTimers();db.close()}
+ })
+})

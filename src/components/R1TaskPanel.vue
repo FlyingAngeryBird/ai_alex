@@ -42,7 +42,7 @@ const labels: Record<TaskStatus, string> = { accepted: '等待处理', running: 
           <p v-if="selected.queuePosition !== null">队列位置 {{ selected.queuePosition }}</p></section>
         <div class="task-actions">
           <button v-if="['accepted','running'].includes(selected.status)" type="button" :disabled="busy" @click="emit('control', 'pause')"><Pause :size="14" />暂停</button>
-          <button v-if="['paused','needs_resume'].includes(selected.status)" type="button" :disabled="busy" @click="emit('control', 'resume')"><Play :size="14" />继续</button>
+          <button v-if="['paused','needs_resume','waiting_input','partially_succeeded'].includes(selected.status)" type="button" :disabled="busy" @click="emit('control', 'resume')"><Play :size="14" />{{ selected.status === 'partially_succeeded' ? '继续未完成步骤' : '继续' }}</button>
           <button v-if="['accepted','running','paused','needs_resume','waiting_input'].includes(selected.status)" type="button" :disabled="busy" @click="emit('control', 'cancel')"><X :size="14" />取消任务</button>
         </div>
         <R1WebResult :task="selected" />

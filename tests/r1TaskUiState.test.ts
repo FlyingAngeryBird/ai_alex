@@ -34,3 +34,14 @@ it('uses the selected goal version and retains state until the real control rece
   expect(state.selected.value?.status).toBe('paused')
   expect(state.busy.value).toBe(false)
 })
+
+it('shows one passive recovery notice without resuming tasks, and does not repeat it after dismissal',async()=>{
+ const task={taskId:'saved',goalVersion:2,status:'needs_resume'} as R1Task
+ const api={list:vi.fn().mockResolvedValue({ok:true,data:[task]}),resume:vi.fn()} as unknown as R1Api['tasks']
+ const state=useTasks(api);await state.refresh()
+ expect(state.recoveryTasks.value).toHaveLength(1);expect(api.resume).not.toHaveBeenCalled()
+ state.dismissRecovery();await state.refresh()
+ expect(state.recoveryTasks.value).toHaveLength(0)
+ state.changeScope();await Promise.resolve()
+ expect(state.recoveryTasks.value).toHaveLength(0)
+})

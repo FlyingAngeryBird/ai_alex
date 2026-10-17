@@ -5,6 +5,8 @@ describe('IPC contract', () => {
     const { exposedChannels } = await import('../electron/preload/index')
 
     expect(exposedChannels).toEqual([
+      'r1.onboarding.get', 'r1.onboarding.complete',
+      'r1.data.prepareCleanup', 'r1.data.confirmCleanup', 'r1.data.exportCleanupBackup',
       'r1.data.summary', 'r1.data.exportBackup', 'r1.data.prepareRestore', 'r1.data.cancelRestore', 'r1.data.confirmRestore', 'r1.data.exportDiagnostics',
       'r1.preferences.get', 'r1.preferences.update',
       'r1.music.attach', 'r1.music.detach', 'r1.music.snapshot', 'r1.music.report', 'r1.music.search', 'r1.music.control', 'r1.music.clearHistory', 'r1.music.exit',

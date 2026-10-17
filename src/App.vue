@@ -11,6 +11,7 @@ import R1TaskPanel from '@/components/R1TaskPanel.vue'
 import { useNativeConversation } from '@/composables/useNativeConversation'
 import { useTasks } from '@/composables/useTasks'
 import R1HistoryPanel from '@/components/R1HistoryPanel.vue'
+import R1WelcomeDialog from '@/components/R1WelcomeDialog.vue'
 import R1FocusChip from '@/components/R1FocusChip.vue'
 import R1FocusDialog from '@/components/R1FocusDialog.vue'
 import { useFocus } from '@/composables/useFocus'
@@ -188,6 +189,19 @@ const composer = ref<InstanceType<typeof R1Composer> | null>(null)
 const credentialStatus = ref<CredentialStatus | null>(null)
 const credentialReadFailed = ref(false)
 const persona = ref<R1Persona | null>(null)
+const welcomeOpen = ref(false), welcomeBusy = ref(false), welcomeError = ref('')
+async function finishWelcome(target: 'home' | 'settings' | 'services'): Promise<void> {
+  if (welcomeBusy.value) return
+  welcomeBusy.value = true; welcomeError.value = ''
+  try {
+    const result = await window.seamoR1.onboarding.complete({ skipped: target === 'home' })
+    if (!result.ok) { welcomeError.value = result.error.message; return }
+    welcomeOpen.value = false
+    if (target === 'settings') openPanel('settings')
+    else if (target === 'services') openServiceSettings('VOLCENGINE_ARK_API_KEY')
+  } catch { welcomeError.value = '引导状态暂时无法保存，请重试。' }
+  finally { welcomeBusy.value = false }
+}
 const currentDate = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())
 const hasSidePanel = computed(() => settingsOpen.value || itemsOpen.value || memoryOpen.value || historyOpen.value)
 const microphoneCapturing = computed(() => nativeConversation.active.value || keyboardRecorder.isRecording.value || realtimeRecorder.isRecording.value)
@@ -228,7 +242,7 @@ function closePanels(): void {
   historyOpen.value = false
 }
 const temporaryMode = ref(false)
-const reminderNotice = ref<{ body: string; dueAtUtc: string; systemRequested: boolean } | null>(null)
+const reminderNotice = ref<import('../electron/main/r1/reminderScheduler').ReminderDueEvent | null>(null)
 let stopReminderNotice: (() => void) | null = null
 let stopMemoryInvalidation: (() => void) | null = null
 const voicePreviewPending = ref(false)
@@ -999,12 +1013,14 @@ onMounted(() => {
   stopMemoryChanged = window.seamoR1.memory.onChanged(() => { memoryRevision.value++ })
   taskState.start()
   try { audioDevices.start() } catch { audioDevices.error.value = '设备列表暂时无法读取，请稍后在设置中重试。' }
-  void Promise.all([window.seamoR1.credentials.status(), window.seamoR1.persona.get(), preferences.load()]).then(([credentials, currentPersona, preferencesReady]) => {
+  void Promise.all([window.seamoR1.credentials.status(), window.seamoR1.persona.get(), preferences.load(), window.seamoR1.onboarding.get()]).then(([credentials, currentPersona, preferencesReady, onboarding]) => {
+    if (onboarding.ok) welcomeOpen.value = !onboarding.data.completed
+    else conversation.addSystemMessage('首次引导状态暂时无法读取，可在设置中重新打开使用说明。')
     if (credentials.ok) credentialStatus.value = credentials.data
     else credentialReadFailed.value = true
     if (currentPersona.ok) persona.value = currentPersona.data
     else conversation.addSystemMessage('人格设置暂时无法读取，请重新启动应用。')
-    if (!preferencesReady || !credentials.ok || !currentPersona.ok ||
+    if (welcomeOpen.value || !onboarding.ok || !preferencesReady || !credentials.ok || !currentPersona.ok ||
       !credentials.data.VOLCENGINE_ARK_API_KEY || !credentials.data.VOLCENGINE_ARK_MODEL) return
     startupGreetingTimer = window.setTimeout(() => {
       if (conversation.messages.value.length || conversation.isListening.value || nativeConversation.active.value || nativeConversation.starting.value) return
@@ -1161,8 +1177,12 @@ onBeforeUnmount(() => {
       @preview-voice="handlePreviewVoice"
       @saved="(saved) => { persona = saved }"
       @credentials-changed="(status) => { credentialStatus = status }"
+      @show-welcome="welcomeOpen = true"
     />
     <R1ItemsPanel v-if="itemsOpen" :temporary-mode="temporaryMode" @close="closePanels" @start-focus="openFocusEditor" />
+    <R1WelcomeDialog v-if="welcomeOpen" :busy="welcomeBusy" :error="welcomeError"
+      :native-configured="!!credentialStatus?.VOLCENGINE_REALTIME_API_KEY && !!(persona?.voiceId || credentialStatus?.VOLCENGINE_REALTIME_VOICE)"
+      :text-configured="!!credentialStatus?.VOLCENGINE_ARK_API_KEY && !!credentialStatus?.VOLCENGINE_ARK_MODEL" @complete="finishWelcome" />
     <SearchPanel v-if="searchEverOpened" v-show="searchOpen" :temporary-mode="temporaryMode" @close="closePanels" />
     <R1MemoryPanel v-if="memoryOpen" :temporary="temporaryMode" :revision="memoryRevision" :interaction-busy="textBusy || conversation.isListening.value || conversation.particleState.value === 'thinking'" @close="closePanels" @continue-topic="handleContinueTopic" @settings="openPanel('settings')" />
     <R1MemoryConfirmationDialog v-if="memoryConfirmation" :key="memoryConfirmation.confirmationId" :confirmation="memoryConfirmation"
@@ -1175,10 +1195,17 @@ onBeforeUnmount(() => {
       <p>{{ focusNotice || focus.error.value }}</p><button type="button" @click="focusNotice = ''; focus.error.value = ''">关闭</button>
     </aside>
     <aside v-if="reminderNotice" class="r1-reminder-toast" role="status">
-      <div><strong>提醒已到期</strong><p>{{ reminderNotice.body }}</p>
+      <div><strong>{{ reminderNotice.recoveredCount ? '错过的提醒' : reminderNotice.kind === 'followup' ? '约定的回访时间到了' : '提醒已到期' }}</strong><p>{{ reminderNotice.body }}</p>
+        <p v-if="reminderNotice.kind === 'followup'">现在方便接着聊这件事吗？</p>
         <small>{{ reminderNotice.systemRequested ? '系统通知已请求；不代表已读。' : '已在应用内显示；系统通知未请求。' }}</small>
       </div>
+      <button type="button" @click="openPanel('items'); reminderNotice = null">查看事项</button>
       <button type="button" @click="reminderNotice = null">关闭</button>
+    </aside>
+    <aside v-if="!welcomeOpen && !temporaryMode && !reminderNotice && !focusNotice && taskState.recoveryTasks.value.length" class="r1-reminder-toast" role="status">
+      <div><strong>上次还有 {{ taskState.recoveryTasks.value.length }} 项委托未完成</strong><p>尚未重新执行。选择继续后，会先核对已保存的结果。</p></div>
+      <button type="button" @click="taskState.selectedId.value = taskState.recoveryTasks.value[0]!.taskId; openTask(); taskState.dismissRecovery()">查看委托</button>
+      <button type="button" @click="taskState.dismissRecovery()">稍后</button>
     </aside>
   </main>
 </template>

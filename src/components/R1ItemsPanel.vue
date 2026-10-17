@@ -210,7 +210,7 @@ onUnmounted(() => stopEvents?.())
           <button v-if="!query" type="button" @click="openItem()"><Plus :size="14" />记下一件事</button></div>
         <section v-if="independentReminders.length" class="r1-items-independent"><h3>独立提醒</h3>
           <article v-for="reminder in independentReminders" :key="reminder.reminderId"><p>{{ reminder.body }}</p>
-            <small>{{ dateLabel(reminder.dueAtUtc) }} · {{ reminder.status === 'due' ? '已到期，不代表已读' : '等待到期' }}</small><button type="button" @click="openExistingReminder(reminder)">改期</button>
+            <small>{{ dateLabel(reminder.dueAtUtc) }} · {{ reminder.status === 'missed' ? '已错过，未发送过期通知' : reminder.status === 'due' ? '已到期，不代表已读' : '等待到期' }}</small><button type="button" @click="openExistingReminder(reminder)">改期</button>
             <button type="button" @click="cancelReminder(reminder)">取消</button></article></section>
         <button class="r1-items-add-reminder" type="button" @click="openReminder()"><Bell :size="14" />设置独立提醒</button>
         <button class="r1-items-add-reminder" type="button" @click="emit('startFocus')"><Timer :size="14" />开始一段专注</button>

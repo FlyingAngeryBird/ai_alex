@@ -52,6 +52,8 @@ import { R1Preferences } from './r1/preferences.js'
 import { registerPreferencesHandlers } from './ipc/preferencesHandlers.js'
 import { R1DataManagement } from './r1/dataManagement.js'
 import { registerDataHandlers } from './ipc/dataHandlers.js'
+import { R1Onboarding } from './r1/onboarding.js'
+import { registerOnboardingHandlers } from './ipc/onboardingHandlers.js'
 import { registerR1MusicHandlers } from './ipc/musicR1Handlers.js'
 import { createConfiguredMusicProvider } from './ipc/musicHandlers.js'
 
@@ -141,6 +143,7 @@ void app.whenReady().then(async () => {
     r1PromptAssets = loadR1PromptAssets(join(app.getAppPath(), 'r1-assets'))
     r1Conversations = new R1Conversations(r1Database)
     const preferences = new R1Preferences(r1Database)
+    registerOnboardingHandlers(new R1Onboarding(join(app.getPath('userData'), 'onboarding.json')))
     registerPreferencesHandlers(preferences)
     importLegacyJson(r1Database, join(app.getPath('appData'), 'lingli'), 'lingli-json')
     importLegacyJson(r1Database, join(app.getPath('appData'), 'lingmo'), 'lingmo-json')
@@ -231,6 +234,7 @@ void app.whenReady().then(async () => {
     })
     powerMonitor.on('suspend', () => r1Focus?.suspend())
     powerMonitor.on('resume', () => r1Focus?.wake())
+    powerMonitor.on('resume', () => reminderScheduler?.recoverMissed())
     powerMonitor.on('suspend', () => r1Tasks?.suspend())
     powerMonitor.on('resume', () => r1Tasks?.wake())
   } catch (error) {
