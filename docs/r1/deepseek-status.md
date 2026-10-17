@@ -43,6 +43,15 @@
 - 导出回执身份：`exportItems`/`exportArtifact` 接受 actionId/task/run，回执 JSON 的 actionId/runId 与 ticket、原 task/run 一致；删除回执用显式 SELECT＋UPDATE 关联，不再用 catch 任意数据库失败当重复吞掉。
 - 验证：`r1ItemActions` 16 项（新增并发、对话框撤销/会话变化/Task 变化、keep/cancel 提醒 ID、Artifact 回执身份、Runner 立即等待）；关联 49 项、typecheck 与生产构建通过。按审查要求未重复全量 653 项。
 
+## E1 真实应用核心流程（进行中，受钥匙串授权阻塞）
+
+- 已操作真实 alpha.11 窗口：Finder/Terminal 启动、截图可用；AppleScript 辅助访问被拒后改用 Electron 本地调试端口（未安装新工具）驱动真实 renderer。
+- 已证：真实开场白；自然查询两次 `ARK_TOOL_SCOPE_OR_SCHEMA_INVALID`；显式“发起后台任务”后 start_task→真实搜索/读页→completed（10 候选/来源）；任务面板并排比较（2 列）、选中第 2 候选；自然追问后真实保存便签「RFC 9110 官方标准」（source_ref 与选中候选一致，正文含真实 URL 与“仅搜索摘要”），并创建关联提醒（1 小时后，scheduled）。
+- 重复保存请求遇 `ARK_REQUEST_TIMEOUT`，数据未重复（仍 1 便签/1 提醒），但“重复保存返回同一事项”的成功回执尚缺。
+- 据此修复并生成 **alpha.12**（`8dd48f0`，资产 3.5.3）：PR03 明确文字频道联网必须 start_task；M01 请求时限 30s→60s；工具调用被拒时仅向主进程记录工具名与原因（无正文/凭据）。
+- alpha.12 启动时出现 macOS 钥匙串授权对话框（“Seamo AI R1 Safe Storage”），需用户输入登录钥匙串密码；当前无 GUI 自动化权限（AppleScript 辅助访问被拒），无法代替用户授权。授权后继续 E1 的重复保存与工作稿流程；TXT/MD 原生保存框同样需要可用的 GUI 输入权限。
+- alpha.12 包：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha12-e1/`，ZIP 148,343,367 字节，SHA256 `7c59d8c082476083eb286b8b2e112fc4b5c4bef920d091ce1e04c7ca7156d821`。
+
 ## D5 集中收口与内部验收包
 
 - 41项逐项盘点见 [R1交付清单](R1-delivery-board.md) 的“D5 41项盘点”；D1–D3 状态统一为开发已交付/实包待验收，不把未跑组合测试列为新开发需求。
@@ -58,7 +67,7 @@
 - 有界复验：netease 200 但无周杰伦原版；kuwo 服务端 400“source is not supported”；joox 命中但资源 URL 503。未发现可修适配缺口，未新增供应商/未改默认源顺序。
 - 修复：聚合服务明确不支持某 source（400/404/410）时，默认“全部”搜索对其退避 10 分钟，避免重复探测；显式单源请求仍真实重试。
 - 验证：新增本地流程（搜索→播放第二首→seek→LRC 以音频时钟定位→20% 降音/恢复→入队→下一首）；音乐关联 8 文件 61 项、typecheck、构建通过。fixture 只证明本地播放器逻辑，不冒充线上点歌/真实扬声器。
-- 资源阻塞：需要 netease 具备原版曲目版权或 joox 资源 URL 恢复；不阻塞本地代码交付，实包听测单列。
+- 资源阻塞：需要该查询在现有源中存在可解析的真实资源（netease 原版条目或 joox 资源恢复）；只陈述观察事实，不推断版权归属，也不代表所有音乐不可用。
 - 版本：资产 3.5.2、schema 3.2.0、SQLite12 不变。
 
 ## D3 开发完成（工作稿、临时模式、播报审计）
@@ -89,7 +98,6 @@
 
 ## 未完成 / 风险
 
-- 真实 M01「删除→界面确认→Receipt」「导出→保存框→文件」与实包 UI 点击仍待验收；当前运行 alpha.10 不含本批代码，不能归因或替代。状态分层：代码已提交/审查待改/实包待验收。
+- 真实 M01「删除→界面确认→Receipt」「导出→保存框→文件」与实包 UI 点击仍待验收；当前内部验收包为 alpha.12，旧 alpha.10 包不含本批代码。状态分层：开发已交付/实包待验收。
 - Artifact 导出在本服务内补写 `notes.export` 回执（原页面 artifact 导出无回执）；待 UI/实包验证。
-- D2：Web 完成合同维持现状，不在本批改动。
 - 旧 `scripts/check-task-research.mjs` 仍是未跟踪诊断脚本，保留归属，不覆盖。
