@@ -52,10 +52,11 @@
 - alpha.12 复测原自然问法仍报 `ARK_TOOL_SCOPE_OR_SCHEMA_INVALID`；主进程诊断（alpha.12 已含）记录为 **`start_task MODEL_TOOL_INPUT_INVALID`**，不是超时或 web 工具直调。
 - 根因：start_task/steer_task 的 delegation 强制要求 toolAliases/requiredActions，与 PR03“必要副作用可空”语义冲突；requiredActions 枚举缺 `web_read_page`，与 DEC-054“明确读原文时声明”冲突。模型按提示构造即被 Schema 拒绝。
 - 修复 **alpha.13**（`c3d5f9b`，资产 3.5.4、schema 3.2.1，DEC-057）：delegation 字段改为可选；requiredActions 枚举补 web_read_page；PR03 说明只读查询可省略/空数组；工具输入拒绝时记录失败 schema 路径/关键字（不含参数值）。
+- 边界验证（`84b1ae9`）：delegation 省略 toolAliases/requiredActions 时程序仍只授权 `read_file`+`write_todos`，不默认域写入；requiredActions 未在授权工具范围内时返回 `TASK_REQUIREMENTS_INVALID`，不静默扩大权限；已加测试锁定。
 - alpha.13 包：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha13-e1/`，ZIP 148,345,052 字节，SHA256 `2e91478ad9e973ab39eba93958e92259e296e81b25c22c1421e3f5c6310d83ad`；启动需再次钥匙串授权（新二进制签名），弹窗已在屏幕。
 - alpha.12 启动时出现 macOS 钥匙串授权对话框（“Seamo AI R1 Safe Storage”），需用户输入登录钥匙串密码；当前无 GUI 自动化权限（AppleScript 辅助访问被拒），无法代替用户授权。授权后继续 E1 的重复保存与工作稿流程；TXT/MD 原生保存框同样需要可用的 GUI 输入权限。
 - alpha.12 包：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha12-e1/`，ZIP 148,343,367 字节，SHA256 `7c59d8c082476083eb286b8b2e112fc4b5c4bef920d091ce1e04c7ca7156d821`。
-- 同步：远端目前 `9dc75d3`；本地 `c3d5f9b`（DEC-057/alpha.13）因 GitHub 连接超时尚未推送（local c3d5f9b / origin 9dc75d3），未强推、未改远程；PR #1 文案已更新为 alpha.13。
+- 同步：`9dc75d3..84b1ae9` 已推送成功（远端=本地 `84b1ae9`）；PR #1 文案为 alpha.13。
 
 ## D5 集中收口与内部验收包
 
