@@ -48,7 +48,7 @@ export class R1ConversationTools {
     private readonly implementedTaskAliases: readonly string[], services?: FocusToolServices, private readonly artifacts: R1Artifacts = new R1Artifacts(db), music?: R1Music) {
     scope.assertCurrent()
     const recallProperties = assets.toolDefinition('memory_recall').output_data_schema.properties as Record<string, unknown> | undefined
-    this.memories = new R1MemoryTools(new R1MemoryStore(db), scope.source, recallProperties && Object.hasOwn(recallProperties, 'topics') ? new R1Topics(db) : undefined)
+    this.memories = new R1MemoryTools(new R1MemoryStore(db, assets.memoryRecallPolicy()), scope.source, recallProperties && Object.hasOwn(recallProperties, 'topics') ? new R1Topics(db) : undefined)
     if (services) { this.aliases.push(...focusToolAliases); this.focus = new R1FocusTools(services, scope.source, scope.assertCurrent) }
     if (music) { this.musicService = music; this.aliases.push(...musicAliases); this.music = new R1MusicTools(music, { ...scope, sourceRef: scope.source.messageId }) }
     this.reminders = new R1ReminderTools(new R1Items(db), { source: { ...scope.source, timezone: scope.timezone },

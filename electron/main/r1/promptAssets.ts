@@ -28,6 +28,7 @@ export type R1PromptAssets = {
   releaseId: string
   schemaVersion: string
   summaryWindow(): { recentTurnLimit: number; triggerFraction: number; requestTimeoutMs: number }
+  memoryRecallPolicy(): { limit: number; budgetMs: number }
   musicPolicy(): { resourceAttempts: number; deviceTimeoutMs: number }
   realtimeSearchPolicy(): { queries: number; candidates: number; timeoutMs: number; snippetCodePoints: number; pages: number; concurrency: number; pageCodePoints: number }
   toolAliases: readonly string[]
@@ -206,6 +207,12 @@ export function loadR1PromptAssets(root: string): R1PromptAssets {
       return structuredClone(tool)
     },
     summaryWindow: () => ({ recentTurnLimit: runtime.context.recentTurnLimit, triggerFraction: runtime.context.summaryTriggerFraction, requestTimeoutMs: runtime.limits.summaryRequestTimeoutMs }),
+    memoryRecallPolicy() {
+      const policy = { limit: runtime.limits.memoryRecallLimit, budgetMs: runtime.limits.memoryRecallBudgetMs }
+      if (!Number.isSafeInteger(policy.limit) || policy.limit < 1 || policy.limit > 5 ||
+        !Number.isSafeInteger(policy.budgetMs) || policy.budgetMs < 1) throw new Error('MEMORY_RECALL_POLICY_INVALID')
+      return policy
+    },
     musicPolicy: () => ({ resourceAttempts: runtime.limits.musicResourceAttempts, deviceTimeoutMs: runtime.limits.connectTimeoutMs }),
     realtimeSearchPolicy() {
       const limits = runtime.limits

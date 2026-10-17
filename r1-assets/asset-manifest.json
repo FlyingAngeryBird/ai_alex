@@ -1,6 +1,6 @@
 {
-  "releaseId": "seamo-ai-r1-agent-assets-3.2.1",
-  "version": "3.2.1",
+  "releaseId": "seamo-ai-r1-agent-assets-3.2.2",
+  "version": "3.2.2",
   "files": [
     {
       "path": ".gitignore",
@@ -25,27 +25,27 @@
     {
       "path": "config/prompt-registry.json",
       "bytes": 4487,
-      "sha256": "7b4e99489986101624eeffe9f3cf8873f00b78fd377be806ffb0adad5ff1f5a4"
+      "sha256": "ec5844ae61d93fbb2c513b0bce6e0c316a5ffb4114b1e6ee70803498fbf20daf"
     },
     {
       "path": "config/runtime.defaults.json",
       "bytes": 5213,
-      "sha256": "48b875bd86c45efc654630352cf6b98461ee5506204e85c94d9e7a2501d50017"
+      "sha256": "7df2137d989b312a765476eb0b3aa7e60f39d32b82ce400a288df6029c0b2716"
     },
     {
       "path": "config/skill-registry.json",
       "bytes": 4143,
-      "sha256": "fa7f0940694f8d3a8b7c56cd1d9466bdf7def0e7a1be2bbf9de12bee9c3a56b2"
+      "sha256": "e0e6bfb5b40d6ad750ccfbb2db67637d6b89610a4d31449cf53659f15d3e533b"
     },
     {
       "path": "contracts/tool-catalog.json",
-      "bytes": 222760,
-      "sha256": "02e983800d27766efc89b2d190a1773dc8022d25dc80ab91d9e5559b5f33dd43"
+      "bytes": 223291,
+      "sha256": "3b088f3cf155baa025cae6a0a204a162f2a9f3e282a72d10715edfab15665a70"
     },
     {
       "path": "docs/AGENT_ASSET_APPENDIX.md",
-      "bytes": 134045,
-      "sha256": "69bc5c81a8b415b70dc3fc4f2132fbf0159b2750c0bfb9fc7d8c0df8f2432656"
+      "bytes": 135842,
+      "sha256": "a05770bd58997bb38b233d12f943361dc37ab7b9c22990f4192d34c0e362ccd6"
     },
     {
       "path": "docs/ARCHITECTURE_CONTRACT.md",
@@ -59,8 +59,8 @@
     },
     {
       "path": "docs/CHANGE_POLICY.md",
-      "bytes": 24003,
-      "sha256": "b85888fc290176f24bee945208905351ef4cd3e62df6a46763ef12abf086494c"
+      "bytes": 25798,
+      "sha256": "7e7274e05aa3a9a2422ee04426272471608025686423ae1e70afe66b080c1afa"
     },
     {
       "path": "docs/DETAIL_SPEC.md",
@@ -74,8 +74,8 @@
     },
     {
       "path": "docs/Seamo_AI_R1_PRD_v0.5.1.md",
-      "bytes": 308298,
-      "sha256": "e80ddec8852c113bc6f8cf9aa5fb7ecd8a45fe4ed00476b2c7baab18ba2e54a3"
+      "bytes": 310095,
+      "sha256": "5ebdef5e29d3e4f4d9dc57938cd9021c591c506806ec4a9813c2cf67a57cc316"
     },
     {
       "path": "evals/behavior-cases.jsonl",

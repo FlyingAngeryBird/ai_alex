@@ -89,3 +89,50 @@ describe('R1 memory source and forgetting boundary', () => {
     } finally { db.close() }
   })
 })
+
+it('recalls actual facts from multi-term natural query phrases without unrelated filler', () => {
+  const db = openR1Database(':memory:'), memory = new R1MemoryStore(db)
+  try {
+    const tea = memory.addManual({ content: '用户喜欢无糖绿茶。', category: 'preference' })
+    const movie = memory.addManual({ content: '用户看电影更喜欢科幻片。', category: 'preference' })
+    const project = memory.addManual({ content: '提案项目先支持macOS桌面版。', category: 'conclusion' })
+    memory.addManual({ content: '红豆项目等待正式报价。', category: 'conclusion' })
+    expect(memory.recall('喝茶习惯 是否加糖 偏好')).toEqual([tea])
+    expect(memory.recall('电影题材偏好 喜欢看什么类型的电影')).toEqual([movie])
+    expect(memory.recall('提案项目 优先支持平台')).toEqual([project])
+    expect(memory.recall('无关的北极光')).toEqual([])
+    expect(memory.recall('记忆 偏好 相关')).toEqual([])
+    memory.forget(tea.memoryId, tea.version)
+    expect(memory.recall('喝茶习惯 是否加糖 偏好')).toEqual([])
+  } finally { db.close() }
+})
+it('does not confuse a different named entity on a single shared character', () => {
+  const db = openR1Database(':memory:'), memory = new R1MemoryStore(db)
+  try {
+    memory.addManual({ content: '用户在北京工作。', category: 'profile' })
+    expect(memory.recall('南京')).toEqual([])
+    expect(memory.recall('南京', false, 'preference')).toEqual([])
+  } finally { db.close() }
+})
+it('keeps a named lookup specific even when the query also contains common topic words', () => {
+  const db = openR1Database(':memory:'), memory = new R1MemoryStore(db)
+  try {
+    const target = memory.addManual({ content: '合成项目SOLAR8427使用蓝色笔记本。', category: 'profile' })
+    memory.addManual({ content: '合成项目SOLAR84270使用蓝色笔记本。', category: 'profile' })
+    memory.addManual({ content: '合成项目SOLAR1000使用蓝色笔记本。', category: 'profile' })
+    expect(memory.recall('SOLAR8427 项目笔记')).toEqual([target])
+  } finally { db.close() }
+})
+it('honors the retrieval limit and reports deadline expiry as failure, never an empty match', () => {
+  const db = openR1Database(':memory:'), memory = new R1MemoryStore(db, { limit: 1, budgetMs: 200 })
+  try {
+    memory.addManual({ content: '用户喜欢无糖绿茶。', category: 'preference' })
+    memory.addManual({ content: '用户有时喝红茶。', category: 'preference' })
+    expect(memory.recall('茶')).toHaveLength(1)
+    let clock = 0
+    const timed = new R1MemoryStore(db, { limit: 5, budgetMs: 1 }, () => clock++)
+    expect(() => timed.recall('茶')).toThrow('MEMORY_RECALL_TIMEOUT')
+    expect(timed.recall('茶', true)).toEqual([])
+    expect(memory.list().entries).toHaveLength(2)
+  } finally { db.close() }
+})

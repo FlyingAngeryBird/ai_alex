@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { inTransaction, type R1Database } from './database.js'
 import { invalidateMemoryContext, memoryContextCutoff, memoryContextEpoch } from './memoryContext.js'
 import { R1MemoryPolicy } from './memoryPolicy.js'
+import { rankMemoryCandidates } from './memoryRetrieval.js'
 
 export type R1Memory = {
   memoryId: string
@@ -33,7 +34,11 @@ function view(row: MemoryRow): R1Memory {
 }
 
 export class R1MemoryStore {
-  constructor(private readonly db: R1Database) {}
+  constructor(private readonly db: R1Database,
+    private readonly recallPolicy = { limit: 5, budgetMs: 200 }, private readonly now = () => performance.now()) {
+    if (!Number.isSafeInteger(recallPolicy.limit) || recallPolicy.limit < 1 || recallPolicy.limit > 5 ||
+      !Number.isSafeInteger(recallPolicy.budgetMs) || recallPolicy.budgetMs < 1) throw new Error('MEMORY_RECALL_POLICY_INVALID')
+  }
 
   validateCandidate(input: { content: string; category: R1Memory['category']; expiresAt: string | null }): void {
     this.validateContent(input.content, input.category); this.validateExpiry(input.expiresAt)
@@ -224,23 +229,22 @@ export class R1MemoryStore {
     }
   }
 
-  recall(query: string, temporary = false, category: R1Memory['category'] | null = null): R1Memory[] {
+  retrievalPolicy(): { limit: number; budgetMs: number } { return { ...this.recallPolicy } }
+
+  recall(query: string, temporary = false, category: R1Memory['category'] | null = null, sharedBudget: () => void = () => {}): R1Memory[] {
     if (temporary) return []
     const normalized = query.trim()
     if (!normalized) return []
-    // Models may supply a descriptive query ("用户喜欢的茶相关记忆"). Remove only
-    // search wrappers, preserving the original query and the factual term. No semantic score is fabricated.
-    let term = normalized.replace(/^(?:关于|用户(?:的)?|我的|你的)/, '').trim()
-    for (let count = 0; count < 3; count++) term = term.replace(/(?:相关)?(?:记忆|偏好|喜好|记录)$/, '').trim()
-    term = term.replace(/^喜欢(?:的)?/, '').replace(/的$/, '').trim()
-    const escaped = normalized.replace(/[\\%_]/g, '\\$&')
-    const escapedTerm = term.replace(/[\\%_]/g, '\\$&')
+    const deadline = this.now() + this.recallPolicy.budgetMs
+    const assertBudget = () => { sharedBudget(); if (this.now() > deadline) throw new Error('MEMORY_RECALL_TIMEOUT') }
+    assertBudget()
+    // The model supplies a search phrase, not necessarily a literal substring.
+    // Filter current domain validity before ranking; never pad with unrelated rows.
     const rows = this.db.prepare(`SELECT * FROM memory WHERE deleted_at IS NULL
       AND (expires_at IS NULL OR expires_at > ?)
-      AND (content LIKE ? ESCAPE '\\' OR (? <> '' AND content LIKE ? ESCAPE '\\'))
-      AND (? IS NULL OR category = ?) ORDER BY updated_at DESC LIMIT 20`)
-      .all(new Date().toISOString(), `%${escaped}%`, term, `%${escapedTerm}%`, category, category) as MemoryRow[]
-    return rows.filter((row) => !this.isSuppressed(row)).slice(0, 5).map(view)
+      AND (? IS NULL OR category = ?) ORDER BY updated_at DESC`)
+      .all(new Date().toISOString(), category, category) as MemoryRow[]
+    return rankMemoryCandidates(rows.filter(row => !this.isSuppressed(row)), normalized, { limit: this.recallPolicy.limit, assertBudget }).map(view)
   }
 
   forget(memoryId: string, expectedVersion: number): { memoryId: string; deletionEpoch: number } {

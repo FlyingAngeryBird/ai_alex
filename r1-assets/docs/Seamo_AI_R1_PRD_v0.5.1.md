@@ -3096,12 +3096,20 @@ DEC-R1-MUSIC-023 补充：沿用原型已有“退出播放”按钮，类型化
 - 验证：新增可复现的隔离SQLite真实M01五步生命周期脚本，断言绝对时间/时区、同ID版本递增、取消状态与表达、一次回访kind、不明确时刻不写入、无额外事项；实际结果见本日reminder-lifecycle报告。模拟/隔离验证不替代用户通知及扬声器验收。
 - 回退：代码与完整资产回退511fb5f；不覆盖用户数据库、遗忘抑制或alpha.7包，不重放既有提醒。
 
+#### DEC-R1-MEMORY-RETRIEVAL-047：自然查询短语召回与明确过滤/超时
+- Bad Case：同一20条合成事实跨SQLite关闭/重开后，前5个真实M01改述查询全部no_match。工具传自然查询短语，旧库却要求整段子串；并非事实没有保存。首轮检索修复中还发现命名对象查询被通用“项目笔记”填入其他对象，以及模型猜category导致漏掉不同类别的真记录。
+- 影响：F04a/F04c；仍由原M01理解并调用memory_recall，Memory/Topic分别过滤当前有效性后，共用一次本地200ms窗口，使用真实文本词组/汉字二元片段、实际文档频次选择更有区分度的词；必要的单字回退需至少两字共现，避免南京因京匹配北京。ASCII实体按完整词匹配。排序是词面重叠，不伪造语义置信度；找不到仍不确定。
+- 边界：不新增Prompt、模型、嵌入供应商、业务路由或权限。category继续严格过滤；工具描述澄清通常不要猜分类，限定分类无匹配可取消该可选过滤再查一次。不能忽略调用方明确过滤，也不能把模型常识当历史。
+- 预算：正式工具从同一已校验资产读取memoryRecallLimit=5、memoryRecallBudgetMs=200；在本地计算及返回前检查，超时抛MEMORY_RECALL_TIMEOUT而不是no_match。SQLite同步读取不可中途抢占，不宣称硬实时线程保证。
+- 版本：资产3.2.2（描述澄清），Prompt/Skill版本、工具schema3.0.0和SQLite11不变；已有Task不换包。固定20例、超时/有效性/对象区分回归及真实复测证据见本日memory-recall-progress报告。局部文本检索不等于通用语义召回或V07全验收。
+- 回退：代码及资产退到321df09，不覆盖记忆、来源、抑制或历史数据。
+
 
 ### 25.3 完整默认配置
 
 ```json
 {
-  "releaseId": "seamo-ai-r1-agent-assets-3.2.1",
+  "releaseId": "seamo-ai-r1-agent-assets-3.2.2",
   "schemaVersion": "3.0.0",
   "providerPolicy": {
     "primary": "volcengine",

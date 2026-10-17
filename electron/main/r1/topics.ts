@@ -3,6 +3,7 @@ import { inTransaction, type R1Database } from './database.js'
 import { R1MemoryStore } from './memory.js'
 import { invalidateMemoryContext, memoryContextCutoff } from './memoryContext.js'
 import { R1MemoryPolicy } from './memoryPolicy.js'
+import { rankMemoryCandidates } from './memoryRetrieval.js'
 import type { SessionMessage } from './conversations.js'
 
 export type R1Topic = { topicId: string; title: string; summary: string; unresolved: string[]; sourceRefs: string[];
@@ -36,6 +37,14 @@ export class R1Topics {
       (title LIKE ? ESCAPE '\\' OR summary LIKE ? ESCAPE '\\') ORDER BY updated_at DESC, topic_id`).all(pattern, pattern) as Row[]
     const current = rows.map(view).filter(topic => !this.suppressed(topic))
     return { entries: current.slice(page * 20, page * 20 + 20), page, hasMore: current.length > page * 20 + 20 }
+  }
+  recall(query: string, policy: { limit: number; assertBudget(): void }): R1Topic[] {
+    if (typeof query !== 'string' || [...query].length > 1000) throw new Error('INVALID_TOPIC_QUERY')
+    policy.assertBudget()
+    const rows = this.db.prepare('SELECT * FROM topics WHERE deleted_at IS NULL ORDER BY updated_at DESC,topic_id').all() as Row[]
+    const current = rows.map(view).filter((topic, index) => { if (index % 64 === 0) policy.assertBudget(); return !this.suppressed(topic) })
+      .map(topic => ({ topic, content: [topic.title, topic.summary, ...topic.unresolved].join('\n') }))
+    return rankMemoryCandidates(current, query, policy).map(value => value.topic)
   }
   private validate(input: Pick<R1Topic, 'title' | 'summary' | 'unresolved' | 'status'>): void {
     if (typeof input.title !== 'string' || !input.title.trim() || [...input.title].length > 80 ||

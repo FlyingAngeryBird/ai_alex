@@ -47,9 +47,12 @@ export class R1MemoryTools {
   }
   execute(alias: string, args: Record<string, unknown>): { data: Record<string, unknown>; entityId?: string; entityVersion?: number; invalidatedEpoch?: number } {
     if (alias === 'memory_recall') {
-      const memories = this.store.recall(args.query as string, false, args.category as R1Memory['category'] | null ?? null)
+      const policy = this.store.retrievalPolicy(), deadline = performance.now() + policy.budgetMs
+      const assertBudget = () => { if (performance.now() > deadline) throw new Error('MEMORY_RECALL_TIMEOUT') }
+      const memories = this.store.recall(args.query as string, false, args.category as R1Memory['category'] | null ?? null, assertBudget)
       for (const memory of memories) this.known.set(memory.memoryId, memory)
-      const topics = this.topics?.list({ query: args.query as string }).entries.slice(0, 5).map(topicContext) ?? []
+      const topics = this.topics?.recall(args.query as string, { limit: policy.limit, assertBudget }).map(topicContext) ?? []
+      assertBudget()
       return { data: { matchStatus: memories.length || topics.length ? 'matched' : 'no_match', memories: memories.map(memoryView), ...(this.topics ? { topics } : {}) } }
     }
     if (alias === 'memory_remember') {

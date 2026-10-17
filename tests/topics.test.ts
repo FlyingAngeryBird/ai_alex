@@ -176,3 +176,19 @@ describe('authorized PR06 topic preparation', () => {
     } finally { await s.close() }
   })
 })
+
+it('retrieves a current Topic from a natural multi-term query without confusing it with a Memory', async () => {
+  const s = fixture()
+  try {
+    const saved = s.save()
+    const { R1MemoryTools } = await import('../electron/main/r1/memoryTools')
+    const tools = new R1MemoryTools(s.memory, s.user, s.topics)
+    const result = tools.execute('memory_recall', { query: '桌面版 项目开发结论 发布日期' })
+    expect(result.data).toMatchObject({ matchStatus: 'matched', memories: [], topics: [{ topicId: saved.topicId, version: 1 }] })
+    s.topics.forget({ topicId: saved.topicId, expectedVersion: 1 })
+    expect(tools.execute('memory_recall', { query: '桌面版 项目开发结论 发布日期' }).data)
+      .toMatchObject({ matchStatus: 'no_match', memories: [], topics: [] })
+    expect(() => s.topics.recall('桌面版', { limit: 5, assertBudget() { throw new Error('MEMORY_RECALL_TIMEOUT') } }))
+      .toThrow('MEMORY_RECALL_TIMEOUT')
+  } finally { s.db.close() }
+})
