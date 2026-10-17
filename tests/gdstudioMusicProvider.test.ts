@@ -84,6 +84,29 @@ describe('GD Studio music provider', () => {
       expect(requestedSources(fetcher, 'pic')).toHaveLength(5)
     } finally { provider.close?.() }
   })
+  it('stops probing a source the aggregator reports as unsupported, but retries it when explicitly requested', async () => {
+    const requested: string[] = []
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(input.toString()), type = url.searchParams.get('types'), source = url.searchParams.get('source') ?? ''
+      if (type === 'search') {
+        requested.push(source)
+        if (source === 'kuwo') return new Response('{"detail":"Value of source is not supported."}', { status: 400 })
+        return Response.json([{ id: `id-${source}`, name: `曲-${source}`, artist: ['合成歌手'], url_id: `url-${source}`, source }])
+      }
+      return Response.json({ url: '' })
+    })
+    const provider = createGdStudioMusicProvider({ fetch: fetcher })
+    try {
+      await provider.search({ query: '第一', sourcePreference: 'all' })
+      expect(requested).toEqual(['netease', 'kuwo', 'joox'])
+      requested.length = 0
+      await provider.search({ query: '第二', sourcePreference: 'all' })
+      expect(requested).toEqual(['netease', 'joox'])
+      requested.length = 0
+      await expect(provider.search({ query: '第三', sourcePreference: 'kuwo' })).rejects.toThrow('MUSIC_PROVIDER_UNAVAILABLE')
+      expect(requested).toEqual(['kuwo'])
+    } finally { provider.close?.() }
+  })
   it('continues to the next source when one GD Studio source returns 503', async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(input.toString())

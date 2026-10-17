@@ -296,6 +296,11 @@ export function createGdStudioMusicProvider(
     DEFAULT_CACHE_TTL_MS
   )
   const searchCache = new Map<string, SearchCacheEntry>()
+  // The upstream aggregator can stop supporting a source (e.g. HTTP 400
+  // "source is not supported"). Avoid probing a dead source on every search;
+  // an explicit single-source request still retries once the user asks.
+  const sourceUnavailableUntil = new Map<MusicSource, number>()
+  const SOURCE_RETRY_MS = 10 * 60_000
   const requests = new Set<AbortController>()
   let closed = false
   let playback: PlaybackState = {
@@ -305,13 +310,16 @@ export function createGdStudioMusicProvider(
     track: null
   }
 
+  class ProviderHttpError extends Error {
+    constructor(readonly status: number) { super('MUSIC_PROVIDER_HTTP_FAILED'); this.name = 'ProviderHttpError' }
+  }
   async function requestJson(url: URL): Promise<unknown> {
     if (closed) throw new Error('MUSIC_PROVIDER_CLOSED')
     const controller = new AbortController(); requests.add(controller)
     const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 8000)
     try {
       const response = await fetcher(url.toString(), { signal: controller.signal })
-      if (!response.ok) throw new Error('MUSIC_PROVIDER_HTTP_FAILED')
+      if (!response.ok) throw new ProviderHttpError(response.status)
       return await response.json()
     } finally { clearTimeout(timer); requests.delete(controller) }
   }
@@ -328,8 +336,10 @@ export function createGdStudioMusicProvider(
 
   async function searchSource(
     query: string,
-    source: MusicSource
+    source: MusicSource,
+    respectBackoff = true
   ): Promise<GdStudioCandidate[]> {
+    if (respectBackoff && (sourceUnavailableUntil.get(source) ?? 0) > now()) throw new Error('MUSIC_PROVIDER_SOURCE_UNAVAILABLE')
     const cacheKey = `${source}:${query.toLowerCase()}`
     const cached = searchCache.get(cacheKey)
 
@@ -337,15 +347,21 @@ export function createGdStudioMusicProvider(
       return cached.tracks
     }
 
-    const body = await requestJson(
-      buildUrl({
+    let body: unknown
+    try {
+      body = await requestJson(buildUrl({
         count: searchCount,
         name: query,
         pages: DEFAULT_SEARCH_PAGE,
         source,
         types: 'search'
-      })
-    )
+      }))
+    } catch (error) {
+      if (error instanceof ProviderHttpError && [400, 404, 410].includes(error.status)) {
+        sourceUnavailableUntil.set(source, now() + SOURCE_RETRY_MS)
+      }
+      throw error
+    }
     const tracks = readSearchItems(body)
       .map((item) => normalizeCandidate(item, source))
       .filter((track): track is GdStudioCandidate => track !== null)
@@ -391,7 +407,9 @@ export function createGdStudioMusicProvider(
     const tracks: GdStudioCandidate[] = []
     let successes = 0
 
-    const results = await Promise.allSettled(normalizeSourcePreference(payload.sourcePreference).map(source => searchSource(query, source)))
+    const preference = normalizeSourcePreference(payload.sourcePreference)
+    const respectBackoff = payload.sourcePreference === 'all'
+    const results = await Promise.allSettled(preference.map(source => searchSource(query, source, respectBackoff)))
     for (const result of results) if (result.status === 'fulfilled') { tracks.push(...result.value); successes++ }
 
     if (!successes) throw new Error('MUSIC_PROVIDER_UNAVAILABLE')

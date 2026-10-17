@@ -4,9 +4,11 @@ import { openR1Database } from '../electron/main/r1/database'
 import { R1Music, type MusicCommand, type MusicSnapshot } from '../electron/main/r1/music'
 import type { R1Api } from '../electron/shared/r1Api'
 import type { MusicProvider, MusicTrack } from '../electron/main/music/gdstudioMusicProvider'
+import { getCurrentLyricIndex } from '../src/utils/musicLyrics'
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
 function fixture(options: Parameters<typeof useMusic>[0] = {}) {
-  const db = openR1Database(':memory:'), first: MusicTrack = { source: 'netease', id: 'one', title: '第一首', artist: '测试歌手', durationMs: 180000 }, second = { ...first, id: 'two', title: '第二首' }
+  const db = openR1Database(':memory:'), first: MusicTrack = { source: 'netease', id: 'one', title: '第一首', artist: '测试歌手', durationMs: 180000,
+    lyrics: [{ timeMs: 0, text: '第一句' }, { timeMs: 2000, text: '第二句' }] }, second = { ...first, id: 'two', title: '第二首' }
   const provider: MusicProvider = { authorize: async () => ({ authorized: true, provider: 'gdstudio' }), getPlaybackState: async () => ({ status: 'idle', track: null, positionMs: 0, durationMs: null }),
     pause: async () => ({ status: 'paused', track: null, positionMs: 0, durationMs: null }), resume: async () => ({ status: 'idle', track: null, positionMs: 0, durationMs: null }),
     search: async () => ({ tracks: [first, second] }), play: async payload => ({ status: 'playing', track: { ...(payload.trackId === 'two' ? second : first), audioUrl: 'https://example.org/fixture.mp3' }, durationMs: 180000, positionMs: 0 }) }
@@ -55,6 +57,30 @@ it('uses the production audio bridge for play, seek, favorites and persistent qu
     await s.music.nextTrack(); expect(s.domain.state()).toMatchObject({ playState: 'playing', track: { trackKey: 'netease:two' }, queue: [] })
     await s.music.nextTrack(); expect(s.domain.state().playState).toBe('ended')
     expect(s.audios.at(-1)?.paused).toBe(true)
+  } finally { s.close() }
+})
+it('keeps search, play, seek, lyric clock, ducking and next-track on one real local player path', async () => {
+  const s = fixture()
+  try {
+    await s.music.searchMusic('测试')
+    expect(s.music.searchResults.value).toHaveLength(2)
+    await s.music.playSearchResult(s.first)
+    expect(s.domain.state()).toMatchObject({ playState: 'playing', track: { trackKey: 'netease:one' } })
+    expect(s.music.playback.value.track?.lyrics).toHaveLength(2)
+    expect(getCurrentLyricIndex(s.music.playback.value.track?.lyrics, 2100)).toBe(1)
+    await s.music.seek(45)
+    expect(s.audios[0].currentTime).toBe(45)
+    const base = s.audios[0].volume
+    s.music.setSpeechActive(true)
+    await new Promise(resolve => setTimeout(resolve, 160))
+    expect(s.audios[0].volume).toBeCloseTo(base * 0.2, 2)
+    s.music.setSpeechActive(false)
+    await new Promise(resolve => setTimeout(resolve, 380))
+    expect(s.audios[0].volume).toBeCloseTo(base, 2)
+    await s.music.addToQueue(s.second)
+    await s.music.nextTrack()
+    expect(s.domain.state()).toMatchObject({ playState: 'playing', track: { trackKey: 'netease:two' } })
+    expect(s.audios.at(-1)).not.toBe(s.audios[0])
   } finally { s.close() }
 })
 it('never lets an earlier play promise revive audio after a pause', async () => {
