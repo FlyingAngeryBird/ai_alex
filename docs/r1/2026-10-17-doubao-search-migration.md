@@ -46,3 +46,5 @@ DEC-040：原后台M02和文字M01共用15秒模型请求上限，不能容纳�
 同时修正独立查询页：输入上限与Custom100字匹配，展示适配器实际收到的页面日期，缺失仍显示未知；此前固定显示未知会隐藏已有发布时间。批准资产/工具合同和数据库版本不变。
 
 恢复后的真实M02返回ARK_RESPONSE_NOT_COMPLETED，仍无搜索/读页回执。补正DEC-040：分类型处理incomplete_details.reason（输出预算耗尽/内容过滤/其他），仅返回固定错误码，不发布部分函数参数；后台模型输出上限2048→8192（包含思考与回答），硬上限仍16000，无自动重试。此时尚无旧响应reason证据，因此不把预算耗尽写成已确认根因。官方依据：https://docs.volcengine.com/docs/ark/create-model-responses-api?lang=zh 。主会话/后台次数预算和工具权限不变。
+
+最终代码2b16802完整90文件565项通过，构建/临时签名完整性检查通过。修复包在`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha3-search-budget/Seamo AI R1.app`。启动采样停在SecItemCopyMatching/SecKeychainItemCopyContent，已请用户完成钥匙串验证；因此新预算下的原委托继续验收尚未开始，不能称已修复真实完整问答。第一次搜索成功及两次M02失败均保留。
