@@ -12,6 +12,9 @@ import type { R1Task, R1TaskSupervisor } from './taskSupervisor.js'
 import { R1Items } from './items.js'
 import { R1Artifacts } from './artifacts.js'
 import { bindArtifactEdit, type ArtifactEditingContext, type ArtifactEditProposal } from './artifactContext.js'
+import { currentCandidateContext, type CandidateContext } from './sessionMode.js'
+import { candidateSaveActionId } from './taskSupervisor.js'
+import { isDeepStrictEqual } from 'node:util'
 import { musicAliases, type R1Music } from './music.js'
 import { R1MusicTools } from './musicTools.js'
 import { afterTransactionCommit, inTransaction, type R1Database } from './database.js'
@@ -20,6 +23,7 @@ export type ConversationToolScope = { source: SessionMessage; temporary: boolean
   realtimeSimpleSearch?: boolean;
   assertCurrent(): void; persistenceConfirmed: boolean; signal?: AbortSignal; sourceMessages?: SessionMessage[];
   selectedArtifact?: ArtifactEditingContext | null;
+  selectedCandidate?: CandidateContext | null;
   onMemoryInvalidated?(deletionEpoch: number): void;
   requestMemoryConfirmation?(candidate: MemorySaveCandidate, sensitive: boolean): MemoryConfirmation }
 type Delegation = { toolAliases: string[]; requiredActions: Array<{ alias: string; minimumCount: number }> }
@@ -221,15 +225,27 @@ export class R1ConversationTools {
         })
       } else if (alias === 'notes_create') {
         if (this.scope.temporary && !this.scope.persistenceConfirmed) throw new Error('TEMPORARY_SAVE_CONFIRMATION_REQUIRED')
-        this.checkSources(args.sourceRefs as string[])
-        const actionId = randomUUID()
+        const target = args.candidateTarget as { taskId: string; goalVersion: number; candidateId: string; candidateVersion: number } | null | undefined
+        const selected = this.scope.selectedCandidate
+        if (target) {
+          if (!selected || ['taskId', 'goalVersion', 'candidateId', 'candidateVersion'].some(key =>
+            target[key as keyof typeof target] !== selected[key as keyof typeof target])) throw new Error('CANDIDATE_SELECTION_MISMATCH')
+          const current = currentCandidateContext({ temporary: this.scope.temporary, sessionId: this.scope.source.sessionId, selectedCandidate: target }, this.tasks)
+          if (!current || !isDeepStrictEqual(current, selected)) throw new Error('CANDIDATE_CONTEXT_STALE')
+          if (args.type !== 'note' || args.mode !== 'original') throw new Error('CANDIDATE_SAVE_MODE_INVALID')
+          if ((args.sourceRefs as string[]).some(ref => ![this.scope.source.messageId, this.scope.source.turnId, ...selected.candidate.sourceRefs].includes(ref))) throw new Error('CONVERSATION_SOURCE_NOT_AVAILABLE')
+        } else this.checkSources(args.sourceRefs as string[])
+        const actionId = target ? candidateSaveActionId(target.taskId, target.candidateId) : randomUUID()
         output = inTransaction(this.db, () => {
           this.scope.assertCurrent()
           const items = new R1Items(this.db)
-          const result = items.create({ actionId, kind: args.type as 'note' | 'todo', title: args.title as string,
-            body: args.content as string, preserveBody: args.mode === 'original', sourceRefs: [this.scope.source.messageId] })
+          const saved = target ? this.tasks.saveCandidate({ taskId: target.taskId, expectedGoalVersion: target.goalVersion,
+            candidateId: target.candidateId, title: args.title as string, temporarySaveConfirmed: this.scope.persistenceConfirmed }) : null
+          const itemId = saved?.itemId ?? items.create({ actionId, kind: args.type as 'note' | 'todo', title: args.title as string,
+            body: args.content as string, preserveBody: args.mode === 'original', sourceRefs: [this.scope.source.messageId] }).item.itemId
+          const item = items.toolView(itemId)
           const receipt = { kind: 'receipt', actionId, tool: this.assets.toolDefinition(alias).name, status: 'succeeded',
-            entityId: result.item.itemId, entityVersion: result.item.version, data: { item: items.toolView(result.item.itemId) },
+            entityId: item.itemId, entityVersion: item.version, data: { item },
             errorCode: null, retryable: false, runId: null }
           this.assets.validateToolOutput(alias, receipt); this.scope.assertCurrent()
           return receipt

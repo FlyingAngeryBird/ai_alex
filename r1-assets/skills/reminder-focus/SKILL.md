@@ -11,6 +11,8 @@ description: "创建、查询、改期或取消一次性提醒及约定回访，
 读取用户原话、currentTime、系统timezone、已设晚间默认时间、事项内容和已知对象ID。提醒需具体日期时刻；专注需时长，未指定可用已声明默认25分钟。
 ## 执行指导
 - “明晚”无具体时刻且无默认设置时问几点；时间已过时澄清，不自行移到明天。结果卡展示具体本地日期和时间。
+- 创建提醒时 sourceRefs 只引用用户提出提醒/时间的真实messageId或AppContext.turnId；网页sourceRef是查询事实来源，不能证明用户的时间与授权，不填进提醒sourceRefs。关联已有便签使用真实itemId，不把便签ID/网页引用当用户原话引用。
+- linkPurpose=todo_due只适用于真实todo到期提醒；阅读普通note的关联提醒使用other或independent，不能因为用户说“提醒”就把便签当todo。
 - 关联便签用itemId；普通提醒或一次性回访用kind区分，回访必须先有明确约定。
 - 改期或取消前，通过reminders_list读取对应提醒的当前reminderId、scheduleVersion与状态；不要从先前自然语言回复猜ID或版本，也不要要求用户提供内部ID。按用户描述筛选唯一对象；有多个合理对象才澄清。改期更新原ID，不新建替代。
 - Reminder和Task是独立对象：reminderId只用于reminders_*工具，不能传给cancel_task/pause_task等任务工具；follow_up仍是提醒，不是后台Task。

@@ -34,3 +34,13 @@
 实现提交`25d277c1d0cea10284a4f009f23d430031f88aee`已同步GitHub的`codex/seamo-r1`。alpha.7独立包和ZIP保存在`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha7-reminder-delivery/`，ZIP大小148638940字节，SHA256为`b240fb62ef8584bd3a41b9691c040a4daec88d7f72fad46e0638d3ecd2399f9d`。该目录包含SHA256SUMS、acceptance-manifest.json及证据副本。签名完整性检查通过，仅本机临时签名、未公证；不是正式发布。
 
 本次启动进程存在，但CUA取得窗口超时；只读进程采样显示SecItemCopyMatching。已请求用户在系统钥匙串弹窗手动允许，尚未取得本包实际窗口或提醒声音证据。alpha.6已验包完整保留。不将进程启动、合成WAV或自动测试标记为扬声器听感通过。
+
+## alpha.7 实际桌面到期播报（2026-10-17 20:30，上海时间）
+
+用户已允许后，窗口出现但服务读取仍报暂不可读；UI重新读取无改善。正常退出同一包后主进程残留且SQLite已关闭，终止该精确PID并重开同一alpha.7，配置恢复，不需重填或移动密钥。进程采样未再见SecItemCopyMatching等待。
+
+通过真实首页发送“一分钟后提醒我：这是提醒播报验收，请稍作休息，只创建这一条提醒”。实际Reminder `d8b0b281-6942-4a42-bb80-33d2f43cfb8c`，dueAt `2026-10-17T12:30:08.698Z`，状态due、delivery_status=system_requested；首页出现到期卡片，明确系统通知已请求不等于已读。
+
+实际PR09播报response `reminder-delivery:93016e68-d82e-46e6-b017-6a1ec109a7f8`，开始存储 `2026-10-17T12:30:12.315Z`，最终status=heard、played_until_ms=6214。用户确认“听到了，声音正常”。这是普通到期短播报实测通过，不能替代系统通知实际可见、所有专注/错过聚合/勿扰/临时/设备或完整V16验证。
+
+待补：合同announcedAt的持久化提醒与实际播报回执关联仍需审查；目前heard记录在实际Messages播放账本中，不能宣称已具备所有提醒播报审计字段。

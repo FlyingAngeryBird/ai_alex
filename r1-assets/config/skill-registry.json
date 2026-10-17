@@ -1,5 +1,5 @@
 {
-  "releaseId": "seamo-ai-r1-agent-assets-3.2.3",
+  "releaseId": "seamo-ai-r1-agent-assets-3.3.0",
   "entries": [
     {
       "skillId": "SK01",
@@ -40,7 +40,7 @@
       "skillId": "SK03",
       "name": "capture-item",
       "legacyKey": "capture_item",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "description": "按明确委托保存原话或整理内容，拆分待办，维护对象并导出TXT/MD。适用于记下来、列待办、修改保存内容；不自动创建提醒。",
       "path": "skills/capture-item/SKILL.md",
       "resourcePaths": [
@@ -62,7 +62,7 @@
       "skillId": "SK04",
       "name": "reminder-focus",
       "legacyKey": "reminder_focus",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "description": "创建、查询、改期或取消一次性提醒及约定回访，并控制一段本地专注计时。适用于明确时间或时长的委托；不提供周期或退出后的云调度。",
       "path": "skills/reminder-focus/SKILL.md",
       "resourcePaths": [

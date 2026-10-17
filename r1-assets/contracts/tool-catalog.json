@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "3.0.0",
+  "schemaVersion": "3.1.0",
   "businessTools": [
     {
       "name": "memory.recall",
@@ -997,6 +997,42 @@
               "maxLength": 160
             },
             "maxItems": 50
+          },
+          "candidateTarget": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "taskId": {
+                    "type": "string",
+                    "maxLength": 160
+                  },
+                  "goalVersion": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "candidateId": {
+                    "type": "string",
+                    "maxLength": 160
+                  },
+                  "candidateVersion": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "taskId",
+                  "goalVersion",
+                  "candidateId",
+                  "candidateVersion"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "仅会话中明确保存当前选中搜索候选时，填写currentCandidate的真实四个身份/版本字段，type=note、mode=original。程序保存候选真实来源内容、忽略content并复用已有Item；不重新整理、不另存副本。普通原话/整理内容省略或null。后台任务不使用此字段。"
           }
         },
         "required": [

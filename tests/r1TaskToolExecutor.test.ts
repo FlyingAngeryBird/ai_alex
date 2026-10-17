@@ -198,13 +198,34 @@ it('saves a chosen real candidate once, keeps source scope, and leaves the note 
     executor.execute(active.lease, 'read_file', { file_path: '/skills/web-qa/SKILL.md' })
     await executor.executeAsync(active.lease, 'web_search', { query: '公园' }, 'search')
     const candidateId = tasks.get(task.taskId).webResult!.candidates[0].candidateId
-    const { selectedConversationEntity } = await import('../electron/main/r1/sessionMode')
+    const { selectedConversationEntity, currentCandidateContext } = await import('../electron/main/r1/sessionMode')
     const mode = { temporary: false, sessionId, selectedCandidate: { taskId: task.taskId, goalVersion: task.goalVersion, candidateId, candidateVersion: tasks.candidateVersion(task.taskId, candidateId) } }
     expect(selectedConversationEntity(mode, tasks)).toEqual({ type: 'candidate', id: candidateId, version: 1 })
     expect(selectedConversationEntity({ ...mode, selectedCandidate: { ...mode.selectedCandidate, candidateVersion: 999 } }, tasks)).toBeNull()
     expect(selectedConversationEntity({ ...mode, temporary: true }, tasks)).toBeNull()
+    const selected = currentCandidateContext(mode, tasks)!
+    expect(selected).toMatchObject({ candidate: { candidateId, label: '公园' }, sources: [{ snippet: '实际搜索摘要', readStatus: 'not_read' }] })
+    const { R1ConversationTools } = await import('../electron/main/r1/conversationTools')
+    const followUp = conversations.append({ sessionId, turnId: 'save-current', role: 'user', body: '把选中的公园记下来，稍后提醒我', status: 'final' })
+    const tools = new R1ConversationTools(db, assets, tasks, { source: followUp, temporary: false, timezone: 'Asia/Shanghai',
+      selectedCandidate: selected, persistenceConfirmed: false, assertCurrent() {} }, ['read_file', 'web_search'])
+    tools.execute('load_skill', { skillId: 'SK03' }, 'load-save')
+    const args = { type: 'note', title: '周末的公园', content: '模型不能覆盖真实来源', mode: 'original',
+      sourceRefs: selected.candidate.sourceRefs, candidateTarget: mode.selectedCandidate }
+    const firstSave = tools.execute('notes_create', args, 'voice-save')
+    expect(firstSave).toMatchObject({ status: 'succeeded', data: { item: { sourceRefs: selected.candidate.sourceRefs } } })
+    expect(JSON.stringify(firstSave)).toContain('实际搜索摘要')
+    expect(JSON.stringify(firstSave)).not.toContain('模型不能覆盖真实来源')
+    expect(tools.execute('notes_create', { ...args, candidateTarget: { ...args.candidateTarget, candidateId: 'invented' } }, 'bad-target'))
+      .toMatchObject({ status: 'failed', errorCode: 'CANDIDATE_SELECTION_MISMATCH' })
+    expect(tools.execute('notes_create', { ...args, sourceRefs: ['invented'] }, 'bad-ref'))
+      .toMatchObject({ status: 'failed', errorCode: 'CONVERSATION_SOURCE_NOT_AVAILABLE' })
+    expect(tools.execute('notes_create', { ...args, mode: 'organized' }, 'bad-mode'))
+      .toMatchObject({ status: 'failed', errorCode: 'CANDIDATE_SAVE_MODE_INVALID' })
     const command = { taskId: task.taskId, expectedGoalVersion: task.goalVersion, candidateId, title: '周末的公园' }
     const saved = tasks.saveCandidate(command)
+    expect(saved.itemId).toBe(firstSave.entityId)
+    expect(tools.execute('notes_create', args, 'repeat-another-call')).toMatchObject({ entityId: saved.itemId })
     expect(tasks.saveCandidate(command)).toEqual(saved)
     expect(items.list()).toHaveLength(1)
     expect(items.list()[0].body).toContain('仅搜索摘要')
@@ -216,5 +237,9 @@ it('saves a chosen real candidate once, keeps source scope, and leaves the note 
       dueAtUtc: new Date(Date.now() + 3600000).toISOString(), timezone: 'Asia/Shanghai' })
     expect(reminder.reminder.itemId).toBe(saved.itemId)
     expect(items.listReminders()).toHaveLength(1)
+    db.prepare('INSERT INTO source_suppression(source_ref,created_at,deletion_epoch) VALUES(?,?,?)').run(source.messageId, new Date().toISOString(), 1)
+    expect(currentCandidateContext(mode, tasks)).toBeNull()
+    expect(tools.execute('notes_create', args, 'after-forget')).toMatchObject({ status: 'failed', errorCode: 'CANDIDATE_CONTEXT_STALE' })
+    expect(items.list()).toHaveLength(1)
   } finally { tasks.close(); db.close() }
 })

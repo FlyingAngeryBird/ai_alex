@@ -36,6 +36,9 @@ type TaskDraft = { status: TaskResult['completionStatus']; goalVersion: number; 
 export type TaskToolReceipt = { kind: 'receipt'; actionId: string; tool: string; status: 'succeeded' | 'failed' | 'cancelled' | 'unknown';
   entityId: string | null; entityVersion: number | null; data: Record<string, unknown>; errorCode: string | null; retryable: boolean; runId: string | null }
 export type WebCandidate = { candidateId: string; label: string; sourceRefs: string[]; fields: Array<{ key: string; value: string | null; verification: 'verified' | 'unconfirmed' | 'conflicting'; sourceRefs: string[] }> }
+export function candidateSaveActionId(taskId: string, candidateId: string): string {
+  return `candidate-save:${createHash('sha256').update(`${taskId}:${candidateId}`).digest('hex')}`
+}
 export type R1Task = { webResult?: { sources: WebSource[]; candidates: WebCandidate[] }; taskId: string; goal: string; constraints: string[]; goalVersion: number;
   status: TaskStatus; assetReleaseId: string; planVersion: number; progressBrief: string;
   queuePosition: number | null; temporary: boolean; budget: R1TaskInput['budget']; runId: string | null;
@@ -159,7 +162,7 @@ export class R1TaskSupervisor {
     requireText(input.title, 80, 'CANDIDATE_TITLE_INVALID')
     const web = this.webResult(record), candidate = web.candidates.find(item => item.candidateId === input.candidateId)
     if (!candidate) throw new Error('TASK_CANDIDATE_NOT_FOUND')
-    const actionId = `candidate-save:${createHash('sha256').update(`${input.taskId}:${input.candidateId}`).digest('hex')}`
+    const actionId = candidateSaveActionId(input.taskId, input.candidateId)
     const items = new R1Items(this.db)
     const prior = this.db.prepare('SELECT entity_id FROM receipts WHERE action_id = ? AND status = ?').get(actionId, 'succeeded') as { entity_id: string } | undefined
     if (prior) {

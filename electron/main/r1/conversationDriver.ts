@@ -1,7 +1,7 @@
 import type { FocusToolServices } from './focusTools.js'
 import { memoryMutationReply } from './memoryTools.js'
 import { topicConversationContext } from './topicContext.js'
-import { selectedConversationEntity } from './sessionMode.js'
+import { selectedConversationEntity, currentCandidateContext } from './sessionMode.js'
 import type { ChatMessage, AssistantOutput } from '../providers/llmProvider.js'
 import type { createArkResponsesProvider, ArkResponseRound } from '../providers/arkResponsesProvider.js'
 import type { R1PromptAssets } from './promptAssets.js'
@@ -21,12 +21,14 @@ export class R1ConversationDriver {
     private readonly artifacts: R1Artifacts = new R1Artifacts(db), private readonly music?: R1Music) {}
   artifactContext(mode: import('./sessionMode.js').R1SessionMode | undefined) { return currentArtifactContext(mode, this.artifacts) }
   topicContext(mode: import('./sessionMode.js').R1SessionMode | undefined) { return topicConversationContext(this.db, mode) }
+  candidateContext(mode: import('./sessionMode.js').R1SessionMode | undefined) { return currentCandidateContext(mode, this.tasks) }
   selectedEntity(mode: import('./sessionMode.js').R1SessionMode | undefined) {
     return selectedConversationEntity(mode, this.tasks)
   }
   async reply(input: { scope: ConversationToolScope; messages: ChatMessage[]; context: Record<string, unknown> }): Promise<AssistantOutput> {
     const tools = new R1ConversationTools(this.db, this.assets, this.tasks, { ...input.scope,
-      selectedArtifact: input.context.currentArtifact as ArtifactEditingContext | null | undefined }, this.implementedTaskAliases, this.services, this.artifacts, this.music)
+      selectedArtifact: input.context.currentArtifact as ArtifactEditingContext | null | undefined,
+      selectedCandidate: input.context.currentCandidate as import('./sessionMode.js').CandidateContext | null | undefined }, this.implementedTaskAliases, this.services, this.artifacts, this.music)
     const rounds: ArkResponseRound[] = []
     // The conversation only dispatches immediate actions/control; long work has its own frozen Task budget.
     let remainingTools = 6

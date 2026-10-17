@@ -126,7 +126,8 @@ export class R1TaskToolExecutor {
         }
       } else if (alias === 'write_todos') data = this.tasks.updatePlan(lease, (input as { steps: PlanInput }).steps)
       else {
-        const args = input as { type: 'note' | 'todo'; title: string; content: string; mode: 'original' | 'organized'; sourceRefs: string[] }
+        const args = input as { type: 'note' | 'todo'; title: string; content: string; mode: 'original' | 'organized'; sourceRefs: string[]; candidateTarget?: unknown }
+        if (args.candidateTarget != null) throw new Error('CANDIDATE_SAVE_REQUIRES_CONVERSATION_SELECTION')
         this.tasks.assertPersistenceAllowed(lease); this.tasks.assertToolSources(lease, args.sourceRefs)
         const saved = this.items!.create({ actionId, kind: args.type, title: args.title, body: args.content,
           sourceRefs: args.sourceRefs, preserveBody: args.mode === 'original' })

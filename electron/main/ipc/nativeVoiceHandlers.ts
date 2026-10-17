@@ -8,7 +8,7 @@ import { R1Artifacts } from '../r1/artifacts.js'
 import { musicAliases, type R1Music } from '../r1/music.js'
 import type { R1TopicSummaries } from '../r1/topicSummaries.js'
 import type { R1AutomaticMemory } from '../r1/automaticMemory.js'
-import { selectedConversationEntity } from '../r1/sessionMode.js'
+import { selectedConversationEntity, currentCandidateContext } from '../r1/sessionMode.js'
 import { ipcMain, type WebContents } from 'electron'
 import { NativePlaybackLedger } from '../r1/nativePlayback.js'
 import { randomUUID } from 'node:crypto'
@@ -64,10 +64,15 @@ export function registerNativeVoiceHandlers(deps: {
     const revision = deps.configurationRevision(), temporary = deps.mode.temporary
     const artifacts = deps.artifacts ?? new R1Artifacts(deps.db)
     const selectedArtifact = currentArtifactContext(deps.mode, artifacts), selectionKey = JSON.stringify(deps.mode.selectedArtifact ?? null)
+    const selectedCandidate = currentCandidateContext(deps.mode, deps.tasks)
+    const candidateKey = JSON.stringify([deps.mode.selectedCandidate ?? null, selectedCandidate])
+    const topicKey = JSON.stringify(deps.mode.selectedTopic ?? null)
     const assertCurrent = () => {
       if (deps.mode.sessionId !== sessionId || deps.mode.temporary !== temporary ||
         deps.persona.get().version !== persona.version || deps.memory.currentDeletionEpoch() !== deletionEpoch ||
         deps.configurationRevision() !== revision || JSON.stringify(deps.mode.selectedArtifact ?? null) !== selectionKey ||
+        JSON.stringify(deps.mode.selectedTopic ?? null) !== topicKey ||
+        JSON.stringify([deps.mode.selectedCandidate ?? null, currentCandidateContext(deps.mode, deps.tasks)]) !== candidateKey ||
         JSON.stringify(currentArtifactContext(deps.mode, artifacts)) !== JSON.stringify(selectedArtifact)) throw new Error('REALTIME_CONTEXT_INVALIDATED')
     }
     let tools: R1ConversationTools | null = null
@@ -106,7 +111,7 @@ export function registerNativeVoiceHandlers(deps: {
     const context = () => ({ sessionId, sessionGeneration: 1, turnId, currentTime: new Date().toISOString(),
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, temporary, contextVersion: 1, realtimeSimpleSearch: true,
       personaVersion: persona.version, deletionEpoch, selectedEntity: selectedArtifact ? { type: 'artifact', id: selectedArtifact.artifactId, version: selectedArtifact.version } : topicConversationContext(deps.db, deps.mode).selected ?? selectedConversationEntity(deps.mode, deps.tasks), currentArtifact: selectedArtifact, availableToolAliases: [],
-      loadedSkillIds: tools ? [...tools.loadedSkillIds] : nativeSkills,
+      currentCandidate: selectedCandidate, loadedSkillIds: tools ? [...tools.loadedSkillIds] : nativeSkills,
       recentTurns: deps.conversations.modelTurns(sessionId),
       memories: [], topics: topicConversationContext(deps.db, deps.mode).topics, activeTasks: deps.tasks.list(temporary ? sessionId : null).slice(-20).map(task => {
         const { taskId, goalVersion, status, goal } = deps.tasks.modelView(task.taskId)
@@ -155,7 +160,7 @@ export function registerNativeVoiceHandlers(deps: {
           sourceTurns.set(event.item_id, turnId)
           const source = deps.conversations.append({ sessionId, turnId, role: 'user', body: event.transcript, status: 'final' })
           const sourceTurnId = turnId
-          tools = new R1ConversationTools(deps.db, deps.assets, deps.tasks, { source, selectedArtifact, sourceMessages: deps.conversations.messages(sessionId).slice(-20), temporary, realtimeSimpleSearch: true,
+          tools = new R1ConversationTools(deps.db, deps.assets, deps.tasks, { source, selectedArtifact, selectedCandidate, sourceMessages: deps.conversations.messages(sessionId).slice(-20), temporary, realtimeSimpleSearch: true,
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, persistenceConfirmed: false,
             assertCurrent() { assertCurrent(); if (turnId !== sourceTurnId) throw new Error('REALTIME_TOOL_SOURCE_REPLACED') },
             onMemoryInvalidated: deps.onMemoryInvalidated ? epoch => { invalidatedEpoch = epoch } : undefined,
@@ -237,7 +242,9 @@ export function registerNativeVoiceHandlers(deps: {
         hintAbort.abort()
         searchTurn?.finish('cancelled')
         for (const retained of retainedSearches) retained.finish('cancelled')
-        try { assertCurrent(); playback.interruptPending() } catch { /* Revoked or ended context cannot publish a late partial. */ }
+        try { assertCurrent(); playback.interruptPending() } catch {
+          if (['REALTIME_PROTOCOL_OR_CONTEXT_INVALID', 'REALTIME_CONTEXT_INVALIDATED'].includes(code)) code = 'REALTIME_CONTEXT_REFRESH_REQUIRED'
+        }
         if (sessions.get(sender.id)?.id === id) sessions.delete(sender.id)
         sender.removeListener('destroyed', destroyed)
         emit(sender, id, { type: 'closed', code, diagnostics: connection.getDiagnostics() })
@@ -276,7 +283,10 @@ export function registerNativeVoiceHandlers(deps: {
         } else if (action === 'Cancel') { active.silenceSearch(); active.session.cancelResponse() }
         else { active.session.close(); return { ok: true, data: { diagnostics: active.session.getDiagnostics() } } }
         return { ok: true, data: null }
-      } catch { active.session.close('REALTIME_COMMAND_FAILED'); return fail('REALTIME_COMMAND_FAILED') }
+      } catch (error) {
+        const code = error instanceof Error && error.message === 'REALTIME_CONTEXT_INVALIDATED' ? 'REALTIME_CONTEXT_REFRESH_REQUIRED' : 'REALTIME_COMMAND_FAILED'
+        active.session.close(code); return fail(code)
+      }
     })
   }
   return { close(code = 'REALTIME_STOPPED') { for (const active of [...sessions.values()]) active.session.close(code) } }

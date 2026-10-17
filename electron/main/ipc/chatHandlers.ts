@@ -173,12 +173,13 @@ export function registerChatHandlers(
 
   const topicSelectionKey = () => sessionMode?.selectedTopic ? `${sessionMode.selectedTopic.topicId}:${sessionMode.selectedTopic.version}` : null
   const artifactSelectionKey = () => JSON.stringify(sessionMode?.selectedArtifact ?? null)
+  const candidateSelectionKey = () => JSON.stringify([sessionMode?.selectedCandidate ?? null, conversationDriver?.candidateContext?.(sessionMode) ?? null])
   function captureRequest() {
-    return { artifactSelection: artifactSelectionKey(), topicSelection: topicSelectionKey(), epoch: sessionEpoch, responseGeneration, signal: responseController?.signal, personaVersion: personaStore?.get().version,
+    return { candidateSelection: candidateSelectionKey(), artifactSelection: artifactSelectionKey(), topicSelection: topicSelectionKey(), epoch: sessionEpoch, responseGeneration, signal: responseController?.signal, personaVersion: personaStore?.get().version,
       deletionEpoch: memoryStore?.currentDeletionEpoch() }
   }
   function requestIsCurrent(request: ReturnType<typeof captureRequest>): boolean {
-    return request.artifactSelection === artifactSelectionKey() && request.topicSelection === topicSelectionKey() && request.epoch === sessionEpoch && request.responseGeneration === responseGeneration &&
+    return request.candidateSelection === candidateSelectionKey() && request.artifactSelection === artifactSelectionKey() && request.topicSelection === topicSelectionKey() && request.epoch === sessionEpoch && request.responseGeneration === responseGeneration &&
       request.personaVersion === personaStore?.get().version &&
       request.deletionEpoch === memoryStore?.currentDeletionEpoch()
   }
@@ -235,7 +236,8 @@ export function registerChatHandlers(
         deletionEpoch,
         selectedEntity: currentArtifact ? { type: 'artifact', id: currentArtifact.artifactId, version: currentArtifact.version } : conversationDriver?.topicContext(sessionMode).selected ?? conversationDriver?.selectedEntity?.(sessionMode) ?? null, availableToolAliases: [], loadedSkillIds: ['SK01'],
         recentTurns: [], memories: [], activeTasks: [],
-        topics: conversationDriver?.topicContext(sessionMode).topics ?? [], currentArtifact
+        topics: conversationDriver?.topicContext(sessionMode).topics ?? [], currentArtifact,
+        currentCandidate: conversationDriver?.candidateContext?.(sessionMode) ?? null
       }
       const boundary = new R1ModelRequestBoundary(promptAssets, persona, context)
       return { text: boundary.systemText, boundary, context }

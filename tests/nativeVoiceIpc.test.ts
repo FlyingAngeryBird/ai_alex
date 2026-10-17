@@ -153,3 +153,24 @@ it('plays a cached hint locally after 1.5 seconds without injecting TTS into the
     expect(socket.terminate).not.toHaveBeenCalled()
   } finally { controller.close(); tasks.close(); db.close(); vi.useRealTimers() }
 })
+
+it('rebuilds when a selected topic changes and does not upload microphone data under the old selection', async () => {
+  state.handlers.clear()
+  vi.stubEnv('VOLCENGINE_REALTIME_API_KEY', 'synthetic'); vi.stubEnv('VOLCENGINE_REALTIME_VOICE', 'synthetic_voice')
+  const db = openR1Database(':memory:'), conversations = new R1Conversations(db), memory = new R1MemoryStore(db)
+  const assets = loadR1PromptAssets(resolve('r1-assets')), tasks = new R1TaskSupervisor(db, assets, () => 0)
+  const mode: import('../electron/main/r1/sessionMode').R1SessionMode = { temporary: false, sessionId: conversations.start() }
+  const sender = Object.assign(new EventEmitter(), { id: 91, isDestroyed: () => false, send: vi.fn() }), socket = new Socket()
+  const controller = registerNativeVoiceHandlers({ db, assets, conversations, memory, tasks, mode,
+    persona: new R1PersonaStore(db), configurationRevision: () => 1, implementedTaskAliases: [],
+    connect() { queueMicrotask(() => socket.emit('open')); return socket as unknown as WebSocket } })
+  try {
+    const connectionId = randomUUID()
+    expect(await state.handlers.get('voice.nativeStart')!({ sender }, { connectionId })).toMatchObject({ ok: true })
+    mode.selectedTopic = { topicId: 'new-selection', version: 1 }
+    expect(state.handlers.get('voice.nativeAudio')!({ sender }, { connectionId, pcm: new Uint8Array([0, 0]) }))
+      .toMatchObject({ ok: false, error: { code: 'REALTIME_CONTEXT_REFRESH_REQUIRED' } })
+    expect(socket.sent.some(value => value.type === 'input_audio_buffer.append')).toBe(false)
+    expect(sender.send).toHaveBeenCalledWith('voice.nativeEvent', expect.objectContaining({ type: 'closed', code: 'REALTIME_CONTEXT_REFRESH_REQUIRED' }))
+  } finally { controller.close(); tasks.close(); db.close() }
+})
