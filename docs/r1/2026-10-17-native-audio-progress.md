@@ -17,3 +17,9 @@
 生产构建通过（含现存bundle体积提示）；完整86文件535项通过，日志`/tmp/seamo-r1-audio-final-build.log`与`/tmp/seamo-r1-audio-final-regression.log`。新增覆盖20ms分帧、非零正负PCM真实输出到worklet缓冲、clear后静音、顺序定速、短暂IPC延迟、持续超时、停止后迟到IPC隔离与导出隐私过滤。均为本地自动测试，不证明扬声器已发声。
 
 下一步：生成可追溯独立预览，核验真实启动和原配置，然后由用户短句复测并读取本次计数。仍需真实播音/打断、20轮连续交流、工具回注、设备与延迟验收；不建立G阶段通过标签或正式Release。
+
+## 更新包与启动阻塞
+
+预览已生成：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-21e027f/Seamo AI R1.app`。build-info对应源提交`21e027f4d76d5ca89bdcc233e5afab095cca3d1d`、资产2.5.1及55个生产依赖；codesign完整性通过，仅本地临时签名/未公证。原旧包目录保留。
+
+退出旧包快捷键后窗口消失但旧PID70090仍在；确认精确旧包路径后发送SIGTERM正常结束，再通过CUA启动新包。新PID82599存在，但两次获取窗口均超时。只读1秒进程采样显示主线程停在系统Security的SecItemCopyMatching/SecKeychainItemCopyContent调用链；这不是云鉴权测试结果，也不能宣称新页面已打开。采样`/tmp/seamo-r1-21e027f-startup.sample`，打包日志`/tmp/seamo-r1-21e027f-package.log`。已请求用户检查并手动处理系统钥匙串提示，未读取、修改或删除钥匙串条目。

@@ -14,6 +14,10 @@ R1 当前是开发预览：应用 ID `com.seamo.ai.r1`，数据目录 `~/Library
 
 2026-10-13 已在现有公开仓库建立远端 `main`（当前指向原 GitHub 旧版提交 `b85da0c`）、`codex/seamo-r1` 和两个旧版标签；原 `feature/lingli-mvp` 保留。R1 开发差异见草稿 PR [#1](https://github.com/FlyingAngeryBird/ai_alex/pull/1)。`main` 只接收后续已验收版本，开发提交不会自动合并。
 
+## 2026-10-17 开发检查点
+
+音频传输和计数诊断源码`21e027f`已保存，86文件535项与生产构建通过。仓库外独立预览`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-21e027f/Seamo AI R1.app`已生成、签名完整性通过；启动暂时阻塞在系统钥匙串读取，尚未证明新页面可用或真实出声。用户上次实测无声/拥塞已记失败，详见[音频联调记录](2026-10-17-native-audio-progress.md)。本批源码回退`b02ceb7`，数据Schema不变；不标阶段通过或正式Release。
+
 ## 2026-10-15 开发检查点
 
 最新交付修复以`ba000b4`为源码回退点：语音配置前检与真实恢复确认通过；打包完整生产依赖、可追溯构建信息和仓库外启动的记录见[交付进度](2026-10-15-delivery-progress.md)。下文「恢复确认UI未验收」为上一批历史状态。本机开发预览不等同正式Release。
