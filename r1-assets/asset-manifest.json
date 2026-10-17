@@ -1,6 +1,6 @@
 {
-  "releaseId": "seamo-ai-r1-agent-assets-3.5.2",
-  "version": "3.5.2",
+  "releaseId": "seamo-ai-r1-agent-assets-3.5.3",
+  "version": "3.5.3",
   "files": [
     {
       "path": ".gitignore",
@@ -25,17 +25,17 @@
     {
       "path": "config/prompt-registry.json",
       "bytes": 4487,
-      "sha256": "1d881dc59066a069851936f56b3d1d97cbdae070cc866f9d688997f2e53e5eeb"
+      "sha256": "8209e4d5c1f57676e1fbe107aaf4178cfa3b1732db389cb2030f55953738b924"
     },
     {
       "path": "config/runtime.defaults.json",
       "bytes": 5213,
-      "sha256": "31f59691a9b3f109a4e27d6498eb7ebc7f57ee53b48d1a812cfd8184efa4e30a"
+      "sha256": "078b45ca0d9e39567b58d495997d2c0c751b428bb9d4c5e6b144e881803f096a"
     },
     {
       "path": "config/skill-registry.json",
       "bytes": 4143,
-      "sha256": "af392498a64d7a406e5fc748a248e12db36db6ea6f5959643b12098c37a60850"
+      "sha256": "bbe7496941d010664c5a55bc88cc142117f02aa4cfccbf3ad0ae436a51b7aece"
     },
     {
       "path": "contracts/tool-catalog.json",
@@ -44,8 +44,8 @@
     },
     {
       "path": "docs/AGENT_ASSET_APPENDIX.md",
-      "bytes": 156060,
-      "sha256": "63207ef68fdc5dfa42ba30de263ed286da3c4f1c91d4a3bc0353e44579083b50"
+      "bytes": 157594,
+      "sha256": "cca289120411fb662b19a48ceab83cd38d501c05e397b4e6eeac11e4989718b7"
     },
     {
       "path": "docs/ARCHITECTURE_CONTRACT.md",
@@ -59,8 +59,8 @@
     },
     {
       "path": "docs/CHANGE_POLICY.md",
-      "bytes": 37952,
-      "sha256": "dda39710557f99b5063ed928fc30d41d47400388d354c156cfdb40cac69f7844"
+      "bytes": 39137,
+      "sha256": "a111655545fbe35111dfb62b379cbc38030419feb2278e4cd8e44d3364f547a4"
     },
     {
       "path": "docs/DETAIL_SPEC.md",
@@ -74,8 +74,8 @@
     },
     {
       "path": "docs/Seamo_AI_R1_PRD_v0.5.1.md",
-      "bytes": 330313,
-      "sha256": "a585017378b6035d773288c9b87b978f171c64e72357c69bfc538ffb327bb98f"
+      "bytes": 331847,
+      "sha256": "9778e0b565d4d65653fbdd8a98a14779c2f0e426980bb115119e0becb9d0bd59"
     },
     {
       "path": "evals/behavior-cases.jsonl",
@@ -94,8 +94,8 @@
     },
     {
       "path": "prompts/conversation.md",
-      "bytes": 11255,
-      "sha256": "4308513089df05b7c89cdcd97e7429ac51d8d154c09d59b7389f86b804699135"
+      "bytes": 11602,
+      "sha256": "f9d3e2d3397a06fdd1c9eba16618bf15b4d8dcdc3b32fafff6504edd7bab79d5"
     },
     {
       "path": "prompts/memory-extract.md",

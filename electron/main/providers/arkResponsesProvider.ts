@@ -46,7 +46,11 @@ function checkedOutput(value: unknown, boundary: ArkModelBoundary, historical = 
       try {
         if (historical && boundary.validateHistoricalToolCall) boundary.validateHistoricalToolCall(item.name, args)
         else boundary.validateToolCall(item.name, args)
-      } catch { invalid('ARK_TOOL_SCOPE_OR_SCHEMA_INVALID') }
+      } catch (error) {
+        // Diagnostic only: tool name and validation reason, never user content or credentials.
+        try { console.error('[seamo-ark] tool_call_rejected', item.name, error instanceof Error ? error.message : 'UNKNOWN') } catch { /* logging only */ }
+        invalid('ARK_TOOL_SCOPE_OR_SCHEMA_INVALID')
+      }
     } else if (item.type === 'message') {
       if (item.role !== 'assistant' || !Array.isArray(item.content) ||
         item.content.some(part => !part || part.type !== 'output_text' || typeof part.text !== 'string')) invalid('ARK_MESSAGE_INVALID')

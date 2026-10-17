@@ -271,7 +271,7 @@ void app.whenReady().then(async () => {
     const taskTools = new R1TaskToolExecutor(r1Tasks, r1PromptAssets, new R1Items(r1Database), createDoubaoSearchProvider(), createPageReader(), focusServices, r1Music, itemActions)
     r1TaskRunner = new R1TaskRunner(r1Tasks, r1PromptAssets, taskTools, r1Artifacts,
       createArkResponsesProvider({ timeoutMs: 60_000 }), () => new R1PersonaStore(r1Database!).get())
-    r1ConversationDriver = new R1ConversationDriver(r1Database, r1PromptAssets, r1Tasks, createArkResponsesProvider({ timeoutMs: 30_000 }),
+    r1ConversationDriver = new R1ConversationDriver(r1Database, r1PromptAssets, r1Tasks, createArkResponsesProvider({ timeoutMs: 60_000 }),
       () => new R1PersonaStore(r1Database!).get(), taskTools.implementedAliases, focusServices, r1Artifacts, r1Music)
     nativeVoice = registerNativeVoiceHandlers({ db: r1Database, assets: r1PromptAssets,
       persona: new R1PersonaStore(r1Database), memory, conversations: r1Conversations,
