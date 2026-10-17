@@ -877,8 +877,8 @@ async function beginPushToTalk(source: PushToTalkSource = 'button'): Promise<voi
 }
 async function endPushToTalk(source: PushToTalkSource = 'button'): Promise<void> { await pushToTalk.release(source) }
 function cancelPushToTalk(): void { void pushToTalk.cancel() }
-function handleWindowBlur(): void { taskDeliveryCoordinator?.cancel(); cancelPushToTalk() }
-function handleVisibilityChange(): void { if (document.hidden) { taskDeliveryCoordinator?.cancel(); cancelPushToTalk() } }
+function handleWindowBlur(): void { cancelPushToTalk() }
+function handleVisibilityChange(): void { if (document.hidden) cancelPushToTalk() }
 
 async function handleContinueTopic(topic: import('../electron/main/r1/topics').R1Topic): Promise<void> {
   nativeAutoRequested.value = false; nativeResumeGeneration = null; ++autoListenModeGeneration
@@ -1032,9 +1032,11 @@ async function handlePreviewVoice(voiceId: string): Promise<void> {
 taskDeliveryCoordinator = createTaskDeliveryCoordinator({
   prepare: input => window.seamoR1.tasks.prepareDelivery(input),
   cancel: requestId => { void window.seamoR1.tasks.cancelDelivery({ requestId }).catch(() => undefined) },
-  async play(result) {
-    await speechPlayer.speak(result.text, undefined, 'proactive', { ok: true, data: result })
+  async play(result, report) {
+    conversation.messages.value.push({ id: result.responseId, role: 'assistant', text: result.text, createdAt: Date.now() })
+    await speechPlayer.speak(result.text, undefined, 'proactive', { ok: true, data: result }, report)
   },
+  report: input => { void window.seamoR1.tasks.reportDeliveryPlayback(input).catch(() => undefined) },
   stop() { if (speechPurpose.value === 'proactive') releaseAssistantAudio(true) }
 })
 watch(() => ({ notice: latestTaskCompletion.value,

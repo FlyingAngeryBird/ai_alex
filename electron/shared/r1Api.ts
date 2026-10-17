@@ -68,6 +68,7 @@ export type R1Api = {
     select(input: { topicId: string; expectedVersion: number }): Promise<R1Result<R1Topic>>
   }
   tasks: {
+    reportDeliveryPlayback(input: import('../main/r1/taskDelivery.js').TaskDeliveryPlayback): Promise<R1Result<null>>
     prepareDelivery(input: import('../main/r1/taskDelivery.js').TaskDeliveryRequest): Promise<R1Result<import('../main/r1/taskDelivery.js').TaskDeliveryAudio | null>>
     cancelDelivery(input: { requestId: string }): Promise<R1Result<null>>
     selectCandidate(input: { taskId: string; expectedGoalVersion: number; candidateId: string }): Promise<R1Result<{ type: 'candidate'; id: string; version: number }>>

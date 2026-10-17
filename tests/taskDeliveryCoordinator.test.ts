@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { createTaskDeliveryCoordinator } from '../src/services/taskDeliveryCoordinator'
 const notice = { key: 'result-v1', taskId: 'task', goalVersion: 1, resultId: 'result', completionStatus: 'completed' }
-const audio = { text: '已整理完成。', audio: new ArrayBuffer(4), mimeType: 'audio/wav' as const }
+const audio = { text: '已整理完成。', audio: new ArrayBuffer(4), mimeType: 'audio/wav' as const, responseId: 'fixture-response' }
 function fixture() {
   vi.useFakeTimers()
   const prepare = vi.fn(async () => ({ ok: true, data: audio })), cancel = vi.fn(), play = vi.fn(async () => undefined), stop = vi.fn()
@@ -11,7 +11,7 @@ afterEach(() => vi.useRealTimers())
 it('does not request a prompt while blocked and waits for an idle gap', async () => {
   const f = fixture(); f.coordinator.update(notice, false); await vi.advanceTimersByTimeAsync(1000); expect(f.prepare).not.toHaveBeenCalled()
   f.coordinator.update(notice, true); await vi.advanceTimersByTimeAsync(599); expect(f.prepare).not.toHaveBeenCalled()
-  await vi.advanceTimersByTimeAsync(1); expect(f.prepare).toHaveBeenCalledTimes(1); expect(f.play).toHaveBeenCalledWith(audio); f.coordinator.dispose()
+  await vi.advanceTimersByTimeAsync(1); expect(f.prepare).toHaveBeenCalledTimes(1); expect(f.play).toHaveBeenCalledWith(audio, expect.any(Function)); f.coordinator.dispose()
 })
 it('cancels a late prepared response on user activity and never replays it', async () => {
   const f = fixture(); let finish!: (value: { ok: boolean; data: typeof audio }) => void
@@ -32,4 +32,19 @@ it('does not retry failures or create audio for failed tasks', async () => {
   f.coordinator.update({ ...notice, completionStatus: 'failed' }, true); await vi.advanceTimersByTimeAsync(1000); expect(f.prepare).not.toHaveBeenCalled()
   f.coordinator.update(notice, true); await vi.advanceTimersByTimeAsync(1000); f.coordinator.update(notice, true)
   await vi.advanceTimersByTimeAsync(1000); expect(f.prepare).toHaveBeenCalledTimes(1); expect(f.play).not.toHaveBeenCalled(); f.coordinator.dispose()
+})
+it('binds device receipts to the original request and reports stop progress before cancelling the server ticket', async () => {
+  vi.useFakeTimers()
+  const sequence: string[] = [], report = vi.fn(() => { sequence.push('receipt') })
+  let callback!: (value: { status: 'interrupted'; playedUntilMs: number }) => void
+  const coordinator = createTaskDeliveryCoordinator({
+    prepare: async () => ({ ok: true, data: audio }), requestId: () => 'bound-request', report,
+    play: async (_audio, onPlayback) => { callback = onPlayback },
+    stop: () => callback({ status: 'interrupted', playedUntilMs: 420 }),
+    cancel: () => { sequence.push('cancel') }
+  })
+  coordinator.update(notice, true); await vi.advanceTimersByTimeAsync(600)
+  coordinator.cancel()
+  expect(report).toHaveBeenCalledWith({ requestId: 'bound-request', status: 'interrupted', playedUntilMs: 420 })
+  expect(sequence).toEqual(['receipt', 'cancel']); coordinator.dispose()
 })

@@ -13,4 +13,8 @@ export function registerTaskDeliveryHandlers(service: R1TaskDelivery, ipc: Ipc):
     service.cancel(event.sender.id, input.requestId)
     return { ok: true, data: null }
   })
+  ipc.handle('r1.tasks.reportDeliveryPlayback', (event, input) => {
+    try { service.reportPlayback(event.sender.id, input); return { ok: true, data: null } }
+    catch { return { ok: false, error: { code: 'TASK_DELIVERY_PLAYBACK_INVALID', message: '播报回执无效。' } } }
+  })
 }

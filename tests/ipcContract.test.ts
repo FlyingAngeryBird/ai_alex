@@ -61,6 +61,7 @@ describe('IPC contract', () => {
       'r1.tasks.list',
       'r1.tasks.prepareDelivery',
       'r1.tasks.cancelDelivery',
+      'r1.tasks.reportDeliveryPlayback',
       'r1.tasks.get',
       'r1.tasks.pause',
       'r1.tasks.resume',

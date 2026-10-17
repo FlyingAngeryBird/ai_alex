@@ -199,7 +199,7 @@ void app.whenReady().then(async () => {
       // Keep local pages usable. The vault retains its failure state, blocks saves
       // that could overwrite unreadable secrets, and can retry through settings.
     }
-    taskDelivery = new R1TaskDelivery({ assets: r1PromptAssets, tasks: r1Tasks,
+    taskDelivery = new R1TaskDelivery({ assets: r1PromptAssets, tasks: r1Tasks, conversations: r1Conversations,
       provider: createArkResponsesProvider({ timeoutMs: 12000, thinking: 'disabled' }), persona: () => new R1PersonaStore(r1Database!).get(),
       preferences: () => preferences.get(), scope: () => ({ temporary: r1SessionMode.temporary, sessionId: r1SessionMode.sessionId }),
       configurationRevision: () => vault.revision, synthesize: synthesizeNativeAnnouncement })

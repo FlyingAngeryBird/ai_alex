@@ -1,9 +1,11 @@
 import type { TaskDeliveryAudio, TaskDeliveryRequest } from '../../electron/main/r1/taskDelivery'
+import type { SpeechPlayback } from './assistantSpeech'
 type Notice = { key: string; taskId: string; goalVersion: number; resultId: string | null; completionStatus: string }
 /** Wait for an idle gap; cancel immediately on user/assistant activity. Never replay an attempted brief. */
 export function createTaskDeliveryCoordinator(options: {
   prepare(input: TaskDeliveryRequest): Promise<{ ok: boolean; data?: TaskDeliveryAudio | null }>
-  cancel(requestId: string): void; play(audio: TaskDeliveryAudio): Promise<void>; stop(): void;
+  cancel(requestId: string): void; play(audio: TaskDeliveryAudio, report: (receipt: SpeechPlayback) => void): Promise<void>; stop(): void;
+  report?(input: SpeechPlayback & { requestId: string }): void
   requestId?: () => string; idleMs?: number
 }) {
   let notice: Notice | null = null, allowed = false, disposed = false
@@ -14,7 +16,7 @@ export function createTaskDeliveryCoordinator(options: {
   function cancel(): void {
     if (timer) clearTimeout(timer); timer = null; scheduledKey = null
     const previous = active; active = null
-    if (previous) { options.cancel(previous.requestId); options.stop() }
+    if (previous) { options.stop(); options.cancel(previous.requestId) }
   }
   function update(next: Notice | null, maySpeak: boolean): void {
     notice = next; allowed = maySpeak
@@ -29,7 +31,10 @@ export function createTaskDeliveryCoordinator(options: {
       active = { key: expected.key, requestId }; attempted.add(expected.key)
       const current = () => !disposed && allowed && active?.requestId === requestId && notice?.key === expected.key
       void options.prepare({ taskId: expected.taskId, goalVersion: expected.goalVersion, resultId: expected.resultId!, requestId })
-        .then(async result => { if (current() && result.ok && result.data) await options.play(result.data) })
+        .then(async result => {
+          if (current() && result.ok && result.data) await options.play(result.data,
+            receipt => options.report?.({ ...receipt, requestId }))
+        })
         .catch(() => undefined) // The truthful result card remains available.
     }, options.idleMs ?? 600)
   }

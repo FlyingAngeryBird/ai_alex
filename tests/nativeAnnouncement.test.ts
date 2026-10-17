@@ -31,6 +31,24 @@ it('collects one utterance into a valid mono PCM24k WAV without tools, microphon
 })
 it('does not open a connection when already cancelled', async () => {
   const controller = new AbortController(); controller.abort(); const connect = vi.fn()
-  await expect(synthesizeNativeAnnouncement({ text: '取消', voice: 'voice', boundary: boundary(), signal: controller.signal }, connect)).rejects.toThrow('ANNOUNCEMENT_CANCELLED_OR_UNAVAILABLE')
+  await expect(synthesizeNativeAnnouncement({ text: '取消', voice: 'voice', boundary: boundary(), signal: controller.signal }, connect)).rejects.toThrow('ANNOUNCEMENT_CANCELLED')
   expect(connect).not.toHaveBeenCalled()
+})
+it.each([20, 46])('bounds a %s-second utterance without dropping a normal completion brief at 15 seconds', async seconds => {
+  vi.stubEnv('VOLCENGINE_REALTIME_API_KEY', 'synthetic')
+  const connect = () => {
+    const socket = Object.assign(new EventEmitter(), { bufferedAmount: 0, terminate: vi.fn(), send(raw: string) {
+      const event = JSON.parse(raw)
+      if (event.type === 'session.create') queueMicrotask(() => socket.emit('message', Buffer.from(JSON.stringify({ type: 'session.created', session: { id: 'long-fixture' } })), false))
+      if (event.type === 'speech_text_buffer.commit') queueMicrotask(() => {
+        const delta = Buffer.alloc(48000).toString('base64')
+        for (let i = 0; i < seconds; i++) socket.emit('message', Buffer.from(JSON.stringify({ type: 'response.output_audio.delta', response_id: 'long-fixture', delta })), false)
+        socket.emit('message', Buffer.from(JSON.stringify({ type: 'response.output_audio.done', response_id: 'long-fixture' })), false)
+      })
+    } })
+    queueMicrotask(() => socket.emit('open')); return socket as unknown as WebSocket
+  }
+  const result = synthesizeNativeAnnouncement({ text: '已完成工作稿。', voice: 'voice', boundary: boundary(), signal: new AbortController().signal }, connect)
+  if (seconds === 20) expect((await result).byteLength).toBe(960044)
+  else await expect(result).rejects.toThrow('ANNOUNCEMENT_AUDIO_LIMIT')
 })

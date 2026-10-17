@@ -14,14 +14,15 @@ export async function synthesizeNativeAnnouncement(input: {
       settled = true; clearTimeout(timer); input.signal.removeEventListener('abort', abort); session?.close()
       if (success && size) resolve(Buffer.concat(chunks)); else reject(new Error(code))
     }
-    const abort = () => finish(false), timer = setTimeout(abort, 12000)
+    const abort = () => finish(false, 'ANNOUNCEMENT_CANCELLED'), timer = setTimeout(() => finish(false, 'ANNOUNCEMENT_TIMEOUT'), 12000)
     input.signal.addEventListener('abort', abort, { once: true })
     if (input.signal.aborted) { abort(); return }
     session = new NativeRealtimeSession({ apiKey: process.env.VOLCENGINE_REALTIME_API_KEY ?? '', voice: input.voice,
       boundary: input.boundary, connect, onToolCalls: abort, onClosed: code => finish(false, code), onEvent(event) {
         if (event.type === 'response.output_audio.delta' && typeof event.delta === 'string') {
           const bytes = Buffer.from(event.delta, 'base64')
-          if (!bytes.length || bytes.length % 2 || size + bytes.length > 720000) { abort(); return }
+          if (!bytes.length || bytes.length % 2) { finish(false, 'ANNOUNCEMENT_AUDIO_INVALID'); return }
+          if (size + bytes.length > 2160000) { finish(false, 'ANNOUNCEMENT_AUDIO_LIMIT'); return }
           size += bytes.length; chunks.push(bytes)
         }
         if (event.type === 'response.output_audio.done') finish(true)
