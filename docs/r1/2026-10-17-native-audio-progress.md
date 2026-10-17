@@ -53,3 +53,5 @@
 修复后再做同范围真实合成探测：6个音频delta全部获非空归属标识，105740字节、52742个非零样本、峰值10581，session正常结束；日志`/tmp/seamo-native-audio-probe-20261017-normalized.log`。没有麦克风、用户历史或扬声器播放，该结果不能替代实际听感验收。
 
 完整回归86文件538项通过，日志`/tmp/seamo-r1-audio-segment-regression.log`；仍不视为G2/G5或安装验收通过。
+
+8fbc6d6独立预览已生成于`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-audio-segments/Seamo AI R1.app`；build-info源提交一致，55个生产依赖，签名完整性通过。CUA退出旧包窗口后核对旧PID84968精确路径并SIGTERM，启动新包首次超时，重读正常显示来自新包的首页、实时配置已读取、麦克风关闭。已请求用户新短句测试字幕与声音，无新听感结果，不宣称修复验收完成。
