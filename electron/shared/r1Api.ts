@@ -68,6 +68,8 @@ export type R1Api = {
     select(input: { topicId: string; expectedVersion: number }): Promise<R1Result<R1Topic>>
   }
   tasks: {
+    prepareDelivery(input: import('../main/r1/taskDelivery.js').TaskDeliveryRequest): Promise<R1Result<import('../main/r1/taskDelivery.js').TaskDeliveryAudio | null>>
+    cancelDelivery(input: { requestId: string }): Promise<R1Result<null>>
     selectCandidate(input: { taskId: string; expectedGoalVersion: number; candidateId: string }): Promise<R1Result<{ type: 'candidate'; id: string; version: number }>>
     saveCandidate(input: { taskId: string; expectedGoalVersion: number; candidateId: string; title: string; temporarySaveConfirmed?: boolean }): Promise<R1Result<{ itemId: string; title: string; version: number }>>
     openSource(input: { taskId: string; sourceRef: string }): Promise<R1Result<null>>

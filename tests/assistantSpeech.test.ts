@@ -25,6 +25,13 @@ it('records playback invocation separately from the actual media playing and end
     s.audios[0].emit('ended'); expect(s.mark).toHaveBeenLastCalledWith('tts_play_end')
   } finally { s.speaker.stop() }
 })
+it('plays a prepared bounded announcement through the same output owner without another TTS request', async () => {
+  const s = fixture()
+  await s.speaker.speak('任务结果', undefined, 'proactive', { ok: true, data: { audio: new ArrayBuffer(48), mimeType: 'audio/wav' } })
+  expect(s.request).not.toHaveBeenCalled(); expect(s.audios).toHaveLength(1)
+  s.audios[0].emit('playing'); expect(s.speaking).toHaveBeenLastCalledWith(true)
+  s.quiet(); expect(s.audios[0].pause).toHaveBeenCalled(); expect(s.release).toHaveBeenCalledTimes(1)
+})
 it('drops a late proactive TTS result after quiet mode without blocking a user-requested reply', async () => {
   const s = fixture(); let release!: (value: Awaited<ReturnType<typeof s.request>>) => void
   s.request.mockImplementationOnce(() => new Promise(resolve => { release = resolve }))

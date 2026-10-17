@@ -125,7 +125,14 @@ export class NativeRealtimeSession {
   speakSearchHint(): void {
     // This is the same native TTS-only event verified by the existing audio
     // probe. It does not inject a user question or request another LLM turn.
-    this.send({ type: 'speech_text_buffer.commit', text: '我查一下。' })
+    this.speakText('我查一下。')
+  }
+  /** TTS only. Call on a dedicated, tool-free session, never an active M01 turn. */
+  speakText(text: string): void {
+    if (this.input.boundary.diagnostic.toolAliases.length || !text.trim() || [...text].length > 500) {
+      throw new NativeRealtimeError('REALTIME_TTS_TEXT_INVALID')
+    }
+    this.send({ type: 'speech_text_buffer.commit', text })
   }
   private receive(event: NativeRealtimeEvent): void {
     if (event.type === 'response.output_audio.delta') {

@@ -60,7 +60,7 @@ function checkedOutput(value: unknown, boundary: ArkModelBoundary, historical = 
 
 /** Stateless Ark Responses transport; business execution stays with the application ToolExecutor. */
 export function createArkResponsesProvider(options: { env?: Environment;
-  fetch?: (url: string, init?: RequestInit) => Promise<Response>; timeoutMs?: number } = {}) {
+  fetch?: (url: string, init?: RequestInit) => Promise<Response>; timeoutMs?: number; thinking?: 'disabled' } = {}) {
   return {
     async request(input: { boundary: ArkModelBoundary; messages: ChatMessage[];
       rounds?: ArkResponseRound[]; signal?: AbortSignal; maxOutputTokens?: number }): Promise<ArkResponse> {
@@ -106,6 +106,7 @@ export function createArkResponsesProvider(options: { env?: Environment;
           method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, signal,
           body: JSON.stringify({ model, store: false, stream: false, instructions: input.boundary.systemText,
             input: history, tools, max_output_tokens: maxOutputTokens,
+            ...(options.thinking ? { thinking: { type: options.thinking } } : {}),
             ...(outputFormat ? { text: { format: { type: 'json_schema', name: outputFormat.name,
               schema: outputFormat.schema, strict: true } } } : {}) })
         })

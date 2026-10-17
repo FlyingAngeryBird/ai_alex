@@ -2,7 +2,7 @@ import { createPageReader } from './providers/pageReader.js'
 import { createDoubaoSearchProvider } from './providers/doubaoSearchProvider.js'
 import { registerNativeVoiceHandlers } from './ipc/nativeVoiceHandlers.js'
 import { createNativeSearchHintCache } from './providers/nativeSearchHint.js'
-import { app, BrowserWindow, powerMonitor } from 'electron'
+import { app, BrowserWindow, ipcMain, powerMonitor } from 'electron'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync } from 'node:fs'
@@ -33,6 +33,9 @@ import { registerFocusHandlers } from './ipc/focusHandlers.js'
 import { R1ServiceDiagnostics } from './r1/serviceDiagnostics.js'
 import { registerServiceHandlers } from './ipc/serviceHandlers.js'
 import { R1TaskSupervisor } from './r1/taskSupervisor.js'
+import { R1TaskDelivery } from './r1/taskDelivery.js'
+import { registerTaskDeliveryHandlers } from './ipc/taskDeliveryHandlers.js'
+import { synthesizeNativeAnnouncement } from './providers/nativeAnnouncement.js'
 import { R1Artifacts } from './r1/artifacts.js'
 import { registerTaskHandlers } from './ipc/taskHandlers.js'
 import { R1TaskToolExecutor } from './r1/taskToolExecutor.js'
@@ -66,6 +69,7 @@ let r1PromptAssets: R1PromptAssets | null = null
 let r1Focus: R1Focus | null = null
 let r1Diagnostics: R1ServiceDiagnostics | null = null
 let r1Tasks: R1TaskSupervisor | null = null
+let taskDelivery: R1TaskDelivery | null = null
 let r1TaskRunner: R1TaskRunner | null = null
 let r1ConversationDriver: R1ConversationDriver | null = null
 let r1Artifacts: R1Artifacts | null = null
@@ -78,6 +82,7 @@ let automaticMemory: R1AutomaticMemory | null = null
 let dataManagement: R1DataManagement | null = null
 const r1SessionMode: R1SessionMode = { temporary: false }
 function invalidateMemoryContexts(deletionEpoch: number): void {
+  taskDelivery?.invalidate()
   topicSummaries?.invalidate()
   r1SessionMode.selectedArtifact = null
   if (r1SessionMode.selectedTopic && r1Database) {
@@ -185,6 +190,7 @@ void app.whenReady().then(async () => {
     r1Tasks.onChanged(event => {
       if (!r1Tasks?.list(r1SessionMode.temporary ? r1SessionMode.sessionId || '__missing__' : null)
         .some(task => task.taskId === event.task.taskId)) return
+      taskDelivery?.observe(event)
       for (const window of BrowserWindow.getAllWindows()) window.webContents.send('r1.taskChanged', event)
       if (event.reason === 'completed') for (const artifact of event.task.result?.artifacts ?? []) artifactChanged(artifact)
     })
@@ -193,6 +199,12 @@ void app.whenReady().then(async () => {
       // Keep local pages usable. The vault retains its failure state, blocks saves
       // that could overwrite unreadable secrets, and can retry through settings.
     }
+    taskDelivery = new R1TaskDelivery({ assets: r1PromptAssets, tasks: r1Tasks,
+      provider: createArkResponsesProvider({ timeoutMs: 12000, thinking: 'disabled' }), persona: () => new R1PersonaStore(r1Database!).get(),
+      preferences: () => preferences.get(), scope: () => ({ temporary: r1SessionMode.temporary, sessionId: r1SessionMode.sessionId }),
+      configurationRevision: () => vault.revision, synthesize: synthesizeNativeAnnouncement })
+    registerTaskDeliveryHandlers(taskDelivery, ipcMain)
+    preferences.onChanged(() => taskDelivery?.invalidate())
     automaticMemory = new R1AutomaticMemory(r1Database, r1PromptAssets, r1Conversations, createArkResponsesProvider(), {
       persona: () => new R1PersonaStore(r1Database!).get(), configurationRevision: () => vault.revision,
       onInvalidated: invalidateMemoryContexts,
@@ -222,7 +234,7 @@ void app.whenReady().then(async () => {
       searchHint: createNativeSearchHintCache(),
       configurationRevision: () => vault.revision, focusServices, onMemoryInvalidated: invalidateMemoryContexts,
       memoryConfirmations, automaticMemory, topicSummaries, artifacts: r1Artifacts, music: r1Music })
-    powerMonitor.on('suspend', () => { nativeVoice?.close(); automaticMemory?.invalidate(); topicSummaries?.invalidate(); memoryConfirmations?.revokeAutomatic() })
+    powerMonitor.on('suspend', () => { taskDelivery?.invalidate(); nativeVoice?.close(); automaticMemory?.invalidate(); topicSummaries?.invalidate(); memoryConfirmations?.revokeAutomatic() })
     r1TaskRunner.start()
     registerR1Handlers(r1Database, undefined, r1SessionMode, invalidateMemoryContexts)
     registerCredentialHandlers(vault)
@@ -300,6 +312,7 @@ app.on('before-quit', event => {
   event.preventDefault()
   if (shutdownStarted) return
   shutdownStarted = true
+  taskDelivery?.invalidate()
   dataManagement?.close()
   chatController?.close()
   r1Music?.close()

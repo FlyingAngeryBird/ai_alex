@@ -1,5 +1,5 @@
 export type SpeechPurpose = 'reply' | 'preview' | 'proactive'
-type TtsResult = { ok: true; data: { audio: ArrayBuffer; mimeType: string } } | { ok: false; error: { code: string; message: string } }
+export type TtsResult = { ok: true; data: { audio: ArrayBuffer; mimeType: string } } | { ok: false; error: { code: string; message: string } }
 /** Owns fallback speech output; policy changes and stale promises cannot revive it. */
 export function createAssistantSpeech(options: {
   request(text: string, voice?: string): Promise<TtsResult>
@@ -25,13 +25,13 @@ export function createAssistantSpeech(options: {
     if (resume) options.onEnded()
   }
   function policyChanged(): void { if (purpose === 'proactive' && !allowed(purpose)) stop(true) }
-  async function speak(text: string, voice?: string, reason: SpeechPurpose = 'reply'): Promise<void> {
+  async function speak(text: string, voice?: string, reason: SpeechPurpose = 'reply', prepared?: TtsResult): Promise<void> {
     if (!text.trim() || !allowed(reason)) return
     stop(); purpose = reason; options.onPurposeChange?.(reason); const epoch = generation
     const current = () => epoch === generation && allowed(reason)
     try {
       options.mark?.('tts_first_push')
-      const result = await options.request(text.trim(), voice)
+      const result = prepared ?? await options.request(text.trim(), voice)
       if (!current()) return
       if (!result.ok) { stop(true); return }
       options.mark?.('tts_first_audio')

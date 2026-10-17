@@ -56,6 +56,8 @@ export const exposedChannels = [
   'r1.tasks.saveCandidate',
   'r1.tasks.openSource',
   'r1.tasks.list',
+  'r1.tasks.prepareDelivery',
+  'r1.tasks.cancelDelivery',
   'r1.tasks.get',
   'r1.tasks.pause',
   'r1.tasks.resume',
@@ -201,6 +203,8 @@ function exposeLingliApi(
       select: input => invokeR1('r1.topics.select', input)
     },
     tasks: {
+      prepareDelivery: input => invokeR1('r1.tasks.prepareDelivery', input),
+      cancelDelivery: input => invokeR1('r1.tasks.cancelDelivery', input),
       selectCandidate: input => invokeR1('r1.tasks.selectCandidate', input),
       saveCandidate: input => invokeR1('r1.tasks.saveCandidate', input),
       openSource: input => invokeR1('r1.tasks.openSource', input),

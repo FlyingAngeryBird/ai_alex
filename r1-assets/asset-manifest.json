@@ -1,6 +1,6 @@
 {
-  "releaseId": "seamo-ai-r1-agent-assets-3.0.0",
-  "version": "3.0.0",
+  "releaseId": "seamo-ai-r1-agent-assets-3.1.0",
+  "version": "3.1.0",
   "files": [
     {
       "path": ".gitignore",
@@ -24,18 +24,18 @@
     },
     {
       "path": "config/prompt-registry.json",
-      "bytes": 4431,
-      "sha256": "70642cbbdb7da948d7b7da416ca10c4392f3d9fd69d1c0cdad07ff30ff16f859"
+      "bytes": 4459,
+      "sha256": "cc4962cf6726fe7291804ca17118743fd42804f030cecc0a44c6f6df7316cea2"
     },
     {
       "path": "config/runtime.defaults.json",
       "bytes": 5213,
-      "sha256": "28fd12c1f8ae6f065d12dc16ae55c6114fd18de644612bd5a4630fa3ad8061a8"
+      "sha256": "792e84700b474153e574f9fb476ae747d55743ccd80739a28d1ce75595e26053"
     },
     {
       "path": "config/skill-registry.json",
       "bytes": 4143,
-      "sha256": "ca8f221f1727d3f7b7127d075a2f83164f725618f9edd0900862bc2e6dcd9e8c"
+      "sha256": "c69d91e934ce593a8323e22857d3327225c2a1789d7da7605a1cb7c4553419d2"
     },
     {
       "path": "contracts/tool-catalog.json",
@@ -44,8 +44,8 @@
     },
     {
       "path": "docs/AGENT_ASSET_APPENDIX.md",
-      "bytes": 127419,
-      "sha256": "6bc35128037ad51a5464b95c6c38c7202d51603a12f7868f003e77f7cb366c20"
+      "bytes": 128801,
+      "sha256": "b0278337def1af7f4d178bd58f11d630d437a14a814cc4f7636af37c75f8f20e"
     },
     {
       "path": "docs/ARCHITECTURE_CONTRACT.md",
@@ -59,8 +59,8 @@
     },
     {
       "path": "docs/CHANGE_POLICY.md",
-      "bytes": 19291,
-      "sha256": "3ffe7aa9adc688171c23b0c391d662e83e38245e7f0153ac9c5c64aed66460d4"
+      "bytes": 20347,
+      "sha256": "915024341917b93bac9053ccaf1a2c8f935ac30e440ed7eaf4e41b86a45bc341"
     },
     {
       "path": "docs/DETAIL_SPEC.md",
@@ -74,8 +74,8 @@
     },
     {
       "path": "docs/Seamo_AI_R1_PRD_v0.5.1.md",
-      "bytes": 301672,
-      "sha256": "7cb44570f9fcc4cb63b23584456e80119e2d8e464cff786042835c15a9099f78"
+      "bytes": 303054,
+      "sha256": "e31ab0ba04a6c20937a40aeb457c00e9ba3e1c5799806d824d3a0074ddb020fa"
     },
     {
       "path": "evals/behavior-cases.jsonl",
@@ -124,8 +124,8 @@
     },
     {
       "path": "prompts/task-delivery.md",
-      "bytes": 763,
-      "sha256": "264baebf51b71087a220eaf25905fcdaec292dfcfe140f8bf749e33a41aa1d4c"
+      "bytes": 1087,
+      "sha256": "5d64ba4673cfd43dd91240e0cfb8913abc88567b70dc84c6f0837acc0110f5f0"
     },
     {
       "path": "prompts/task-harness.md",

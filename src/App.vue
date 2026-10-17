@@ -39,6 +39,7 @@ import { useAppPreferences } from './composables/useAppPreferences'
 import { useSystemReducedMotion } from './composables/useSystemReducedMotion'
 import { createAudioDevices } from './services/audioDevices'
 import { createAssistantSpeech, type SpeechPurpose } from './services/assistantSpeech'
+import { createTaskDeliveryCoordinator } from './services/taskDeliveryCoordinator'
 import { withCaptureAbort } from './services/abortableCapture'
 import { checkVoiceReadiness, voiceConfigurationMessage, type VoiceMode } from './services/voiceReadiness'
 
@@ -91,12 +92,13 @@ const realtimeRecorder = useRealtimeVoiceRecorder({
 const assistantAudioLevel = ref(0.14)
 const assistantAudioPlaying = ref(false)
 const speechPurpose = ref<SpeechPurpose | null>(null)
+let taskDeliveryCoordinator: ReturnType<typeof createTaskDeliveryCoordinator> | null = null
 const speechPlayer = createAssistantSpeech({
   request: (text, voice) => invokeWithTimeout(window.lingli.invoke('tts.speak', { text, ...(voice ? { voice } : {}) }), 15000, '语音合成响应超时。'),
   canSpeakProactively: () => Boolean(preferences.value.value && !preferences.value.value.doNotDisturb && preferences.value.value.proactiveSpeechEnabled),
   configureOutput: audioDevices.bindOutput,
   onSpeaking(active) { assistantAudioPlaying.value = active; assistantAudioLevel.value = 0.14 },
-  onEnded: resumeAutoListenAfterAssistantAudio, mark: markVoiceTrace,
+  onEnded() { taskDeliveryCoordinator?.finished(); resumeAutoListenAfterAssistantAudio() }, mark: markVoiceTrace,
   onPurposeChange: purpose => { speechPurpose.value = purpose }
 })
 const nativeAutoRequested = ref(false)
@@ -123,6 +125,8 @@ const nativeConversation = useNativeConversation({
   },
   onError(message) { nativeAutoRequested.value = false; nativeResumeGeneration = null; conversation.disableAutoListen(); conversation.particleState.value = 'idle'; conversationPartialText.value = ''; conversation.addSystemMessage(message) },
   onText(event) {
+    if (event.type === 'conversation.item.input_audio_transcription.started' ||
+      event.type === 'response.output_audio.delta' || event.type === 'response.output_text.delta') taskDeliveryCoordinator?.cancel()
     if (event.type === 'search.state') {
       realtimeSearch.value = event as unknown as import('../electron/main/r1/realtimeSearch').RealtimeSearchState
       if (['ready', 'timeout', 'cancelled', 'failed'].includes(realtimeSearch.value.phase) && !nativeConversation.userSpeaking.value) conversation.particleState.value = 'idle'
@@ -537,6 +541,7 @@ function scheduleAutoListenGraceFinish(): void {
 }
 
 function stopCurrentResponse(): void {
+  taskDeliveryCoordinator?.cancel()
   if (nativeConversation.active.value) void nativeConversation.interrupt()
   conversation.stopCurrentReply()
   void window.lingli.invoke('chat.stopResponse')
@@ -872,8 +877,8 @@ async function beginPushToTalk(source: PushToTalkSource = 'button'): Promise<voi
 }
 async function endPushToTalk(source: PushToTalkSource = 'button'): Promise<void> { await pushToTalk.release(source) }
 function cancelPushToTalk(): void { void pushToTalk.cancel() }
-function handleWindowBlur(): void { cancelPushToTalk() }
-function handleVisibilityChange(): void { if (document.hidden) cancelPushToTalk() }
+function handleWindowBlur(): void { taskDeliveryCoordinator?.cancel(); cancelPushToTalk() }
+function handleVisibilityChange(): void { if (document.hidden) { taskDeliveryCoordinator?.cancel(); cancelPushToTalk() } }
 
 async function handleContinueTopic(topic: import('../electron/main/r1/topics').R1Topic): Promise<void> {
   nativeAutoRequested.value = false; nativeResumeGeneration = null; ++autoListenModeGeneration
@@ -1024,6 +1029,28 @@ async function handlePreviewVoice(voiceId: string): Promise<void> {
   }
 }
 
+taskDeliveryCoordinator = createTaskDeliveryCoordinator({
+  prepare: input => window.seamoR1.tasks.prepareDelivery(input),
+  cancel: requestId => { void window.seamoR1.tasks.cancelDelivery({ requestId }).catch(() => undefined) },
+  async play(result) {
+    await speechPlayer.speak(result.text, undefined, 'proactive', { ok: true, data: result })
+  },
+  stop() { if (speechPurpose.value === 'proactive') releaseAssistantAudio(true) }
+})
+watch(() => ({ notice: latestTaskCompletion.value,
+  allowed: Boolean(preferences.value.value?.proactiveSpeechEnabled && !preferences.value.value.doNotDisturb &&
+    !welcomeOpen.value && !reminderNotice.value && !focusNotice.value && !memoryConfirmation.value &&
+    !textBusy.value && !voicePreparing.value && !voicePreviewPending.value && !conversation.isListening.value &&
+    !nativeConversation.userSpeaking.value && !nativeConversation.speaking.value && !nativeConversation.starting.value &&
+    !realtimeRecorder.userSpeaking.value && !keyboardRecorder.userSpeaking.value && !autoListen.diagnostics.value.speaking &&
+    !realtimeSearchBusy.value && conversation.particleState.value === 'idle' &&
+    (!assistantAudioPlaying.value || speechPurpose.value === 'proactive')),
+  temporary: temporaryMode.value, personaVersion: persona.value?.version
+}), (next, previous) => {
+  if (previous && (next.temporary !== previous.temporary || next.personaVersion !== previous.personaVersion)) taskDeliveryCoordinator?.cancel()
+  taskDeliveryCoordinator?.update(next.notice, next.allowed)
+}, { flush: 'sync' })
+
 onMounted(() => {
   stopMemoryConfirmation = window.seamoR1.memory.onConfirmation(value => {
     memoryConfirmation.value = value; memoryConfirmationError.value = ''
@@ -1054,6 +1081,7 @@ onMounted(() => {
     reminderNotice.value = event
   }) ?? null
   stopMemoryInvalidation = window.seamoR1.memory.onInvalidated(() => {
+    taskDeliveryCoordinator?.cancel()
     taskState.clearCompletionNotices()
     if (assistantAudioPlaying.value || conversation.particleState.value === 'thinking') {
       releaseAssistantAudio(true)
@@ -1069,6 +1097,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  taskDeliveryCoordinator?.dispose()
   nativeAutoRequested.value = false; nativeResumeGeneration = null; ++autoListenModeGeneration
   void nativeConversation.stop()
   taskState.dispose()

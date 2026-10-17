@@ -26,6 +26,13 @@ describe('Ark Responses native tool protocol', () => {
     expect(body.instructions).not.toContain('unregistered')
     expect(body.tools[0]).toMatchObject({ type: 'function', name: 'memory_recall', parameters: { type: 'object' } })
     expect(body).not.toHaveProperty('previous_response_id')
+    expect(body).not.toHaveProperty('thinking')
+  })
+  it('disables thinking only for an explicitly configured presentation provider', async () => {
+    const fetcher = vi.fn(async () => response([{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '结果已就绪。' }] }]))
+    await createArkResponsesProvider({ env, fetch: fetcher, thinking: 'disabled' }).request({ boundary: boundary(), messages })
+    const [, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit]
+    expect(JSON.parse(init.body as string).thinking).toEqual({ type: 'disabled' })
   })
   it('returns results with the original call_id and preserves reasoning/message items locally', async () => {
     const fetcher = vi.fn(async () => response([{ type: 'message', role: 'assistant',

@@ -1,5 +1,5 @@
 {
-  "releaseId": "seamo-ai-r1-agent-assets-3.0.0",
+  "releaseId": "seamo-ai-r1-agent-assets-3.1.0",
   "composition": {
     "realtime": [
       "PR01",
@@ -29,6 +29,8 @@
       "PR06"
     ],
     "taskDelivery": [
+      "PR01",
+      "PR02",
       "PR07"
     ],
     "taskSteering": [
@@ -144,7 +146,7 @@
       "id": "PR07",
       "name": "task-delivery",
       "path": "prompts/task-delivery.md",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "description": "有效任务结果的口头呈现事件",
       "variables": [
         "delivery_json"
