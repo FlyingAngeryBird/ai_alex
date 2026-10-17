@@ -62,3 +62,9 @@ DEC-041后真实复测：M01曾调用旧Task结论再次复述错误入口；新
 新只读任务91c14091-6614-43da-8749-d890450a6383实际授权read_file/web_search/web_read_page，加载SK02及3条harness.readSkill回执。第一次模型没有执行搜索，诚实返回partial；从已加载Skill检查点继续后，真实web.search成功返回10条来源及候选，随后web.readPage失败PAGE_NO_READABLE_CONTENT，下一次错误sourceRef/URL组合被TASK_PAGE_SOURCE_INVALID拒绝。任务partial，未创建事项/提醒。由此真实通过M01受理→Task→Skill→Custom搜索→真实来源回执；完整“读官方正文→结论”仍未通过，不将摘要伪装已读。
 
 来源绑定失败现移入executeReadTool的校验执行区，仍在任何HTTP读取前拒绝，形成固定错误码的failed Receipt，允许模型观察失败后按预算改查；不在异常处直接终止整个Task。回归验证不匹配URL时实际页面请求数为0、随后正确来源仍可读取。官方动态页面可读性仍为待验/能力限制，未增加浏览器登录、第三方抓取供应商或伪造正文回执。
+
+## 最终交付检查点
+
+源码ea9f64c已推送codex/seamo-r1，包含DEC-041及旧结果回注拒绝、失败回执恢复；90文件568项通过，构建与临时签名完整性通过。`/tmp/seamo-web-evidence-final-tests.log`、`/tmp/seamo-web-evidence-final-build.log`为本批日志。最终开发包`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha3-web-recovery/Seamo AI R1.app`已通过CUA实际启动（包URL核对），问候返回、麦克风未开启，原服务状态保留。
+
+独立搜索/真实Task搜索已通过，动态官方正文读取和完整结论仍未通过。最新失败回执恢复代码已有自动化验证，但尚未在最终包重新完成实际动态页失败后的模型改查；不称全部联网A/V通过。正式签名、公证、音乐源及全量版本验收仍沿原未通过项。
