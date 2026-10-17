@@ -59,6 +59,7 @@ watch(() => music.playback.value.status === 'playing' && music.playback.value.tr
   void window.seamoR1.focus.reportMusicSelection({ trackKey }).catch(() => undefined)
 }, { immediate: true })
 const focusNotice = ref('')
+const focusDeliveryId = ref<string | null>(null)
 const focus = useFocus(event => {
   const track = music.playback.value.track
   const currentTrackKey = track ? `${track.source ?? 'unknown'}:${track.id}` : null
@@ -67,6 +68,7 @@ const focus = useFocus(event => {
     void music.pauseTrack(currentTrackKey!)
   }
   focusNotice.value = '这一段专注已完成，可以休息一下。'
+  focusDeliveryId.value = event.deliveryId ?? null
 })
 const focusEditorOpen = ref(false)
 const focusTargetTrack = ref<{ key: string; title: string } | null>(null)
@@ -1029,19 +1031,33 @@ async function handlePreviewVoice(voiceId: string): Promise<void> {
   }
 }
 
+const speechRequests = new Map<string, 'reminder' | 'task'>()
 taskDeliveryCoordinator = createTaskDeliveryCoordinator({
-  prepare: input => window.seamoR1.tasks.prepareDelivery(input),
-  cancel: requestId => { void window.seamoR1.tasks.cancelDelivery({ requestId }).catch(() => undefined) },
+  prepare: input => {
+    const reminder = 'deliveryId' in input
+    speechRequests.set(input.requestId, reminder ? 'reminder' : 'task')
+    return reminder ? window.seamoR1.reminders.prepareDelivery(input) : window.seamoR1.tasks.prepareDelivery(input)
+  },
+  cancel: requestId => {
+    const api = speechRequests.get(requestId) === 'reminder' ? window.seamoR1.reminders : window.seamoR1.tasks
+    void api.cancelDelivery({ requestId }).catch(() => undefined)
+    speechRequests.delete(requestId)
+  },
   async play(result, report) {
     conversation.messages.value.push({ id: result.responseId, role: 'assistant', text: result.text, createdAt: Date.now() })
     await speechPlayer.speak(result.text, undefined, 'proactive', { ok: true, data: result }, report)
   },
-  report: input => { void window.seamoR1.tasks.reportDeliveryPlayback(input).catch(() => undefined) },
+  report: input => {
+    const api = speechRequests.get(input.requestId) === 'reminder' ? window.seamoR1.reminders : window.seamoR1.tasks
+    void api.reportDeliveryPlayback(input).catch(() => undefined)
+    if (input.status === 'completed') speechRequests.delete(input.requestId)
+  },
   stop() { if (speechPurpose.value === 'proactive') releaseAssistantAudio(true) }
 })
-watch(() => ({ notice: latestTaskCompletion.value,
+watch(() => ({ notice: reminderNotice.value ? reminderNotice.value.deliveryId ? { key: reminderNotice.value.deliveryId, deliveryId: reminderNotice.value.deliveryId } : null :
+    focusNotice.value ? focusDeliveryId.value ? { key: focusDeliveryId.value, deliveryId: focusDeliveryId.value } : null : latestTaskCompletion.value,
   allowed: Boolean(preferences.value.value?.proactiveSpeechEnabled && !preferences.value.value.doNotDisturb &&
-    !welcomeOpen.value && !reminderNotice.value && !focusNotice.value && !memoryConfirmation.value &&
+    !welcomeOpen.value && !memoryConfirmation.value &&
     !textBusy.value && !voicePreparing.value && !voicePreviewPending.value && !conversation.isListening.value &&
     !nativeConversation.userSpeaking.value && !nativeConversation.speaking.value && !nativeConversation.starting.value &&
     !realtimeRecorder.userSpeaking.value && !keyboardRecorder.userSpeaking.value && !autoListen.diagnostics.value.speaking &&
@@ -1242,7 +1258,7 @@ onBeforeUnmount(() => {
         :assistant-name="persona?.assistantName || 'Seamo AI'" @close="closePanels" />
     <R1FocusDialog v-if="focusEditorOpen" :active="focus.active.value" :busy="focus.busy.value"
       :error="focus.error.value" :track="focusTargetTrack" @close="focusEditorOpen = false" @start="startFocus" />
-    <aside v-if="focusNotice || (focus.error.value && !focusEditorOpen)" class="r1-reminder-toast" role="status">
+    <aside v-if="!reminderNotice && (focusNotice || (focus.error.value && !focusEditorOpen))" class="r1-reminder-toast" role="status">
       <p>{{ focusNotice || focus.error.value }}</p><button type="button" @click="focusNotice = ''; focus.error.value = ''">关闭</button>
     </aside>
     <aside v-if="reminderNotice" class="r1-reminder-toast" role="status">

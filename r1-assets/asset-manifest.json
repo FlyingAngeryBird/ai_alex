@@ -1,6 +1,6 @@
 {
-  "releaseId": "seamo-ai-r1-agent-assets-3.1.1",
-  "version": "3.1.1",
+  "releaseId": "seamo-ai-r1-agent-assets-3.2.0",
+  "version": "3.2.0",
   "files": [
     {
       "path": ".gitignore",
@@ -24,18 +24,18 @@
     },
     {
       "path": "config/prompt-registry.json",
-      "bytes": 4459,
-      "sha256": "02ae31404a8a0a18d3c1fe4517a9624bbd876ac3f35a78f76bfa4e14b4142a33"
+      "bytes": 4487,
+      "sha256": "ee8f338ea508d4142bed952ea1408d3d8ab9ea786f77b7a4b78aba0bd43b1774"
     },
     {
       "path": "config/runtime.defaults.json",
       "bytes": 5213,
-      "sha256": "6d4a5c1d4e46752da7a6552ac66708cd684df9a0b46896b2236ddf676dede619"
+      "sha256": "c2daf4ad4f165b455dd0c721384c1e9d299a5265b6e8206192d767b6912d5ad7"
     },
     {
       "path": "config/skill-registry.json",
       "bytes": 4143,
-      "sha256": "472730b5c61b14cab1c30ba6353501ef4a0bf96420c25b72eb6ce8976fc1970c"
+      "sha256": "8fed49cb94312f3e8535a0971f3b6575af98e521718fe1c4e98dcfa63d2004f0"
     },
     {
       "path": "contracts/tool-catalog.json",
@@ -44,8 +44,8 @@
     },
     {
       "path": "docs/AGENT_ASSET_APPENDIX.md",
-      "bytes": 129978,
-      "sha256": "7987e86de7daa26c7d6b0a0d87d00935c799569f673c6402ae7919a1bc46b840"
+      "bytes": 131548,
+      "sha256": "cb65c1d98d4b9da025043b4cddd9cf372d732c0c2572c2a4a235dfdd2cb05fc8"
     },
     {
       "path": "docs/ARCHITECTURE_CONTRACT.md",
@@ -59,8 +59,8 @@
     },
     {
       "path": "docs/CHANGE_POLICY.md",
-      "bytes": 21163,
-      "sha256": "f17b93df6da09a56ca6155c0b617bf87db4877d0d535e2e1bb30b7af79153a72"
+      "bytes": 22511,
+      "sha256": "bd1f06acc8f3e12f2f9f45a7a715c801cd3f44d49351b7b1ddf6394bff76ae93"
     },
     {
       "path": "docs/DETAIL_SPEC.md",
@@ -74,8 +74,8 @@
     },
     {
       "path": "docs/Seamo_AI_R1_PRD_v0.5.1.md",
-      "bytes": 304231,
-      "sha256": "2859e8889c94f0394bbc31fba47ef4513c2f498a28d4c18359a1a4c5e7ef7b95"
+      "bytes": 305801,
+      "sha256": "5bdda89ef7bd6be9b5d762822793979708f12858bef90ae29766a8ca8e51b18b"
     },
     {
       "path": "evals/behavior-cases.jsonl",
@@ -109,8 +109,8 @@
     },
     {
       "path": "prompts/reminder-delivery.md",
-      "bytes": 595,
-      "sha256": "88b0426a531c1b619f6b75d460c573292116da3a7ed2e4c48aa968b7d421a2e0"
+      "bytes": 815,
+      "sha256": "0be35c33beaddacb0a64141499160418511873edf174e4bf9fdfbc8d0e5587dc"
     },
     {
       "path": "prompts/schema-repair.md",

@@ -4,6 +4,7 @@ import type { R1Database } from './database.js'
 import { R1Preferences } from './preferences.js'
 
 export type ReminderDueEvent = {
+  deliveryId?: string
   reminderId: string
   body: string
   dueAtUtc: string
@@ -94,12 +95,14 @@ export class ReminderScheduler {
   }
 }
 
-export function createElectronReminderScheduler(db: R1Database): ReminderScheduler {
+export function createElectronReminderScheduler(db: R1Database, prepareDelivery: (event: ReminderDueEvent) => string | null = () => null): ReminderScheduler {
   return new ReminderScheduler(db, {
     isSupported: () => Notification.isSupported(),
     show: (title, body, options) => new Notification({ title, body, silent: options?.silent }).show()
   }, {
     broadcast: (event) => {
+      const deliveryId = prepareDelivery(event)
+      if (deliveryId) event = { ...event, deliveryId }
       for (const window of BrowserWindow.getAllWindows()) {
         const send=()=>{if(!window.isDestroyed()&&!window.webContents.isDestroyed())window.webContents.send('r1.reminderDue',event)}
         if(window.webContents.isLoadingMainFrame())window.webContents.once('did-finish-load',send)

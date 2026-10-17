@@ -1,5 +1,5 @@
 {
-  "releaseId": "seamo-ai-r1-agent-assets-3.1.1",
+  "releaseId": "seamo-ai-r1-agent-assets-3.2.0",
   "composition": {
     "realtime": [
       "PR01",
@@ -37,6 +37,8 @@
       "PR08"
     ],
     "reminderDelivery": [
+      "PR01",
+      "PR02",
       "PR09"
     ],
     "repair": [
@@ -179,7 +181,7 @@
       "id": "PR09",
       "name": "reminder-delivery",
       "path": "prompts/reminder-delivery.md",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "description": "提醒及专注完成的呈现事件",
       "variables": [
         "reminder_delivery_json"

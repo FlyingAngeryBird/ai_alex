@@ -133,6 +133,9 @@ export type R1Api = {
     delete(input: MethodInput<'delete'>): Promise<R1Result<MethodOutput<'delete'>>>
   }
   reminders: {
+    prepareDelivery(input: import('../main/r1/reminderDelivery.js').ReminderSpeechRequest): Promise<R1Result<import('../main/r1/taskDelivery.js').TaskDeliveryAudio | null>>
+    cancelDelivery(input: { requestId: string }): Promise<R1Result<null>>
+    reportDeliveryPlayback(input: import('../main/r1/taskDelivery.js').TaskDeliveryPlayback): Promise<R1Result<null>>
     list(): Promise<R1Result<Reminder[]>>
     create(input: MethodInput<'createReminder'>): Promise<R1Result<MethodOutput<'createReminder'>>>
     reschedule(input: MethodInput<'reschedule'>): Promise<R1Result<MethodOutput<'reschedule'>>>

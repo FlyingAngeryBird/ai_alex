@@ -48,3 +48,13 @@ it('binds device receipts to the original request and reports stop progress befo
   expect(report).toHaveBeenCalledWith({ requestId: 'bound-request', status: 'interrupted', playedUntilMs: 420 })
   expect(sequence).toEqual(['receipt', 'cancel']); coordinator.dispose()
 })
+it('prioritizes a reminder over a task through the same speech owner, without replaying the interrupted task', async () => {
+  const f = fixture()
+  f.coordinator.update(notice, true); await vi.advanceTimersByTimeAsync(600)
+  f.coordinator.update({ key: 'reminder-key', deliveryId: 'delivery' }, true)
+  expect(f.stop).toHaveBeenCalledTimes(1)
+  await vi.advanceTimersByTimeAsync(600)
+  expect(f.prepare).toHaveBeenLastCalledWith({ deliveryId: 'delivery', requestId: 'request' })
+  f.coordinator.update(notice, true); await vi.advanceTimersByTimeAsync(1000)
+  expect(f.prepare).toHaveBeenCalledTimes(2); f.coordinator.dispose()
+})

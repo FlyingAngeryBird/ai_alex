@@ -34,6 +34,8 @@ import { R1ServiceDiagnostics } from './r1/serviceDiagnostics.js'
 import { registerServiceHandlers } from './ipc/serviceHandlers.js'
 import { R1TaskSupervisor } from './r1/taskSupervisor.js'
 import { R1TaskDelivery } from './r1/taskDelivery.js'
+import { R1ReminderDelivery } from './r1/reminderDelivery.js'
+import { registerReminderDeliveryHandlers } from './ipc/reminderDeliveryHandlers.js'
 import { registerTaskDeliveryHandlers } from './ipc/taskDeliveryHandlers.js'
 import { synthesizeNativeAnnouncement } from './providers/nativeAnnouncement.js'
 import { R1Artifacts } from './r1/artifacts.js'
@@ -70,6 +72,7 @@ let r1Focus: R1Focus | null = null
 let r1Diagnostics: R1ServiceDiagnostics | null = null
 let r1Tasks: R1TaskSupervisor | null = null
 let taskDelivery: R1TaskDelivery | null = null
+let reminderDelivery: R1ReminderDelivery | null = null
 let r1TaskRunner: R1TaskRunner | null = null
 let r1ConversationDriver: R1ConversationDriver | null = null
 let r1Artifacts: R1Artifacts | null = null
@@ -82,6 +85,7 @@ let automaticMemory: R1AutomaticMemory | null = null
 let dataManagement: R1DataManagement | null = null
 const r1SessionMode: R1SessionMode = { temporary: false }
 function invalidateMemoryContexts(deletionEpoch: number): void {
+  reminderDelivery?.invalidate()
   taskDelivery?.invalidate()
   topicSummaries?.invalidate()
   r1SessionMode.selectedArtifact = null
@@ -204,7 +208,12 @@ void app.whenReady().then(async () => {
       preferences: () => preferences.get(), scope: () => ({ temporary: r1SessionMode.temporary, sessionId: r1SessionMode.sessionId }),
       configurationRevision: () => vault.revision, synthesize: synthesizeNativeAnnouncement })
     registerTaskDeliveryHandlers(taskDelivery, ipcMain)
-    preferences.onChanged(() => taskDelivery?.invalidate())
+    reminderDelivery = new R1ReminderDelivery({ db: r1Database, assets: r1PromptAssets, conversations: r1Conversations,
+      scope: () => ({ ...r1SessionMode }), preferences: () => preferences.get(), persona: () => new R1PersonaStore(r1Database!).get(),
+      configurationRevision: () => vault.revision, provider: createArkResponsesProvider({ timeoutMs: 12000, thinking: 'disabled' }),
+      synthesize: synthesizeNativeAnnouncement })
+    registerReminderDeliveryHandlers(reminderDelivery, ipcMain)
+    preferences.onChanged(() => { taskDelivery?.invalidate(); reminderDelivery?.invalidate() })
     automaticMemory = new R1AutomaticMemory(r1Database, r1PromptAssets, r1Conversations, createArkResponsesProvider(), {
       persona: () => new R1PersonaStore(r1Database!).get(), configurationRevision: () => vault.revision,
       onInvalidated: invalidateMemoryContexts,
@@ -234,7 +243,7 @@ void app.whenReady().then(async () => {
       searchHint: createNativeSearchHintCache(),
       configurationRevision: () => vault.revision, focusServices, onMemoryInvalidated: invalidateMemoryContexts,
       memoryConfirmations, automaticMemory, topicSummaries, artifacts: r1Artifacts, music: r1Music })
-    powerMonitor.on('suspend', () => { taskDelivery?.invalidate(); nativeVoice?.close(); automaticMemory?.invalidate(); topicSummaries?.invalidate(); memoryConfirmations?.revokeAutomatic() })
+    powerMonitor.on('suspend', () => { taskDelivery?.invalidate(); reminderDelivery?.invalidate(); nativeVoice?.close(); automaticMemory?.invalidate(); topicSummaries?.invalidate(); memoryConfirmations?.revokeAutomatic() })
     r1TaskRunner.start()
     registerR1Handlers(r1Database, undefined, r1SessionMode, invalidateMemoryContexts)
     registerCredentialHandlers(vault)
@@ -245,6 +254,8 @@ void app.whenReady().then(async () => {
       requestRestart: () => { setTimeout(() => app.quit(), 0) } })
     registerFocusHandlers(r1Focus, undefined, r1SessionMode)
     r1Focus.onChanged(event => {
+      const deliveryId = reminderDelivery?.observeFocus(event)
+      if (deliveryId) event = { ...event, deliveryId }
       for (const window of BrowserWindow.getAllWindows()) window.webContents.send('r1.focusChanged', event)
     })
     powerMonitor.on('suspend', () => r1Focus?.suspend())
@@ -295,7 +306,7 @@ void app.whenReady().then(async () => {
   createMainWindow()
   r1Focus?.startScheduler()
   if (r1Database) {
-    reminderScheduler = createElectronReminderScheduler(r1Database)
+    reminderScheduler = createElectronReminderScheduler(r1Database, event => reminderDelivery?.observeReminder(event) ?? null)
     reminderScheduler.start()
   }
 
@@ -313,6 +324,7 @@ app.on('before-quit', event => {
   if (shutdownStarted) return
   shutdownStarted = true
   taskDelivery?.invalidate()
+  reminderDelivery?.invalidate()
   dataManagement?.close()
   chatController?.close()
   r1Music?.close()

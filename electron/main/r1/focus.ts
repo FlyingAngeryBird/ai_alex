@@ -12,7 +12,7 @@ type FocusRow = { focus_id: string; duration_sec: number; remaining_sec: number;
   end_target_track_key: string | null }
 export type FocusCommand = { actionId: string; focusId: string; expectedVersion: number }
 type FocusResult = { focus: FocusState; receipt: ActionReceipt }
-export type FocusEvent = { focus: FocusState; reason: 'started' | 'paused' | 'resumed' | 'stopped' | 'completed' | 'recovered' | 'tick' }
+export type FocusEvent = { focus: FocusState; reason: 'started' | 'paused' | 'resumed' | 'stopped' | 'completed' | 'recovered' | 'tick'; deliveryId?: string }
 
 const view = (row: FocusRow): FocusState => ({ focusId: row.focus_id, durationSec: row.duration_sec,
   remainingSec: Math.max(0, Math.ceil(row.remaining_sec)), state: row.state, version: row.version,

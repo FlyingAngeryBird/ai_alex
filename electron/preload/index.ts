@@ -76,6 +76,9 @@ export const exposedChannels = [
   'r1.items.deletionPreview',
   'r1.items.delete',
   'r1.reminders.list',
+  'r1.reminders.prepareDelivery',
+  'r1.reminders.cancelDelivery',
+  'r1.reminders.reportDeliveryPlayback',
   'r1.reminders.create',
   'r1.reminders.reschedule',
   'r1.reminders.cancel',
@@ -309,6 +312,9 @@ function exposeLingliApi(
       open: (candidateId) => invokeR1('r1.search.open', { candidateId })
     },
     reminders: {
+      prepareDelivery: input => invokeR1('r1.reminders.prepareDelivery', input),
+      cancelDelivery: input => invokeR1('r1.reminders.cancelDelivery', input),
+      reportDeliveryPlayback: input => invokeR1('r1.reminders.reportDeliveryPlayback', input),
       list: () => invokeR1('r1.reminders.list'),
       create: (input) => invokeR1('r1.reminders.create', input),
       reschedule: (input) => invokeR1('r1.reminders.reschedule', input),
