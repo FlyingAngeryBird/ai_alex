@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { randomUUID } from 'node:crypto'
+import { randomUUID, createHash } from 'node:crypto'
 const root=resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const imp=p=>import(`${root}/dist-electron/main/${p}`)
 const {openR1Database}=await imp('r1/database.js'),{R1Conversations}=await imp('r1/conversations.js'),{R1MemoryStore}=await imp('r1/memory.js')
@@ -31,6 +31,7 @@ const cases=[
  ['M19','profile','用户每周日傍晚整理下周待办。','一周的待办一般什么时候梳理？','周日.*傍晚|星期日.*傍晚'],
  ['M20','profile','用户希望被称呼为小海。','平时应该怎么称呼我？','小海']
 ]
+const datasetSha256=createHash('sha256').update(JSON.stringify(cases)).digest('hex')
 const dir=mkdtempSync(join(tmpdir(),'seamo-memory-recall-')),path=join(dir,'test.sqlite'),assets=loadR1PromptAssets(join(root,'r1-assets'))
 let db=openR1Database(path),conversations=new R1Conversations(db),store=new R1MemoryStore(db)
 const seedSession=conversations.start(),ids=new Map()
@@ -52,6 +53,7 @@ const provider=createArkResponsesProvider({timeoutMs:30000,fetch:async(url,init)
 const driver=new R1ConversationDriver(db,assets,tasks,provider,()=>persona,[]),results=[]
 try{
  const limit=Number(process.env.SEAMO_MEMORY_CASE_LIMIT||20)
+ console.log(JSON.stringify({scope:'recall_evaluation_config',datasetSha256,assetReleaseId:assets.releaseId,modelProfile:'configured_ark',historyUsed:false}))
  for(const [id,,fact,question,pattern] of cases.slice(0,limit)){
   observed=new Set();calls=[];const sessionId=conversations.start(),source=conversations.append({sessionId,turnId:randomUUID(),role:'user',body:question,status:'final'}),started=Date.now()
   try{
@@ -61,6 +63,6 @@ try{
   }catch(error){const row={id,status:'failed',code:error.code??error.message,calls,elapsedMs:Date.now()-started};results.push(row);console.log(JSON.stringify(row))}
   conversations.end(sessionId)
  }
- console.log(JSON.stringify({scope:'real_M01_cross_session_recall_after_sqlite_reopen',assetReleaseId:assets.releaseId,total:results.length,passed:results.filter(x=>x.status==='passed').length,threshold:0.9,sourceFactsSeeded:20,memoryRows:db.prepare('SELECT COUNT(*) AS n FROM memory').get().n,fullSetExecuted:results.length===20,database:'isolated-temporary-file',profileBusinessWrites:false,microphoneOpened:false,audioPlayed:false}))
+ console.log(JSON.stringify({scope:'real_M01_cross_session_recall_after_sqlite_reopen',datasetSha256,assetReleaseId:assets.releaseId,total:results.length,passed:results.filter(x=>x.status==='passed').length,threshold:0.9,sourceFactsSeeded:20,memoryRows:db.prepare('SELECT COUNT(*) AS n FROM memory').get().n,fullSetExecuted:results.length===20,database:'isolated-temporary-file',profileBusinessWrites:false,microphoneOpened:false,audioPlayed:false}))
  if(db.prepare('SELECT COUNT(*) AS n FROM memory').get().n!==20 || db.prepare('SELECT COUNT(*) AS n FROM memory WHERE version<>1').get().n!==0 || db.prepare('SELECT COUNT(*) AS n FROM items').get().n!==0 || tasks.list().length!==0 || results.filter(x=>x.status==='passed').length/results.length<0.9)process.exitCode=1
 }finally{tasks.close();db.close();rmSync(dir,{recursive:true,force:true})}

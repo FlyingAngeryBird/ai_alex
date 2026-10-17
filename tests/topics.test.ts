@@ -192,3 +192,18 @@ it('retrieves a current Topic from a natural multi-term query without confusing 
       .toThrow('MEMORY_RECALL_TIMEOUT')
   } finally { s.db.close() }
 })
+
+it('does not authorize a hidden Memory target when the combined Topic lookup fails', async () => {
+  const s = fixture()
+  try {
+    const saved = s.memory.addManual({ content: '用户喜欢无糖绿茶', category: 'preference' })
+    const source = s.conversations.append({ sessionId: s.sessionId, turnId: 'correction', role: 'user', body: '更正关于茶的记忆，改成红茶。', status: 'final' })
+    const { R1MemoryTools } = await import('../electron/main/r1/memoryTools')
+    const tools = new R1MemoryTools(s.memory, source, s.topics)
+    vi.spyOn(s.topics, 'recall').mockImplementationOnce(() => { throw new Error('MEMORY_RECALL_TIMEOUT') })
+    expect(() => tools.execute('memory_recall', { query: '茶' })).toThrow('MEMORY_RECALL_TIMEOUT')
+    expect(() => tools.execute('memory_update', { memoryId: saved.memoryId, expectedVersion: 1, content: '用户喜欢红茶' }))
+      .toThrow('MEMORY_TARGET_NOT_OBSERVED')
+    expect(s.memory.list().entries).toEqual([saved])
+  } finally { s.db.close() }
+})

@@ -50,9 +50,9 @@ export class R1MemoryTools {
       const policy = this.store.retrievalPolicy(), deadline = performance.now() + policy.budgetMs
       const assertBudget = () => { if (performance.now() > deadline) throw new Error('MEMORY_RECALL_TIMEOUT') }
       const memories = this.store.recall(args.query as string, false, args.category as R1Memory['category'] | null ?? null, assertBudget)
-      for (const memory of memories) this.known.set(memory.memoryId, memory)
       const topics = this.topics?.recall(args.query as string, { limit: policy.limit, assertBudget }).map(topicContext) ?? []
       assertBudget()
+      for (const memory of memories) this.known.set(memory.memoryId, memory)
       return { data: { matchStatus: memories.length || topics.length ? 'matched' : 'no_match', memories: memories.map(memoryView), ...(this.topics ? { topics } : {}) } }
     }
     if (alias === 'memory_remember') {

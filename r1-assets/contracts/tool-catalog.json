@@ -4,7 +4,7 @@
     {
       "name": "memory.recall",
       "alias": "memory_recall",
-      "description": "检索已授权有效的长期记忆；临时会话不可用。无匹配与检索失败分别返回。 同时返回匹配的有效持续话题 topics（真实 topicId/version/title/summary/unresolved/status/sourceRefs），与 memories 分层；Topic 不是 Memory ID，不能交给 memory_update/forget。 query使用问题中的对象或主题，可包含多个检索词。no_match只说明本次查询及过滤无匹配，不证明所有记录不存在；若先限定了category而用户未限定类别，去掉类别以同一主题再查一次。仍未找到时说明不确定，不编造共同经历或用通用建议冒充过去的决定。",
+      "description": "检索已授权有效的长期记忆；临时会话不可用。无匹配与检索失败分别返回。 同时返回匹配的有效持续话题 topics（真实 topicId/version/title/summary/unresolved/status/sourceRefs），与 memories 分层；Topic 不是 Memory ID，不能交给 memory_update/forget。 query使用问题中的对象或主题，可包含多个检索词。no_match只说明本次查询及过滤无匹配，不证明所有记录不存在；若先限定了category而用户未限定类别，去掉类别以同一主题再查一次。仍未找到时说明不确定，不编造共同经历或用通用建议冒充过去的决定。 本地按真实词面查找。query优先使用简短对象名或核心名词；泛称/同义表达首次无匹配时，可用有根据的同义或上下位具体名词组合补查一次，同时去掉非用户限定的category。不要仅重复整句问题或穷举无关概念。补查词只是查询假设，不能当成用户事实；只有真实返回的来源才可用于回答。",
       "input_schema": {
         "type": "object",
         "properties": {
