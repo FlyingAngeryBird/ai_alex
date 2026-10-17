@@ -27,7 +27,7 @@ const credentialFields: { key: CredentialField; label: string; secret: boolean }
   { key: 'VOLCENGINE_STREAM_ASR_API_KEY', label: '实时语音 API Key', secret: true },
   { key: 'VOLCENGINE_TTS_API_KEY', label: '语音合成 API Key', secret: true },
   { key: 'VOLCENGINE_TTS_VOICE', label: '默认音色 ID', secret: false },
-  { key: 'BRAVE_SEARCH_API_KEY', label: 'Brave Search API Key（G0 待验证候选）', secret: true }
+  { key: 'DOUBAO_SEARCH_API_KEY', label: '豆包搜索 Custom API Key', secret: true }
 ]
 const credentialInputs = reactive<Partial<Record<CredentialField, string>>>({})
 const credentialStatus = ref<CredentialStatus | null>(null)

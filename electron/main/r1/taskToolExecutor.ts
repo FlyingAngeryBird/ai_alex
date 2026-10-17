@@ -1,7 +1,7 @@
 import { R1FocusTools, focusToolAliases, type FocusToolServices } from './focusTools.js'
 import { R1ReminderTools, reminderToolAliases } from './reminderTools.js'
 import { createPageReader } from '../providers/pageReader.js'
-import { createBraveSearchProvider, SearchProviderError } from '../providers/braveSearchProvider.js'
+import { SearchProviderError, type SearchProvider } from '../providers/searchProvider.js'
 import { randomUUID } from 'node:crypto'
 import type { R1PromptAssets } from './promptAssets.js'
 import type { R1TaskSupervisor, TaskLease, TaskToolReceipt } from './taskSupervisor.js'
@@ -17,7 +17,7 @@ export class R1TaskToolExecutor {
   private readonly musicTools = new Map<string, R1MusicTools>()
   readonly implementedAliases: readonly string[]
   constructor(private readonly tasks: R1TaskSupervisor, private readonly assets: R1PromptAssets,
-    private readonly items?: R1Items, private readonly search?: ReturnType<typeof createBraveSearchProvider>, private readonly pages?: ReturnType<typeof createPageReader>, private readonly services?: FocusToolServices,
+    private readonly items?: R1Items, private readonly search?: SearchProvider, private readonly pages?: ReturnType<typeof createPageReader>, private readonly services?: FocusToolServices,
     private readonly music?: R1Music) {
     this.implementedAliases = Object.freeze(['read_file', 'write_todos', ...(items ? ['notes_create', ...reminderToolAliases] : []), ...(search ? ['web_search'] : []), ...(pages ? ['web_read_page'] : []), ...(services ? focusToolAliases : []), ...(music ? musicAliases : [])])
   }

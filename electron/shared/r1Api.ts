@@ -1,7 +1,7 @@
 import type { ActionReceipt, Item, R1Items, Reminder } from '../main/r1/items.js'
 import type { CredentialPatch, CredentialStatus } from '../main/r1/credentials.js'
 import type { ReminderDueEvent } from '../main/r1/reminderScheduler.js'
-import type { SearchResult } from '../main/providers/braveSearchProvider.js'
+import type { SearchResult } from '../main/providers/searchProvider.js'
 import type { R1Persona, R1PersonaStore } from '../main/r1/persona.js'
 import type { R1Memory, R1MemoryPage, R1MemorySource, R1MemoryStore } from '../main/r1/memory.js'
 import type { HistoryPage, R1Conversations, SessionMessage } from '../main/r1/conversations.js'

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import type { Item } from '../../electron/shared/r1Api'
-import type { SearchCandidate, SearchResult } from '../../electron/main/providers/braveSearchProvider'
+import type { SearchCandidate, SearchResult } from '../../electron/main/providers/searchProvider'
 
 const emit = defineEmits<{ close: [] }>()
 const props = defineProps<{ temporaryMode: boolean }>()

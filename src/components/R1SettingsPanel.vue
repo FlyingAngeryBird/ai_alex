@@ -109,7 +109,7 @@ const credentialFields: { key: CredentialField; label: string; secret: boolean }
   { key: 'VOLCENGINE_STREAM_ASR_API_KEY', label: '流式 ASR API Key', secret: true },
   { key: 'VOLCENGINE_TTS_API_KEY', label: '语音合成 API Key', secret: true },
   { key: 'VOLCENGINE_TTS_VOICE', label: '默认音色 ID', secret: false },
-  { key: 'BRAVE_SEARCH_API_KEY', label: 'Brave Search API Key · G0 待验证候选', secret: true }
+  { key: 'DOUBAO_SEARCH_API_KEY', label: '豆包搜索 Custom API Key', secret: true }
 ]
 const credentialInputs = reactive<Partial<Record<CredentialField, string>>>({})
 const credentialStatus = ref<CredentialStatus | null>(null)
@@ -358,11 +358,12 @@ async function clearCredential(field: CredentialField): Promise<void> {
           </template>
           <p>仅在本地显示计数与播放进度，不记录原始音频、识别正文或密钥。</p>
         </details>
-        <p v-if="credentialStatus">联网搜索：{{ credentialStatus.BRAVE_SEARCH_API_KEY ? '候选服务已填写密钥，G0 待验证' : 'G0 待验证候选，未配置' }}</p>
+        <p v-if="credentialStatus">联网搜索：豆包搜索 Custom · {{ credentialStatus.DOUBAO_SEARCH_API_KEY ? '密钥已填写，实际搜索待验证' : '未配置' }}</p>
         <p>音乐音源：待 G0 真实播放验证</p>
         <details ref="serviceConfiguration"><summary>模型与语音服务配置</summary>
           <p>密钥保存在本机加密存储中，这里不回显。留空不会覆盖原值。原生实时对话与 ASR、TTS 使用独立配置。</p>
           <p>实时对话 Key 来自豆包语音新版控制台的「API Key 管理」。请确认该 Key 所属项目已开通实时对话；火山方舟 Key 和旧版 Access Token 不能直接填写到此项。保存后点击「检测实时对话」验证连接。</p>
+          <p>豆包搜索 Custom 使用「联网搜索控制台 → API Key 管理」创建的搜索专用 Key。请选择对应的订阅套餐或按量后付费 Key；它与上面的豆包模型 Key、实时语音 Key 分开配置。</p>
           <div v-for="field in credentialFields" :key="field.key" class="r1-settings-field">
             <label :for="`r1-${field.key}`">{{ field.label }}</label>
             <div class="r1-settings-credential-row">

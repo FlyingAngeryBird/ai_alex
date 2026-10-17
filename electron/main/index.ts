@@ -1,5 +1,5 @@
 import { createPageReader } from './providers/pageReader.js'
-import { createBraveSearchProvider } from './providers/braveSearchProvider.js'
+import { createDoubaoSearchProvider } from './providers/doubaoSearchProvider.js'
 import { registerNativeVoiceHandlers } from './ipc/nativeVoiceHandlers.js'
 import { app, BrowserWindow, powerMonitor } from 'electron'
 import { dirname, join } from 'node:path'
@@ -209,7 +209,7 @@ void app.whenReady().then(async () => {
     })
     r1Focus = new R1Focus(r1Database)
     const focusServices = { focus: r1Focus, currentTrackKey: () => r1SessionMode.currentPlayingTrackKey ?? null }
-    const taskTools = new R1TaskToolExecutor(r1Tasks, r1PromptAssets, new R1Items(r1Database), createBraveSearchProvider(), createPageReader(), focusServices, r1Music)
+    const taskTools = new R1TaskToolExecutor(r1Tasks, r1PromptAssets, new R1Items(r1Database), createDoubaoSearchProvider(), createPageReader(), focusServices, r1Music)
     r1TaskRunner = new R1TaskRunner(r1Tasks, r1PromptAssets, taskTools, r1Artifacts,
       createArkResponsesProvider(), () => new R1PersonaStore(r1Database!).get())
     r1ConversationDriver = new R1ConversationDriver(r1Database, r1PromptAssets, r1Tasks, createArkResponsesProvider(),

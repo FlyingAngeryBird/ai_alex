@@ -6,7 +6,7 @@ const status = (patch: Partial<CredentialStatus> = {}): CredentialStatus => ({
   VOLCENGINE_ARK_API_KEY: false, VOLCENGINE_ARK_MODEL: false, VOLCENGINE_REALTIME_API_KEY: false,
   VOLCENGINE_REALTIME_VOICE: false, VOLCENGINE_ASR_APP_ID: false, VOLCENGINE_ASR_ACCESS_TOKEN: false,
   VOLCENGINE_STREAM_ASR_API_KEY: false, VOLCENGINE_TTS_API_KEY: false, VOLCENGINE_TTS_VOICE: false,
-  BRAVE_SEARCH_API_KEY: false, ...patch
+  BRAVE_SEARCH_API_KEY: false, DOUBAO_SEARCH_API_KEY: false, ...patch
 })
 it('does not mistake text model credentials for native voice credentials', () => {
   expect(voiceConfigurationError('native', status({ VOLCENGINE_ARK_API_KEY: true, VOLCENGINE_ARK_MODEL: true }), 'voice')).toBe('REALTIME_NOT_CONFIGURED')

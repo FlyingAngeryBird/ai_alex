@@ -113,17 +113,21 @@ describe('controlled internal task tools', () => {
   })
 })
 
-it('runs registered search through the task budget, records real sources, and drops results after cancellation', async () => {
+it.each(['brave', 'doubao'] as const)('runs %s search through the task budget, records real sources, and drops results after cancellation', async providerName => {
   const { createBraveSearchProvider } = await import('../electron/main/providers/braveSearchProvider')
+  const { createDoubaoSearchProvider } = await import('../electron/main/providers/doubaoSearchProvider')
   const db = openR1Database(':memory:')
   const conversations = new R1Conversations(db), sessionId = conversations.start()
   const source = conversations.append({ sessionId, turnId: 'search-source', role: 'user', body: '查询安静的公园', status: 'final' })
   const tasks = new R1TaskSupervisor(db, assets, () => 0)
   let requests = 0, release: (() => void) | undefined
-  const provider = createBraveSearchProvider({ key: () => 'synthetic', fetcher: (async () => {
+  const createProvider = providerName === 'doubao' ? createDoubaoSearchProvider : createBraveSearchProvider
+  const provider = createProvider({ key: () => 'synthetic', fetcher: (async () => {
     requests++
     if (requests === 2) await new Promise<void>(resolve => { release = resolve })
-    return new Response(JSON.stringify({ web: { results: [{ title: '官方公园介绍', url: 'https://example.com/park', description: '搜索摘要，尚未读页面' }] } }), { status: 200 })
+    return new Response(JSON.stringify(providerName === 'doubao'
+      ? { Result: { ResultCount: 1, WebResults: [{ Title: '官方公园介绍', Url: 'https://example.com/park', Summary: '搜索摘要，尚未读页面', PublishTime: '2026-10-16T08:00:00Z' }] } }
+      : { web: { results: [{ title: '官方公园介绍', url: 'https://example.com/park', description: '搜索摘要，尚未读页面' }] } }), { status: 200 })
   }) as typeof fetch })
   const executor = new R1TaskToolExecutor(tasks, assets, undefined, provider)
   try {

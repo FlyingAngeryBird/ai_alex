@@ -12,7 +12,8 @@ export const CREDENTIAL_FIELDS = [
   'VOLCENGINE_STREAM_ASR_API_KEY',
   'VOLCENGINE_TTS_API_KEY',
   'VOLCENGINE_TTS_VOICE',
-  'BRAVE_SEARCH_API_KEY'
+  'BRAVE_SEARCH_API_KEY', // Preserve old vault data for explicit rollback; never used as a Doubao key.
+  'DOUBAO_SEARCH_API_KEY'
 ] as const
 
 export type CredentialField = (typeof CREDENTIAL_FIELDS)[number]
