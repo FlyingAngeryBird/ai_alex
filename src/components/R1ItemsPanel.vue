@@ -216,7 +216,7 @@ onUnmounted(() => { stopEvents?.(); stopItemChanges?.() })
 
 <template>
   <aside class="r1-basic-side r1-items-panel" aria-label="事项" @keydown.stop @keyup.stop>
-    <header><div><small>SEAMO / YOUR THINGS</small><h2>事项</h2></div>
+    <header><div><small>SEAMO / YOUR THINGS</small><h2>手边的事</h2></div>
       <button type="button" aria-label="关闭侧栏" @click="emit('close')"><X :size="19" /></button></header>
     <div class="r1-basic-content">
       <div class="r1-items-summary"><span>{{ outstanding }} 件待办</span>

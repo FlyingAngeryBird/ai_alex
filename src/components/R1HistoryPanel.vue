@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp, History, Search, X } from 'lucide-vue-next'
 import type { HistorySession, SessionMessage } from '../../electron/main/r1/conversations'
 import type { CleanupPreview } from '../../electron/main/r1/dataManagement'
 import R1CleanupDialog from './R1CleanupDialog.vue'
+import { relativeDateTime } from '@/utils/dateLabels'
 
 const props = defineProps<{ temporary: boolean; assistantName: string }>()
 const emit = defineEmits<{ close: [] }>()
@@ -99,12 +100,12 @@ watch(() => props.temporary, () => { page.value = 0; void load() })
 
 <template>
   <aside class="r1-basic-side r1-history-panel" aria-label="历史对话">
-    <header><div><small>SEAMO / OUR CONVERSATIONS</small><h2>聊过的话</h2></div>
+    <header><div><small>SEAMO / PERSONAL SPACE</small><h2>聊过的话</h2></div>
       <button type="button" aria-label="关闭侧栏" @click="emit('close')"><X :size="19" /></button></header>
     <div class="r1-basic-content">
       <p v-if="temporary" role="status">当前为临时对话，不读取普通对话历史。关闭临时对话后可查看。</p>
       <template v-else>
-        <div class="r1-history-summary"><span>保存在这台设备上的普通对话</span></div>
+        <div class="r1-history-summary"><span>{{ sessions.length }}{{ hasMore ? '+' : '' }} 个话题</span><span>本地记录</span></div>
         <label class="r1-history-search"><Search :size="15" /><input v-model="query"
           placeholder="找一句话或一个话题" aria-label="搜索历史对话" /></label>
         <p v-if="loading" role="status">正在读取历史…</p>
@@ -114,14 +115,14 @@ watch(() => props.temporary, () => { page.value = 0; void load() })
         <section v-for="session in sessions" :key="session.sessionId" class="r1-history-session">
           <button type="button" class="r1-history-title" :aria-expanded="selectedId === session.sessionId"
             @click="selectSession(session.sessionId)"><span><strong>{{ session.title }}</strong>
-              <small>{{ dateLabel(session.lastMessageAt) }} · {{ session.messageCount }} 条消息</small></span>
+              <small>{{ relativeDateTime(session.lastMessageAt) }} · {{ session.messageCount }} 条消息</small></span>
             <ChevronUp v-if="selectedId === session.sessionId" :size="16" /><ChevronDown v-else :size="16" /></button>
           <template v-if="selectedId === session.sessionId">
             <button type="button" class="r1-history-delete" :disabled="deleting" @click="prepareDelete(session.sessionId)">删除这段对话…</button>
             <p v-if="messagesLoading" role="status">正在打开对话…</p>
             <article v-for="message in messages" :key="message.messageId" class="r1-history-message" :class="message.role">
               <div><small>{{ message.role === 'user' ? '你' : message.role === 'assistant' ? assistantName : '系统' }}</small>
-                <time>{{ dateLabel(message.createdAt) }}</time></div><p>{{ message.body }}</p>
+                <time>{{ relativeDateTime(message.createdAt) }}</time></div><p>{{ message.body }}</p>
             </article>
           </template>
         </section>
@@ -134,7 +135,7 @@ watch(() => props.temporary, () => { page.value = 0; void load() })
 </template>
 
 <style scoped>
-.r1-history-summary{margin-bottom:18px;color:#89978f;font-size:11px}
+.r1-history-summary{display:flex;justify-content:space-between;gap:12px;margin-bottom:18px;color:#89978f;font-size:11px}
 .r1-history-search{display:flex;align-items:center;gap:9px;height:43px;margin-bottom:19px;padding:0 12px;border:1px solid var(--r1-line);border-radius:6px;background:#ffffff06;color:#788a83}
 .r1-history-search input{flex:1;min-width:0;height:100%;border:0;outline:0;background:none;color:var(--r1-text);font-size:12px}
 .r1-history-empty{display:flex;flex-direction:column;align-items:center;gap:16px;padding:60px 8px;color:#75877d;text-align:center;font-size:12px}

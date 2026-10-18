@@ -7,6 +7,7 @@ import { rankMemoryCandidates } from './memoryRetrieval.js'
 export type R1Memory = {
   memoryId: string
   content: string
+  createdAt: string
   category: 'profile' | 'preference' | 'ongoing' | 'conclusion'
   sourceRefs: string[]
   expiresAt: string | null
@@ -20,14 +21,14 @@ export type R1MemorySource = { messageId: string; body: string; createdAt: strin
 export type R1MemoryPage = { entries: R1Memory[]; page: number; hasMore: boolean }
 
 type MemoryRow = {
-  memory_id: string; content: string; category: R1Memory['category']
+  memory_id: string; content: string; category: R1Memory['category']; created_at: string
   source_refs_json: string; expires_at: string | null; version: number
   deletion_epoch: number; deleted_at: string | null
   authorization: string; authorization_version: number | null
 }
 
 function view(row: MemoryRow): R1Memory {
-  return { memoryId: row.memory_id, content: row.content, category: row.category,
+  return { memoryId: row.memory_id, content: row.content, createdAt: row.created_at, category: row.category,
     sourceRefs: JSON.parse(row.source_refs_json) as string[], expiresAt: row.expires_at,
     version: row.version, deletionEpoch: row.deletion_epoch,
     authorization: row.authorization === 'automatic' ? 'automatic' : 'explicit', authorizationVersion: row.authorization_version }

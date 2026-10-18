@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp, MessageCircle, ArrowRight, Pencil, Plus, Search
 import type { R1Topic } from '../../electron/main/r1/topics'
 import type { R1Api } from '../../electron/shared/r1Api'
 import type { R1Memory, R1MemorySource } from '../../electron/main/r1/memory'
+import { relativeDateTime, relativeDay } from '@/utils/dateLabels'
 
 const props = defineProps<{ temporary: boolean; revision?: number; interactionBusy?: boolean }>()
 const emit = defineEmits<{ close: []; continueTopic: [topic: R1Topic]; settings: [] }>()
@@ -261,10 +262,10 @@ function confirmForget(): void {
           <div v-else-if="!visible.length" class="r1-memory-empty"><p>{{ query ? '没有找到这段记忆' : '这里还没有你保存的记忆' }}</p>
             <button v-if="!query" type="button" @click="newMemory"><Plus :size="14" />添加一段</button></div>
           <article v-for="record in visible" :key="record.memoryId" class="r1-memory-row">
-            <small>{{ label(record.category) }} · {{ record.authorization === 'automatic' ? '自动记住' : '你确认的内容' }} · v{{ record.version }}</small><p>{{ record.content }}</p>
+            <small>{{ label(record.category) }} · {{ relativeDay(record.createdAt) }}{{ record.authorization === 'automatic' ? ' · 自动记住' : '' }}</small><p>{{ record.content }}</p>
             <details @toggle="showSources(record.memoryId)"><summary>这段记忆从哪里来</summary>
               <p v-for="source in sources[record.memoryId] ?? []" :key="source.messageId">
-                {{ source.body }}<small>{{ new Date(source.createdAt).toLocaleString('zh-CN') }}</small></p>
+                {{ source.body }}<small>{{ relativeDateTime(source.createdAt) }}</small></p>
             </details>
             <div class="r1-memory-actions"><button type="button" @click="edit(record)"><Pencil :size="13" />更正</button>
               <button type="button" @click="confirmingId = record.memoryId"><Trash2 :size="13" />忘记</button></div>
@@ -281,13 +282,13 @@ function confirmForget(): void {
           <p v-else-if="preparing === 'failed'" role="status">本次整理未完成，已保存的话题仍保留。</p>
           <div v-if="!loading && !topics.length" class="r1-memory-empty"><p>{{ query ? '没有找到这个话题' : '还没有持续关注的话题' }}</p></div>
           <article v-for="topic in topics" :key="topic.topicId" class="topic-row" :class="{ selected: expandedTopic === topic.topicId }">
-            <button class="topic-title" type="button" :aria-expanded="expandedTopic === topic.topicId" @click="expandTopic(topic)"><span><strong>{{ topic.title }}</strong><small>{{ new Date(topic.updatedAt).toLocaleString('zh-CN') }} · v{{ topic.version }}</small></span><ChevronUp v-if="expandedTopic === topic.topicId" :size="16" /><ChevronDown v-else :size="16" /></button>
+            <button class="topic-title" type="button" :aria-expanded="expandedTopic === topic.topicId" @click="expandTopic(topic)"><span><strong>{{ topic.title }}</strong><small>{{ relativeDateTime(topic.updatedAt) }}</small></span><ChevronUp v-if="expandedTopic === topic.topicId" :size="16" /><ChevronDown v-else :size="16" /></button>
             <p>{{ topic.summary }}</p>
             <div v-if="expandedTopic === topic.topicId" class="topic-detail">
               <small>{{ topic.status === 'active' ? '进行中' : '已形成结论' }}</small>
               <ul v-if="topic.unresolved.length" aria-label="未解问题"><li v-for="question in topic.unresolved" :key="question">{{ question }}</li></ul>
               <ol aria-label="结论版本"><li v-for="version in topicDetails[topic.topicId]?.versions ?? []" :key="version.version"><time>v{{ version.version }}<br />{{ new Date(version.updatedAt).toLocaleDateString('zh-CN') }}</time><span>{{ version.summary }}</span></li></ol>
-              <details><summary>这个话题从哪里来</summary><p v-for="source in topicDetails[topic.topicId]?.sources ?? []" :key="source.messageId">{{ source.role === 'user' ? '你' : '助手' }}：{{ source.body }}<small>{{ new Date(source.createdAt).toLocaleString('zh-CN') }}</small></p></details>
+              <details><summary>这个话题从哪里来</summary><p v-for="source in topicDetails[topic.topicId]?.sources ?? []" :key="source.messageId">{{ source.role === 'user' ? '你' : '助手' }}：{{ source.body }}<small>{{ relativeDateTime(source.createdAt) }}</small></p></details>
               <p v-if="topicDetails[topic.topicId]?.related.artifacts.length">关联工作稿：{{ topicDetails[topic.topicId].related.artifacts.map(artifact => `${artifact.title} · v${artifact.version}`).join('、') }}</p>
               <div class="r1-memory-actions"><button type="button" :disabled="busy || interactionBusy" @click="continueTopic(topic)"><MessageCircle :size="14" />继续聊这件事</button><button type="button" @click="editTopic(topic)"><Pencil :size="13" />改结论</button><button type="button" @click="topicConfirming = topic"><Trash2 :size="13" />忘记</button></div>
             </div>

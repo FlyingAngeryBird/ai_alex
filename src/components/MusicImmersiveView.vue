@@ -57,7 +57,7 @@ const sourceOptions: Array<{ label: string; value: MusicSourcePreference }> = [
 ]
 
 const searchInput = ref(props.searchQuery)
-const libraryOpen = ref(!props.playback.track)
+const libraryOpen = ref(false)
 const failedArtworks = ref(new Set<string>())
 function markArtworkFailed(url: string | undefined): void { if (url) failedArtworks.value.add(url) }
 const feedbackOpen = ref(false)
@@ -68,6 +68,7 @@ function persistentAction(description: string, run: (confirmed: boolean) => void
   restoreFocus = document.activeElement as HTMLElement | null
   pendingSave.value = { description, run: () => run(true) }
 }
+watch(() => props.playback.status, status => { if (status === 'playing') libraryOpen.value = false })
 watch(pendingSave, async (value, previous) => {
   if (value) { await nextTick(); confirmationDialog.value?.querySelector<HTMLButtonElement>('button')?.focus() }
   else if (previous) restoreFocus?.focus()
@@ -273,6 +274,12 @@ function submitSearch(): void {
   }
 
   emit('search', query, props.sourcePreference)
+}
+
+function submitDefaultSearch(): void {
+  if (!searchInput.value.trim()) return
+  libraryOpen.value = true
+  submitSearch()
 }
 
 function selectSource(sourcePreference: MusicSourcePreference): void {
@@ -594,6 +601,10 @@ function lyricStyle(distance: number): Record<string, string> {
         <p class="eyebrow">SEAMO SESSIONS</p>
         <h2>{{ emptyTitle }}</h2>
         <p v-if="emptySubtitle" class="artist">{{ emptySubtitle }}</p>
+        <form v-if="!playback.track" class="r1-music-default-search" @submit.prevent="submitDefaultSearch">
+          <input v-model="searchInput" class="search-field" placeholder="搜索歌曲、歌手或专辑" aria-label="搜索歌曲、歌手或专辑" />
+          <button class="search-button" type="submit" aria-label="搜索歌曲">⌕</button>
+        </form>
       </div>
       <aside class="r1-music-empty-lyric" aria-label="歌词状态">
         <h3>{{ playback.status === 'loading' ? '正在寻找可播放版本' : '把时间，留给一首歌。' }}</h3>
@@ -616,5 +627,6 @@ function lyricStyle(distance: number): Record<string, string> {
 .r1-music-notice{font-size:12px;line-height:1.7;color:var(--r1-muted)}.r1-music-search-error{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.music-retry{background:none;border:1px solid var(--r1-line);border-radius:6px;color:var(--r1-aqua);font-size:12px;padding:3px 8px;cursor:pointer}.r1-music-confirm-backdrop{position:fixed;inset:0;background:#0009;z-index:100;display:grid;place-items:center}.r1-music-confirm{width:min(420px,90vw);padding:28px;background:var(--r1-surface,#101216);border:1px solid var(--r1-line);border-radius:8px}.r1-music-confirm h3{font-size:20px;color:var(--r1-text);font-weight:500}.r1-music-confirm p{font-size:13px;line-height:1.8;color:var(--r1-muted)}.r1-music-confirm button{margin:12px 20px 0 0;background:none;border:0;color:var(--r1-aqua);cursor:pointer}
 .r1-music-volume{display:flex;align-items:center;gap:8px;margin-left:auto;color:var(--r1-muted)}
 .r1-music-volume input{width:76px;height:3px;accent-color:var(--r1-aqua)}
+.r1-music-default-search{display:flex;align-items:center;gap:8px;max-width:420px;margin:20px 0 0}.r1-music-default-search .search-field{flex:1;min-width:0;height:38px;padding:0 12px;border:1px solid var(--r1-line);border-radius:6px;background:#ffffff06;color:var(--r1-text);font:inherit;font-size:12px;outline:0}.r1-music-default-search .search-field:focus-visible{outline:2px solid var(--r1-aqua);outline-offset:2px}.r1-music-default-search .search-button{height:38px;padding:0 13px;border:1px solid var(--r1-line);border-radius:6px;background:#1b2422;color:var(--r1-aqua);font:inherit;cursor:pointer}
 .lyrics--speaking{opacity:.2;transition:opacity .2s ease}
 </style>

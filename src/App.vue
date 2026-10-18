@@ -311,6 +311,20 @@ function closePanels(): void {
   historyOpen.value = false
 }
 const temporaryMode = ref(false)
+const lastNormalTopic = ref<string | null>(null)
+async function refreshLastNormalTopic(): Promise<void> {
+  if (temporaryMode.value) { lastNormalTopic.value = null; return }
+  try {
+    const result = await window.seamoR1.history.list({ page: 0 })
+    if (!result.ok) { lastNormalTopic.value = null; return }
+    const latest = result.data.sessions.find(session => session.messageCount > 0 && session.title.trim())
+    lastNormalTopic.value = latest?.title.trim() ?? null
+  } catch { lastNormalTopic.value = null }
+}
+watch([temporaryMode, () => conversation.messages.value.length], () => {
+  if (temporaryMode.value) lastNormalTopic.value = null
+  else if (conversation.messages.value.length === 0) void refreshLastNormalTopic()
+})
 const reminderNotice = ref<import('../electron/main/r1/reminderScheduler').ReminderDueEvent | null>(null)
 let stopReminderNotice: (() => void) | null = null
 let stopMemoryInvalidation: (() => void) | null = null
@@ -1316,9 +1330,12 @@ onBeforeUnmount(() => {
           :partial-text="conversationPartialText"
           :temporary-mode="temporaryMode"
           :search-state="realtimeSearch"
+          :last-topic="lastNormalTopic"
           @open-history="openPanel('history')"
           @open-search="openPanel('search')"
           @start-chat="composer?.focusInput()"
+          @send-prompt="handleSendText"
+          @resume-topic="(title) => handleSendText(`接着「${title}」聊`)"
         />
     </Transition>
       <R1Composer ref="composer" :auto-listen-state="conversation.autoListenState.value"

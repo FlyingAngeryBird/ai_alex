@@ -341,7 +341,8 @@ async function clearCredential(field: CredentialField): Promise<void> {
         <p v-if="preferences.error.value" role="alert">{{ preferences.error.value }}</p>
       </section>
       <section class="r1-settings-section">
-        <h3>服务状态</h3>
+        <details class="r1-settings-advanced">
+        <summary><h3>服务状态与诊断</h3></summary>
         <p v-if="!credentialStatus" role="status">服务配置{{ credentialLoading ? '读取中…' : '暂时不可读；已保存文件保留' }}</p>
         <button v-if="!credentialStatus" type="button" :disabled="credentialLoading || busy" @click="refreshCredentials">{{ credentialLoading ? '读取中…' : '重新读取服务配置' }}</button>
         <p v-if="credentialStatus">对话模型：{{ credentialStatus.VOLCENGINE_ARK_API_KEY && credentialStatus.VOLCENGINE_ARK_MODEL ? '密钥与模型已填写，实际连接待请求验证' : '未配置' }}</p>
@@ -385,6 +386,7 @@ async function clearCredential(field: CredentialField): Promise<void> {
           </div>
           <button type="button" class="r1-settings-save" :disabled="busy || !credentialStatus" @click="saveCredentials">保存服务配置</button>
         </details>
+        </details>
       </section>
       <p v-if="message" class="r1-settings-message" role="status">{{ message }}</p>
       <R1DataSettings :diagnostic-trace="diagnosticTrace" @open-history="emit('openHistory')" />
@@ -393,6 +395,12 @@ async function clearCredential(field: CredentialField): Promise<void> {
 </template>
 
 <style scoped>
+.r1-welcome-link { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 18px; padding: 0; border: 0; background: none; color: var(--r1-muted); font: inherit; font-size: 11px; line-height: 1.6; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.r1-welcome-link:hover { color: var(--r1-aqua); }
+.r1-welcome-link:focus-visible { outline: 2px solid var(--r1-aqua); outline-offset: 3px; border-radius: 3px; }
+.r1-settings-advanced > summary { display: flex; align-items: center; gap: 6px; cursor: pointer; list-style-position: inside; color: var(--r1-text); }
+.r1-settings-advanced > summary h3 { display: inline; margin: 0; font: inherit; font-size: 13px; }
+.r1-settings-advanced > summary:focus-visible { outline: 2px solid var(--r1-aqua); outline-offset: 3px; border-radius: 3px; }
 .r1-settings-section select { width: 100%; min-height: 34px; padding: 7px 9px; background: #1b2422; color: var(--r1-text); border: 1px solid var(--r1-line); border-radius: 5px; font: inherit; }
 .r1-settings-check { display: flex; align-items: center; gap: 10px; margin: 8px 0; font-size: 11px; line-height: 1.6; }
 .r1-settings-check button { flex-shrink: 0; min-height: 30px; padding: 4px 9px; border: 1px solid var(--r1-line); border-radius: 5px; background: #1b2422; color: var(--r1-aqua); font: inherit; }
