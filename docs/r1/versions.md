@@ -62,3 +62,8 @@ alpha.2最终开发预览标签`r1-preview-1.0.0-alpha.2-build2`指向`9017bf8`�
 设备与安静模式批次的回退源码为 `6b7aa5f`，SQLite9、资产2.5.1；schema8 升级前自动快照。81文件490项和后续77项关联检查、生产构建通过；真实桌面设置保存/重载与未配置反馈已核验，实际音频/通知权限和安装未验收。详见 [设置记录](2026-10-15-settings-progress.md)。
 
 `codex/seamo-r1` 的本批音乐整合以父提交 `de8b600` 为回退源码点；报告为 [音乐进度](2026-10-15-music-progress.md)，资产2.5.1、SQLite8。升级前自动保留 schema7 快照；回退需隔离数据，旧代码不能直接打开 schema8。77文件472项及生产构建通过；实际音源核验失败、未听音或安装验收。未打 G4 通过标签，未创建 Release。最近一次推送因 HTTPS 未登录失败；没有新推送成功证据，不能认为本地开发提交已全部在 GitHub。
+
+## 1.0.0-alpha.17（导出标题修复候选包，2026-10-18）
+- 源码提交：`6a0f482`（修复：正文首个非空行与 Artifact 标题相同的 H1 时不再重复添加导出标题，TXT/MD 一致；保留正文与不同标题）。
+- 包：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha17-e4fix/`；ZIP `Seamo-AI-R1-1.0.0-alpha.17-mac-arm64.zip` 148,705,341 字节，SHA256 `c746ee0820184a41bc47463a1214588629dcfe798b1da7a8e129fa4b09631a5a`；资产 3.5.7、SQLite 12、bundle `com.seamo.ai.r1`，ad-hoc 未公证，无凭据/用户库。
+- alpha.16 包与升级前快照保留；已导出用户文件未覆盖（验证写入新文件 `~/Documents/E4-fix-check.txt/.md`，184B 且内容一致）。

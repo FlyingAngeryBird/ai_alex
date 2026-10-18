@@ -4,13 +4,13 @@
   "branch": "codex/seamo-r1",
   "generatedAt": "2026-10-18T21:00:00+08:00",
   "candidate": {
-    "appVersion": "1.0.0-alpha.16",
+    "appVersion": "1.0.0-alpha.17",
     "bundleId": "com.seamo.ai.r1",
-    "sourceCommit": "164b3549d5ab8002d2ec6cf24fdd85ca6a4eb395",
-    "packageDir": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha16-e2",
-    "zip": "Seamo-AI-R1-1.0.0-alpha.16-mac-arm64.zip",
-    "zipBytes": 148351784,
-    "zipSha256": "1530c8fd6fa0bb386d9bf54d476117afaa0d35f574d082d60c16fe048fbc43ff",
+    "sourceCommit": "6a0f4826b504bb987014417a5c88dcd22fc3b7d6",
+    "packageDir": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha17-e4fix",
+    "zip": "Seamo-AI-R1-1.0.0-alpha.17-mac-arm64.zip",
+    "zipBytes": 148705341,
+    "zipSha256": "c746ee0820184a41bc47463a1214588629dcfe798b1da7a8e129fa4b09631a5a",
     "signing": "local-ad-hoc",
     "notarized": false,
     "forbiddenFilesFound": false
@@ -48,7 +48,8 @@
       "E3 settings/data/backup/restore isolation",
       "isolated real-UI task recovery",
       "onboarding skip without mic",
-      "narrow-window overlays"
+      "narrow-window overlays",
+      "E4 real playback/analyser/queue-next/pause-mute-volume; export H1 dedupe in alpha.17 (new files only)"
     ],
     "pendingUserAcceptance": [
       "real voice/device/notifications",
@@ -58,16 +59,16 @@
       "full prototype visual comparison"
     ],
     "externalBlocked": [
-      "music target-track resources beyond alternate netease tracks",
+      "music target-track resources beyond verified netease tracks",
       "Developer ID signing and notarization",
-      "GitHub credentials renewal"
+      "keychain authorization for model/TTS/real voice 边听边聊"
     ],
     "notClaimedComplete": true
   },
   "userActions": [
-    "Unlock Mac and allow one short local playback at low/zero volume for E4 real audio verification",
-    "Run `gh auth login` (or restore token) so local commits can be pushed and PR updated",
-    "Point save dialog to 'Save' for TXT/Markdown export verification",
-    "Provide Developer ID/signing conditions and perform install/rollback acceptance if required"
+    "If the system keychain prompt appears: enter macOS login password and choose Allow/Always Allow for Seamo AI R1 Safe Storage, then tell me; do not refill keys",
+    "Confirm whether music/particles were actually seen/heard; user voice 边听边聊 listening step after keychain authorization",
+    "Run gh auth login if PR description text should be updated (code already pushed via SSH)",
+    "Install/rollback acceptance and Developer ID signing conditions if required"
   ]
 }

@@ -3,10 +3,10 @@
 > 结论先行：**尚未达到“全部功能通过验收”**。代码与候选包已具备，核心流程有真实/隔离证据；真实语音、音乐资源、安装回退、签名公证及部分端到端场景仍受外部/用户条件阻塞，未合并 main、未正式发布。
 
 ## 1. 版本与包
-- 分支：`codex/seamo-r1`；候选包代码提交：`164b354`（alpha.16）；本地文档 HEAD：`892695d`（GitHub 凭据失效未推送，远端 `e0aed5c`）。
-- 包：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha16-e2/`
-  - `Seamo AI R1.app`；ZIP `Seamo-AI-R1-1.0.0-alpha.16-mac-arm64.zip`（148,351,784 字节）
-  - SHA256：`1530c8fd6fa0bb386d9bf54d476117afaa0d35f574d082d60c16fe048fbc43ff`
+- 分支：`codex/seamo-r1`；最新候选包代码提交：`6a0f482`（alpha.17，导出标题去重修复）；alpha.16（`164b354`）保留可回退；文档已用 SSH 推送（`gh` token 仅影响 PR 文本）。
+- 包：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha17-e4fix/`
+  - `Seamo AI R1.app`；ZIP `Seamo-AI-R1-1.0.0-alpha.17-mac-arm64.zip`（148,705,341 字节）
+  - SHA256：`c746ee0820184a41bc47463a1214588629dcfe798b1da7a8e129fa4b09631a5a`
   - 资产 3.5.7、工具 schema 3.2.1、SQLite 12、bundle id `com.seamo.ai.r1`
   - 本机 ad-hoc 签名，未 Developer ID、未公证；包内无 `.env`/凭据/用户数据库
 - 安装/回退：见 [install-rollback.md](install-rollback.md)。
