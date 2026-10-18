@@ -2,9 +2,9 @@
 
 ## 包信息
 - 路径：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha18-e5/`
-- App：`Seamo AI R1.app`；ZIP：`Seamo-AI-R1-1.0.0-alpha.18-mac-arm64.zip`（148,708,149 字节）
-- SHA256：`594637c6f684bc7dea8f59302f244f2301455c59b18ef5b0f93bcff45459e92e`
-- 源码：`37a41cc`（E5 修复：Esc/搜索重试/诊断/任务面板 flush）；资产 3.5.7；工具 schema 3.2.1；SQLite 12；bundle id `com.seamo.ai.r1`；alpha.16/alpha.17 包保留可回退
+- App：`Seamo AI R1.app`；ZIP：`Seamo-AI-R1-1.0.0-alpha.18-mac-arm64.zip`（148,708,227 字节）
+- SHA256：`898ac18dddd2e2dc4069b719cfa304879ab7a178f43797ffcd235defe137ecc4`
+- 源码：`ebbc613`（E5 修复：Esc/搜索重试/诊断/任务面板 flush）；资产 3.5.7；工具 schema 3.2.1；SQLite 12；bundle id `com.seamo.ai.r1`；alpha.16/alpha.17 包保留可回退
 - 签名：本机 ad-hoc；**未 Developer ID 签名、未公证**；包内无 `.env`/凭据/用户数据库
 
 ## 安装

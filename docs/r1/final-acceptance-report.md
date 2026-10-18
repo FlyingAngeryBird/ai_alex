@@ -5,8 +5,8 @@
 ## 1. 版本与包
 - 分支：`codex/seamo-r1`；最新候选包代码提交：`37a41cc`（alpha.18，E5 集成修复）；alpha.16/alpha.17 保留可回退；文档已用 SSH 推送（`gh` token 仅影响 PR 文本）。
 - 包：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha18-e5/`
-  - `Seamo AI R1.app`；ZIP `Seamo-AI-R1-1.0.0-alpha.18-mac-arm64.zip`（148,708,149 字节）
-  - SHA256：`594637c6f684bc7dea8f59302f244f2301455c59b18ef5b0f93bcff45459e92e`
+  - `Seamo AI R1.app`；ZIP `Seamo-AI-R1-1.0.0-alpha.18-mac-arm64.zip`（148,708,227 字节）
+  - SHA256：`898ac18dddd2e2dc4069b719cfa304879ab7a178f43797ffcd235defe137ecc4`
   - 资产 3.5.7、工具 schema 3.2.1、SQLite 12、bundle id `com.seamo.ai.r1`
   - 本机 ad-hoc 签名，未 Developer ID、未公证；包内无 `.env`/凭据/用户数据库
 - 安装/回退：见 [install-rollback.md](install-rollback.md)。

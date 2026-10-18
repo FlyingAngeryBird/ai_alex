@@ -6,11 +6,11 @@
   "candidate": {
     "appVersion": "1.0.0-alpha.18",
     "bundleId": "com.seamo.ai.r1",
-    "sourceCommit": "37a41cc6003a0423764bbbfd14a06068e9d22419",
+    "sourceCommit": "ebbc6136b11dc71712924491ba6faeeb634f37b6",
     "packageDir": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha18-e5",
     "zip": "Seamo-AI-R1-1.0.0-alpha.18-mac-arm64.zip",
-    "zipBytes": 148708149,
-    "zipSha256": "594637c6f684bc7dea8f59302f244f2301455c59b18ef5b0f93bcff45459e92e",
+    "zipBytes": 148708227,
+    "zipSha256": "898ac18dddd2e2dc4069b719cfa304879ab7a178f43797ffcd235defe137ecc4",
     "signing": "local-ad-hoc",
     "notarized": false,
     "forbiddenFilesFound": false
