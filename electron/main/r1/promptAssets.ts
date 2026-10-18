@@ -40,6 +40,7 @@ export type R1PromptAssets = {
   validateToolOutput(alias: string, input: unknown): void
   taskBudget(complexity: 'light' | 'complex'): { decisionsRemaining: number; toolsRemaining: number;
     activeMsRemaining: number; searchQueriesRemaining: number; pagesRemaining: number }
+  taskSearchPolicy(): { candidates: number }
   readSkillFile(filePath: string, offset?: number, limit?: number): {
     data: { path: string; content: string; offset: number; hasMore: boolean; assetReleaseId: string }; loadedSkillId: string | null
   }
@@ -221,6 +222,11 @@ export function loadR1PromptAssets(root: string): R1PromptAssets {
         pages: limits.realtimeSearchPages, concurrency: limits.realtimeSearchConcurrency, pageCodePoints: limits.realtimeSearchPageCodePoints }
       if (policy.queries !== 3 || policy.candidates !== 3 || policy.timeoutMs !== 8000 || policy.snippetCodePoints !== 600 || policy.pages !== 2 || policy.concurrency !== 2 || policy.pageCodePoints !== 4000) throw new Error('REALTIME_SEARCH_POLICY_INVALID')
       return policy
+    },
+    taskSearchPolicy() {
+      const candidates = runtime.limits.taskSearchCandidates
+      if (!Number.isSafeInteger(candidates) || candidates < 1 || candidates > 10) throw new Error('TASK_SEARCH_POLICY_INVALID')
+      return { candidates }
     },
     taskBudget(complexity) {
       if (!['light', 'complex'].includes(complexity)) throw new Error('TASK_COMPLEXITY_INVALID')

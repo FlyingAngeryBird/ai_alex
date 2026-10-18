@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ArrowRight, Globe, History, MessageCircle } from 'lucide-vue-next'
 import type { ParticleState, UiMessage } from '@/types/app'
 import type { RealtimeSearchState } from '../../electron/main/r1/realtimeSearch'
@@ -38,12 +38,31 @@ const statusLabel: Record<ParticleState, string> = {
   idle: '在这里', listening: '正在听', thinking: '正在想', speaking: '正在说',
   playing: '音乐陪伴', error: '需要检查'
 }
+// Keep the wait state honest: a model turn can take tens of seconds, so show elapsed time.
+const thinkingStartedAt = ref<number | null>(null)
+const tick = ref(Date.now())
+let ticker: number | null = null
+watch(() => props.state, value => {
+  if (value === 'thinking') {
+    thinkingStartedAt.value ??= Date.now(); tick.value = Date.now()
+    if (ticker === null) ticker = window.setInterval(() => { tick.value = Date.now() }, 1000)
+  } else {
+    thinkingStartedAt.value = null
+    if (ticker !== null) { window.clearInterval(ticker); ticker = null }
+  }
+}, { immediate: true })
+const presenceLabel = computed(() => {
+  const base = props.temporaryMode ? '临时对话' : statusLabel[props.state]
+  if (props.state !== 'thinking' || thinkingStartedAt.value === null) return base
+  return `${base} · ${Math.max(1, Math.floor((tick.value - thinkingStartedAt.value) / 1000))}s`
+})
+onBeforeUnmount(() => { if (ticker !== null) window.clearInterval(ticker) })
 </script>
 
 <template>
   <section class="r1-conversation" :data-expanded="replyExpanded || expanded" aria-label="当前对话">
     <div class="r1-conversation-copy" aria-live="polite">
-      <span class="r1-presence"><i :data-state="state" />{{ temporaryMode ? '临时对话' : statusLabel[state] }}<b>/</b>{{ assistantName }}</span>
+      <span class="r1-presence"><i :data-state="state" />{{ presenceLabel }}<b>/</b>{{ assistantName }}</span>
       <button v-if="recentMessages.length > 2" class="r1-recent-toggle" type="button"
         :aria-expanded="expanded" @click="expanded = !expanded">
         <History :size="13" />{{ expanded ? '收起最近对话' : '查看最近对话' }}

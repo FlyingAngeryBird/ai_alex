@@ -1,5 +1,5 @@
 {
-  "releaseId": "seamo-ai-r1-agent-assets-3.5.5",
+  "releaseId": "seamo-ai-r1-agent-assets-3.5.6",
   "schemaVersion": "3.2.1",
   "providerPolicy": {
     "primary": "volcengine",
@@ -58,7 +58,8 @@
     "realtimeSearchSnippetCodePoints": 600,
     "realtimeSearchPages": 2,
     "realtimeSearchConcurrency": 2,
-    "realtimeSearchPageCodePoints": 4000
+    "realtimeSearchPageCodePoints": 4000,
+    "taskSearchCandidates": 5
   },
   "context": {
     "recentTurnLimit": 12,

@@ -1,6 +1,6 @@
 {
-  "releaseId": "seamo-ai-r1-agent-assets-3.5.5",
-  "version": "3.5.5",
+  "releaseId": "seamo-ai-r1-agent-assets-3.5.6",
+  "version": "3.5.6",
   "files": [
     {
       "path": ".gitignore",
@@ -25,17 +25,17 @@
     {
       "path": "config/prompt-registry.json",
       "bytes": 4487,
-      "sha256": "5f76ce930ad289822fab1bcc3decd627da78084115728a50d150b3c8e8869bef"
+      "sha256": "dc12908dbd9733c1f5197b1718ce0f89621509f4d883111c3ea41223fe6bde43"
     },
     {
       "path": "config/runtime.defaults.json",
-      "bytes": 5213,
-      "sha256": "f704ba89a61e2c29f5a62ee88a7e0e3971b06ba9fbaa660de923c0685fdf9148"
+      "bytes": 5244,
+      "sha256": "846712644ed98345524169ec67578e25ef33361e772190c13b4534c7afe45a5a"
     },
     {
       "path": "config/skill-registry.json",
       "bytes": 4143,
-      "sha256": "bf2b60a6f7ac5087b3ea3ddab0fefdc72023ab06171f73af37ba7aaa10ffbdc2"
+      "sha256": "3fa8dabd8172f13aceeea29931af55fca8bbe92e89512cfc53be020c1b150cd8"
     },
     {
       "path": "contracts/tool-catalog.json",
@@ -44,8 +44,8 @@
     },
     {
       "path": "docs/AGENT_ASSET_APPENDIX.md",
-      "bytes": 160214,
-      "sha256": "6b104ad0bd42a03c8262448bc356a683937c68779f7c4cb0b25ed165e02ff0bf"
+      "bytes": 161449,
+      "sha256": "6dc6730ab286141eae03006b2d843c66fe8db25adf1ecaefbd7c1ada9848897a"
     },
     {
       "path": "docs/ARCHITECTURE_CONTRACT.md",
@@ -59,8 +59,8 @@
     },
     {
       "path": "docs/CHANGE_POLICY.md",
-      "bytes": 41589,
-      "sha256": "f808763a542ae638c784404014425fef4dfe09235cda1681b485fb273a24c1cb"
+      "bytes": 42791,
+      "sha256": "9e02028413876f494aeac426b0e1d1978692a22c5d85a1c06be86c0725bc7fc5"
     },
     {
       "path": "docs/DETAIL_SPEC.md",
@@ -74,8 +74,8 @@
     },
     {
       "path": "docs/Seamo_AI_R1_PRD_v0.5.1.md",
-      "bytes": 334467,
-      "sha256": "cccab0c5952255e2b1097e3f0610580e5eab7a798a1ee2d6d006e78b093e57aa"
+      "bytes": 335702,
+      "sha256": "dd8e119486d8e0ca78ce04c93dd7a833c19dd1373988f58e2fb8cbfd85f3b33c"
     },
     {
       "path": "evals/behavior-cases.jsonl",

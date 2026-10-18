@@ -3216,12 +3216,20 @@ DEC-R1-MUSIC-023 补充：沿用原型已有“退出播放”按钮，类型化
 - 版本：代码修复，无 Prompt/Schema 变更；资产 3.5.5（仅记录本决策）、工具 schema 3.2.1、SQLite12。
 - 验证：隔离 vault 测试覆盖 pending→成功/失败→重试；真实窗口在授权后显示“已配置”。系统密码仍由用户处理。
 
+#### DEC-R1-TASK-SEARCH-SCOPE-059：任务搜索候选数量与目标复杂度收敛
+- 现象：自然查询“给出几个候选来源和要点”在真实任务中一次取回 10 个候选/11 个来源，随后继续读页，60s 模型请求超时，任务 154s 以 partial 结束（ARK_REQUEST_TIMEOUT）。
+- 原因：后台任务使用的 Doubao Search provider 采用默认 resultLimit=10（实时频道已有 3 条独立预算，任务侧没有策略），候选列表超出用户请求所需，诱发过度核对与轮次膨胀。
+- 修复：新增 `limits.taskSearchCandidates=5`，任务 `web_search` 使用该上限；查询次数/读页/决策/工具/时长预算不变，实时语音预算不变；用户明确要求更多候选时仍可在既有查询预算内追加查询，不新增工具/模型。
+- 版本：资产 3.5.6；工具 schema 3.2.1；SQLite12。前端“正在想”显示已用秒数，发送后等待反馈更准确；任务既有 progressBrief 阶段保留。
+- 验证：资产/搜索 provider 合同测试、typecheck、构建；真实自然查询候选数与耗时在下一个候选包验证。
+- 回退：代码与资产整体退至 6312b58；不覆盖用户数据。
+
 
 ### 25.3 完整默认配置
 
 ```json
 {
-  "releaseId": "seamo-ai-r1-agent-assets-3.5.5",
+  "releaseId": "seamo-ai-r1-agent-assets-3.5.6",
   "schemaVersion": "3.2.1",
   "providerPolicy": {
     "primary": "volcengine",
@@ -3280,7 +3288,8 @@ DEC-R1-MUSIC-023 补充：沿用原型已有“退出播放”按钮，类型化
     "realtimeSearchSnippetCodePoints": 600,
     "realtimeSearchPages": 2,
     "realtimeSearchConcurrency": 2,
-    "realtimeSearchPageCodePoints": 4000
+    "realtimeSearchPageCodePoints": 4000,
+    "taskSearchCandidates": 5
   },
   "context": {
     "recentTurnLimit": 12,

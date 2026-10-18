@@ -271,7 +271,8 @@ void app.whenReady().then(async () => {
     const itemActionSweep = setInterval(() => { itemActions?.sweep() }, 30_000)
     itemActionSweep.unref?.()
     registerItemActionHandlers(itemActions)
-    const taskTools = new R1TaskToolExecutor(r1Tasks, r1PromptAssets, new R1Items(r1Database), createDoubaoSearchProvider(), createPageReader(), focusServices, r1Music, itemActions)
+    const taskTools = new R1TaskToolExecutor(r1Tasks, r1PromptAssets, new R1Items(r1Database),
+      createDoubaoSearchProvider({ resultLimit: r1PromptAssets.taskSearchPolicy().candidates }), createPageReader(), focusServices, r1Music, itemActions)
     r1TaskRunner = new R1TaskRunner(r1Tasks, r1PromptAssets, taskTools, r1Artifacts,
       createArkResponsesProvider({ timeoutMs: 60_000 }), () => new R1PersonaStore(r1Database!).get())
     r1ConversationDriver = new R1ConversationDriver(r1Database, r1PromptAssets, r1Tasks, createArkResponsesProvider({ timeoutMs: 60_000 }),
