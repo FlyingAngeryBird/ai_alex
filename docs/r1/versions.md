@@ -73,3 +73,8 @@ alpha.2最终开发预览标签`r1-preview-1.0.0-alpha.2-build2`指向`9017bf8`�
 - 隔离验证：F06b/F06c/F07b/F08d/F09b/F01c/F11a Esc；搜索失败重试 mock；诊断 payload 脱敏。
 - 包：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha18-e5/`；ZIP `Seamo-AI-R1-1.0.0-alpha.18-mac-arm64.zip` 148,708,227 字节，SHA256 `898ac18dddd2e2dc4069b719cfa304879ab7a178f43797ffcd235defe137ecc4`；源码 `ebbc613`；资产 3.5.7、SQLite 12、ad-hoc 未公证、无凭据/用户库。
 - 该包为 E5 集成候选（重建后含任务面板全离开路径 flush 守卫），未替换/未重启用户当前 alpha.17 窗口；隔离验证基于同产品源码提交（仅版本号差异）。
+
+## 1.0.0-alpha.19（E5 编辑防丢最终集成候选，2026-10-18）
+- 源码 `970bcbd`：alpha.18 基础上修复任务编辑器有效保存后 Esc 竞态误报未保存（flushEditing 失败后 250ms 复核一次）；产品行为仅此一处变化。
+- 包：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha19-e5-retention/`；ZIP 148,708,256 字节，SHA256 `2b8a593dcc5699fbbb6984504b1ac87f4202e2c96266702da5ced0749ce6d941`；资产 3.5.7、SQLite 12、ad-hoc、无凭据/用户库。
+- alpha.18 包保留（源码 `ebbc613`，ZIP SHA256 `898ac18dddd2e2dc4069b719cfa304879ab7a178f43797ffcd235defe137ecc4`）；未替换/未重启用户当前 alpha.17 窗口。
