@@ -23,6 +23,13 @@ describe('final R1 model request boundary', () => {
     expect(() => boundary.validateToolCall('start_task', args)).toThrow('MODEL_TOOL_NOT_EXPOSED')
     expect(() => boundary.validateHistoricalToolCall('start_task', args)).toThrow('MODEL_TOOL_NOT_EXPOSED')
     expect(() => boundary.validateToolCall('start_task', { ...args, delegation: { toolAliases: ['read_file'], requiredActions: [] } })).not.toThrow()
+    // Optional delegation arrays must not crash validation when omitted.
+    expect(() => boundary.validateToolCall('start_task', { goal: '只读查询', constraints: [], sourceRefs: [], delegation: {} })).not.toThrow()
+    expect(() => boundary.validateToolCall('start_task', { goal: '只读查询', constraints: [], sourceRefs: [], delegation: { toolAliases: ['read_file'] } })).not.toThrow()
+    const optionalBoundary = new R1ModelRequestBoundary(assets, persona, modelContext(), ['start_task', 'steer_task'], 'textOnly', () => {}, false, ['read_file', 'write_todos', 'notes_update'])
+    expect(() => optionalBoundary.validateToolCall('start_task', { goal: '写事项', constraints: [], sourceRefs: [], delegation: { requiredActions: [{ alias: 'notes_update', minimumCount: 1 }] } })).not.toThrow()
+    expect(() => optionalBoundary.validateToolCall('steer_task', { taskId: 't', expectedGoalVersion: 1,
+      patch: { goal: null, addConstraints: [], removeConstraints: [] }, sourceRefs: [], delegation: { requiredActions: [] } })).not.toThrow()
     expect(new R1ModelRequestBoundary(assets, persona, modelContext(), ['start_task'], 'textOnly', () => {}, false, []).finalize([]).tools).toEqual([])
     // Narrowing must never mutate the registered package for another runtime.
     expect(JSON.stringify(assets.toolDefinition('start_task').input_schema)).toContain('notes_update')

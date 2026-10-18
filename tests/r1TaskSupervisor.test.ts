@@ -34,6 +34,21 @@ describe('R1 TaskSupervisor identity, recovery and result publication', () => {
       expect(supervisor.publish(active.lease, { ...output, status: 'partial', replyBrief: '尚未联网核验', unresolved: ['没有实际来源'] }, new R1Artifacts(db)).completionStatus).toBe('partial')
     } finally { supervisor.close(); db.close() }
   })
+  it('updates only the progress brief for a running task without consuming budget or authority', () => {
+    const { db, supervisor, request } = setup()
+    try {
+      supervisor.accept(request)
+      const active = supervisor.claimNext()!
+      const before = supervisor.list()[0]
+      supervisor.noteProgress(active.lease, '正在整理已获得的结果。')
+      const after = supervisor.list()[0]
+      expect(after.progressBrief).toBe('正在整理已获得的结果。')
+      expect(after.status).toBe('running')
+      expect(after.budget).toEqual(before.budget)
+      expect(supervisor.authorizedAliases(active.lease)).toEqual(request.authorizedAliases)
+      expect(() => supervisor.noteProgress({ ...active.lease, taskId: 'missing' }, 'x')).toThrow('TASK_NOT_FOUND')
+    } finally { supervisor.close(); db.close() }
+  })
   it('returns accepted idempotently, allows one running task and at most three queued tasks', () => {
     const { db, supervisor, request } = setup()
     try {

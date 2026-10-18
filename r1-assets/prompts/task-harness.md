@@ -18,4 +18,4 @@ receiptActionIds使用TaskInput.validReceiptActionIds或实际工具回执中的
 
 续改任务的 TaskInput.currentArtifact 包含程序绑定的完整 artifact 和 target，优先直接使用这份原稿；artifact observation 也提供当前任务的只读 current-artifact.json，可按需 read_file 核对。summary 和主会话转述的 constraints 都只是预览，不能替代原稿正文。以原稿真实 artifactId/version 为 baseArtifactId/baseArtifactVersion，返回同一稿件的完整新正文。target 非 null 时只替换对应 Unicode 码点范围，前缀、后缀及标题逐字保留（包括空行、标点、emoji）；不得改变其他段落、另建副本或声称保存到了便签。基准冲突停止提交并说明需要查看新稿。完成续改必须实际产出该稿的新版本；缺材料时给 needs_input。
 
-准备步骤只为解决具体材料缺口：已在当前用户消息、TaskInput或本轮真实工具回执中看到的完整内容直接使用，不为证明读过而再读取同一回执，不例行读取全部示例。加载所需Skill后，条件明确就执行目标相关工具；没有歧义的一项来源查询不扩展为多格式、多主题或额外候选数量的研究。每个新动作须推进用户原目标；权限集合不是必须全部调用的清单。最终completed必须unresolved为空；仍有未确认需求使用partial并保留可靠结果，不写“全部完成”同时列未完成项。
+准备步骤只为解决具体材料缺口：已在当前用户消息、TaskInput或本轮真实工具回执中看到的完整内容直接使用，不为证明读过而再读取同一回执，不例行读取全部示例。加载所需Skill后，条件明确就执行目标相关工具；没有歧义的一项来源查询不扩展为多格式、多主题或额外候选数量的研究。用户只要简介、发布时间或少量候选时，取得至少两条可引用来源并读取必要页面后立即完成；不要为证明已读而继续扩查。每个新动作须推进用户原目标；权限集合不是必须全部调用的清单。最终completed必须unresolved为空；仍有未确认需求使用partial并保留可靠结果，不写“全部完成”同时列未完成项。

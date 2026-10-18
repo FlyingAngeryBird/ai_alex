@@ -244,3 +244,12 @@ DEC-R1-MUSIC-023 补充：沿用原型已有“退出播放”按钮，类型化
 - 版本：资产 3.5.6；工具 schema 3.2.1；SQLite12。前端“正在想”显示已用秒数，发送后等待反馈更准确；任务既有 progressBrief 阶段保留。
 - 验证：资产/搜索 provider 合同测试、typecheck、构建；真实自然查询候选数与耗时在下一个候选包验证。
 - 回退：代码与资产整体退至 6312b58；不覆盖用户数据。
+
+## DEC-R1-E2-GAPS-060：记忆遗忘表达、临时保存重试、委托可选字段入口与任务早收敛
+- 遗忘：`memory_forget` 显式授权只认“忘记/遗忘/删除”，用户常用“忘掉”被拒；现加入“忘掉/清除”，保留“不要/别…忘掉”等否定保护，仍要求显式目标与版本。只操作合成测试记忆。
+- 临时保存：范围勾选只是授权；模型应加载 SK03 后调用 notes_create/reminders_create 并等待真实回执，面板勾选不等于已保存。PR03 已明确该顺序，不永久开放写入、不落临时消息。
+- 委托入口：DEC-057 使 delegation 字段可选后，modelBoundary 对未提供的 toolAliases/requiredActions 直接调用 .map 崩溃，导致 `ARK_TOOL_SCOPE_OR_SCHEMA_INVALID`；现对缺省/空数组/显式值统一判空，越界别名仍 MODEL_TOOL_NOT_EXPOSED，不扩大权限。
+- 任务收敛：任务模型在已有 6 候选/来源后仍未完成，141s 预算耗尽；新增“预算剩余<30s”时的一次性执行提示（不增加预算/查询/读页），要求基于已有证据完成或返回 partial；模型请求前更新 progressBrief，等待状态更准确。
+- 版本：资产 3.5.7；工具 schema 3.2.1；SQLite12；实时语音预算不变。
+- 验证：memoryConversation“忘掉”及否定、modelBoundary 缺省/空数组/显式、taskSupervisor progress、任务相关测试；真实窗口待集成包复测。
+- 回退：整体退至 alpha.15 源码 8e882b8；不覆盖用户数据。

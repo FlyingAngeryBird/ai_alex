@@ -470,6 +470,15 @@ ${source.snippet}
     this.persist(record); this.emit(record, 'waiting_input')
     return structuredClone(result)
   }
+  /** Progress-only update for long model waits; never changes budget, authority or receipts. */
+  noteProgress(lease: TaskLease, brief: string): void {
+    this.assertLease(lease)
+    const record = this.checked(lease.taskId)
+    if (record.status !== 'running' || record.checkpoint.progressBrief === brief) return
+    record.checkpoint.progressBrief = brief
+    this.persist(record); this.emit(record, 'updated')
+  }
+
   /**
    * A model-requested UI confirmation is not a domain receipt. It consumes a
    * tool slot, is checkpointed for cancellation, and is returned as ui_action.

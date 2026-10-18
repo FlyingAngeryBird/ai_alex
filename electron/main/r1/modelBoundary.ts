@@ -41,9 +41,11 @@ export class R1ModelRequestBoundary {
     this.validateInput = (alias, input) => {
       assets.validateToolInput(alias, input)
       if (implementedTaskAliases && ['start_task', 'steer_task'].includes(alias)) {
-        const delegation = (input as { delegation?: { toolAliases: string[]; requiredActions: Array<{ alias: string }> } }).delegation
-        if (delegation && [...delegation.toolAliases, ...delegation.requiredActions.map(action => action.alias)]
-          .some(name => !implementedTaskAliases.includes(name))) throw new Error('MODEL_TOOL_NOT_EXPOSED')
+        const delegation = (input as { delegation?: { toolAliases?: string[]; requiredActions?: Array<{ alias: string }> } }).delegation
+        if (delegation) {
+          const names = [...(delegation.toolAliases ?? []), ...(delegation.requiredActions ?? []).map(action => action.alias)]
+          if (names.some(name => !implementedTaskAliases.includes(name))) throw new Error('MODEL_TOOL_NOT_EXPOSED')
+        }
       }
     }
     snapshot.availableToolAliases = this.tools.map(tool => tool.function.name)

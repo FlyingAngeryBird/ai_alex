@@ -26,6 +26,22 @@ function setup() {
 }
 
 describe('explicit memory conversation commits and revocation', () => {
+  it('accepts explicit 忘掉 wording and still rejects negated forget commands', () => {
+    const s = setup()
+    try {
+      const remembered = s.turn('请记住，我的合成测试代号是 BLUE-42。')
+      remembered.tools.execute('memory_remember', { content: '合成测试代号是 BLUE-42', category: 'profile', sourceRefs: [remembered.source.turnId] }, 'remember')
+      const target = s.memory.list().entries.find(entry => entry.content.includes('BLUE-42'))!
+      const forget = s.turn('忘掉我的合成测试代号。')
+      forget.tools.execute('memory_recall', { query: 'BLUE-42' }, 'lookup')
+      expect(forget.tools.execute('memory_forget', { scope: 'one', memoryId: target.memoryId, expectedVersion: target.version }, 'forget'))
+        .toMatchObject({ status: 'succeeded', data: { invalidatedMemoryIds: [target.memoryId] } })
+      expect(s.memory.list().entries.find(entry => entry.memoryId === target.memoryId)).toBeUndefined()
+      const negative = s.turn('别忘掉我的合成测试代号。')
+      expect(negative.tools.execute('memory_forget', { scope: 'one', memoryId: target.memoryId, expectedVersion: target.version }, 'negative'))
+        .toMatchObject({ status: 'failed', errorCode: 'MEMORY_EXPLICIT_AUTHORIZATION_REQUIRED' })
+    } finally { s.close() }
+  })
   it('binds to the actual user source, merges repeated facts, and acknowledges only committed writes', () => {
     const s = setup()
     try {

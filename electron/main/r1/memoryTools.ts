@@ -19,8 +19,8 @@ export class R1MemoryTools {
     const prefix = /^(?:请(?:你)?(?:帮我)?|麻烦(?:你)?(?:帮我)?|帮我)?\s*/
     const command = text.replace(prefix, '')
     const allowed = action === 'remember' ? /^(?:记住|记一下|记下来)(?:[\s，,:：]|我|以后|下次|这|喜|正在)/ :
-      action === 'update' ? /^(?:更正|纠正|更新|修改)(?:[\s，,:：]|我|记忆|这|一下|关于)/ : /^(?:忘记|遗忘|删除)(?:[\s，,:：]|我|这|记忆|关于)/
-    if (!allowed.test(command) || /不要(?:再)?(?:记住|保存|修改|删除|忘记)|别(?:再)?(?:记住|保存|修改|删除|忘记)/.test(text)) throw new Error('MEMORY_EXPLICIT_AUTHORIZATION_REQUIRED')
+      action === 'update' ? /^(?:更正|纠正|更新|修改)(?:[\s，,:：]|我|记忆|这|一下|关于)/ : /^(?:忘记|遗忘|忘掉|删除|清除)(?:[\s，,:：]|我|这|记忆|关于)/
+    if (!allowed.test(command) || /不要(?:再)?(?:记住|保存|修改|删除|忘记|忘掉)|别(?:再)?(?:记住|保存|修改|删除|忘记|忘掉)/.test(text)) throw new Error('MEMORY_EXPLICIT_AUTHORIZATION_REQUIRED')
   }
   private sensitive(content: string): void {
     if (isSensitiveMemory(this.source.body, content)) throw new Error('MEMORY_SENSITIVE_CONFIRMATION_REQUIRED')

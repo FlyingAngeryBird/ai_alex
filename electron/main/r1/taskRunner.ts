@@ -67,12 +67,22 @@ export class R1TaskRunner {
     const rounds: ArkResponseRound[] = []
     const source = this.tasks.originalSource(lease)
     const messages = [{ role: 'user' as const, content: source.body }]
-    let repaired = false
+    let repaired = false, budgetHinted = false
     while (!this.closed) {
       const input = this.tasks.beginDecision(lease)
       const aliases = this.tasks.authorizedAliases(lease).filter(alias => this.executor.implementedAliases.includes(alias))
       const boundary = new R1TaskRequestBoundary(this.assets, this.persona(), input, aliases,
         () => this.tasks.authority(lease.taskId), this.tasks.steeringEvent(lease))
+      // Show an accurate wait state during long model requests and, when the budget
+      // is nearly exhausted, ask the model to finish from evidence already gathered
+      // instead of extending the run.
+      const nearBudget = rounds.length > 0 && input.budget.activeMsRemaining < 30_000
+      this.tasks.noteProgress(lease, nearBudget ? '预算即将耗尽，正在整理部分结果。'
+        : rounds.length ? '正在整理已获得的结果。' : '正在理解你的委托。')
+      if (nearBudget && !budgetHinted) {
+        budgetHinted = true
+        messages.push({ role: 'user', content: '[任务执行提示] 本次可用预算即将耗尽。不要继续扩展查询或读取；立即基于已获得的真实证据给出最终结果，证据不足时返回 partial 并说明缺少什么。' })
+      }
       const response = await this.requestWithinBudget({ boundary, messages, rounds, signal, maxOutputTokens: 8192 }, input.budget.activeMsRemaining)
       this.tasks.assertLease(lease)
       if (response.calls.length) {
