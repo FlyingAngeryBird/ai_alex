@@ -152,8 +152,8 @@
 | F06d | 已验证 | 真实保存框 TXT/MD 导出成功；alpha.17 修复同标题 H1 重复，新文件验证 184B/TXT=MD，既有用户文件未覆盖；取消分支返回 cancelled=true 且不改文件 |
 | F07a | 已验证 | E1 关联提醒 + E2 临时提醒创建 |
 | F07b | 隔离已验证/待实包 | 隔离实例API：create v1→reschedule v2（同ID,scheduled）→cancel v3（cancelled,user_cancelled），list一致；到期竞态待实包 |
-| F07c | 已验证部分/待验收 | 隔离alpha.19包：标准提醒到期systemRequested=true/silent=false/kind=standard，多次tick无重复；DND=true时silent=true仍投递不取消；回访kind=followup一次投递；系统通知权限/勿扰中心待实包 |
-| F07d | 已验证部分 | E2重启专注running→paused；alpha.19隔离包 focus start/pause/resume/stop v1→v4，remaining 冻结/递减一致；结束音乐规则/休眠/真实计时听测待实包 |
+| F07c | 已验证部分/待验收 | 隔离alpha.19包：标准提醒到期systemRequested=true/silent=false/kind=standard，多次tick无重复；DND=true时silent=true仍投递不取消；回访kind=followup一次投递；重启后>24h→missed、<=24h→due/system_requested；系统通知权限/勿扰中心待实包 |
+| F07d | 已验证部分 | E2重启专注running→paused；alpha.19隔离包 focus start/pause/resume/stop v1→v4，remaining冻结/递减；60s完成remaining0/v2+deliveryId；endMusicRule=pause_user_selected_track完成时暂停用户曲目；休眠/唤醒/冲突/真实听测待实包 |
 | F08a | 部分可用/待验收 | 本地播放器链路已验证；有界检查：netease 备用曲目解析 URL 200 + 封面 + LRC；晴天原版仍缺、joox Yesterday 503、kuwo 不支持；真实音频听测/用户听感确认待完成 |
 | F08b | 部分可用/待验收 | 备用曲目有精确候选且 netease 可解析；不静默替换；真实点歌/UI 播放与用户听感确认待完成 |
 | F08c | 已验证（真实播放/队列/下一首/seek） | netease真实播放；暂停冻结/恢复；音量0→20保持playing；队列→下一首真实切歌；播放中seek到120s→position121.05+s、LRC立即重算，暂停seek45s→position45仍paused且LRC匹配；设备听测（用户听感）待确认 |

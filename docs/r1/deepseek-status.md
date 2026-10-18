@@ -265,3 +265,10 @@
 - 回访：kind=followup 提醒到期事件/状态正确，仅一次投递。
 - 专注：start(60s) v1 running→pause v2 paused(remaining 冻结 60)→resume v3 running(1.3s 后 remaining 58)→stop v4 stopped；getState 与事件版本一致。
 - 局限：系统通知权限/真实勿扰中心、结束音乐规则、休眠/唤醒、真实出声仍未验（系统/人工）；隔离实例不代表正式安装。
+
+## E5/A-V 本地闭环补充（alpha.19 包隔离实例，2026-10-18）
+
+- 专注完成：start(60s, endMusicRule=none) → tick 事件 remaining 7→1 → completed remaining 0/version2，带 deliveryId；15s 后 getState 仍 completed。
+- 专注结束音乐规则：先播放 netease《月亮代表我的心》（音量 0 静音），start(60s, endMusicRule=pause_user_selected_track, endTargetTrackKey=netease:1847408145)；60s 后 focus completed(remaining0) 且 music playState=paused（position≈66.6s）；证明用户选中曲目在专注结束时暂停。
+- 提醒错过策略（重启注入）：due 25h 前的提醒 → status=missed/deliveryStatus=missed；due 2h 前的提醒 → status=due/deliveryStatus=system_requested（按 <=24h 恢复投递），与 24h 策略一致。
+- 局限：休眠/唤醒、真实系统通知权限/勿扰中心、专注冲突/新时长、真实听感仍未验；隔离实例不称正式安装。
