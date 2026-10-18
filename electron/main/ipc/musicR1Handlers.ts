@@ -4,6 +4,12 @@ import { inTransaction, type R1Database } from '../r1/database.js'
 import { musicAliases, type R1Music, type MusicReport } from '../r1/music.js'
 import type { R1PromptAssets } from '../r1/promptAssets.js'
 import type { R1SessionMode } from '../r1/sessionMode.js'
+import { recordMusicDiagnosticFailure } from '../r1/musicDiagnostics.js'
+
+const musicControlPhase = (alias: string | null): string => ({
+  music_play: 'play', music_pause: 'pause', music_resume: 'resume', music_next: 'next', music_seek: 'seek',
+  music_set_volume: 'volume', music_queue: 'queue', music_favorite: 'favorite', music_feedback: 'feedback'
+} as Record<string, string>)[alias ?? ''] ?? 'unknown'
 
 type MusicIpc = { handle(channel: string, handler: (event: { sender: Pick<WebContents, 'id' | 'isDestroyed' | 'send' | 'once'> }, payload?: unknown) => unknown): void }
 export function registerR1MusicHandlers(db: R1Database, music: R1Music, assets: R1PromptAssets, mode: R1SessionMode, ipc: MusicIpc = ipcMain) {
@@ -21,7 +27,7 @@ export function registerR1MusicHandlers(db: R1Database, music: R1Music, assets: 
   ipc.handle('r1.music.detach', ({ sender }) => { music.detach(sender.id); return { ok: true, data: null } })
   ipc.handle('r1.music.snapshot', () => ({ ok: true, data: music.snapshot() }))
   ipc.handle('r1.music.exit', tracked(async (_event, payload) => {
-    const actionId = randomUUID(), temporary = mode.temporary
+    const actionId = randomUUID(), started = performance.now(), temporary = mode.temporary
     let mediaConfirmed = false
     const save = (data: Record<string, unknown>, status: string, errorCode: string | null) => {
       if (temporary) return
@@ -39,6 +45,7 @@ export function registerR1MusicHandlers(db: R1Database, music: R1Music, assets: 
       save(data, 'succeeded', null)
       return { ok: true, data: { actionId, ...data } }
     } catch (error) {
+      if (!mediaConfirmed) try { recordMusicDiagnosticFailure(db, { provider: (music.state().track as { sourceProvider?: string } | null)?.sourceProvider, phase: 'exit', error, durationMs: performance.now() - started }) } catch { /* diagnostics must never change the operation result */ }
       if (mediaConfirmed) return fail(new Error('MUSIC_RECEIPT_PERSIST_FAILED'))
       const result = fail(error)
       try { save({}, result.error.code === 'MUSIC_PLAYBACK_UNKNOWN' ? 'unknown' : 'failed', result.error.code) }
@@ -50,14 +57,20 @@ export function registerR1MusicHandlers(db: R1Database, music: R1Music, assets: 
     try { if (mode.temporary) throw new Error('TEMPORARY_DATA_OPERATION_UNAVAILABLE'); music.clearHistory(); return { ok: true, data: null } } catch (error) { return fail(error) }
   })
   ipc.handle('r1.music.search', async (_event, payload) => {
-    try { const input = payload as { keyword: string; sourcePreference?: 'all' | 'netease' | 'kuwo' | 'joox' }
+    const input = payload as { keyword: string; sourcePreference?: 'all' | 'netease' | 'kuwo' | 'joox' }
+    try {
       if (input.sourcePreference !== undefined && !['all', 'netease', 'kuwo', 'joox'].includes(input.sourcePreference)) throw new Error('MUSIC_SEARCH_INVALID')
       assets.validateToolInput('music_search', { keyword: input.keyword })
-      return { ok: true, data: await music.search(input.keyword, input.sourcePreference, !mode.temporary, !mode.temporary) }
     } catch (error) { return fail(error) }
+    const started = performance.now()
+    try { return { ok: true, data: await music.search(input.keyword, input.sourcePreference, !mode.temporary, !mode.temporary) } }
+    catch (error) {
+      try { recordMusicDiagnosticFailure(db, { provider: input.sourcePreference ?? 'all', phase: 'search', error, durationMs: performance.now() - started }) } catch { /* diagnostics must never change the operation result */ }
+      return fail(error)
+    }
   })
   ipc.handle('r1.music.control', tracked(async (_event, payload) => {
-    const actionId = randomUUID()
+    const actionId = randomUUID(), started = performance.now()
     let alias: string | null = null, temporary = mode.temporary, mediaConfirmed = false
     const save = (data: Record<string, unknown>, status: string, errorCode: string | null) => {
       if (temporary || !alias) return
@@ -79,6 +92,7 @@ export function registerR1MusicHandlers(db: R1Database, music: R1Music, assets: 
       if (!local) { mediaConfirmed = true; save(data, 'succeeded', null) }
       return { ok: true, data: { actionId, ...data } }
     } catch (error) {
+      if (!mediaConfirmed) try { recordMusicDiagnosticFailure(db, { provider: (music.state().track as { sourceProvider?: string } | null)?.sourceProvider, phase: musicControlPhase(alias), error, durationMs: performance.now() - started }) } catch { /* diagnostics must never change the operation result */ }
       if (mediaConfirmed) return fail(new Error('MUSIC_RECEIPT_PERSIST_FAILED'))
       const result = fail(error)
       try { save({}, result.error.code === 'MUSIC_PLAYBACK_UNKNOWN' ? 'unknown' : 'failed', result.error.code) }

@@ -225,3 +225,17 @@
 - Escape 关闭音乐资料库。
 - 音乐搜索失败提示带错误码，并在资料库提供「重试搜索」；搜索成功清除提示。
 - 测试：`tests/panelDismissal.test.ts` 1 项、`musicBridge/musicIpc/musicMelodyFlow` 21 项通过；typecheck 通过。真实 UI 行为需集成包验证（本轮按指示不打包/不切换）。
+
+## ① 现包真实 seek（alpha.17，未重复播放/切歌段）
+
+- 可播放 netease《月亮代表我的心》播放中，拖进度到 120s：position 立即到 121.05s，当前 LRC 行立即重算为「月亮代表我的心」；离线只读取 provider LRC 同曲 120s 行也是「月亮代表我的心」，映射一致。
+- 暂停后拖到 45s：position 精确为 45s，playState 仍 paused，LRC 行为「我爱你有几分」；1.2s 后仍 paused/45s（未自动恢复播放）。provider LRC 在 45s 行同为「我爱你有几分」。
+- 结论：真实播放中 seek、暂停中 seek、音频 position 跳转与 LRC 按 seek 目标立即重算均通过；不再重复已过播放/切歌。
+- 音量已还原 100、退出播放回 idle/conversation。
+
+## ② F11d 音乐失败诊断（源码已实现，未打包/未重启现包）
+
+- 新增 `electron/main/r1/musicDiagnostics.ts`：失败写入既有 `event_log`（kind=`music_failure`），payload 仅含 provider、phase、安全错误码（大写码或 `unknown`）、upstreamStatus（100–599 或 null）、traceId、durationMs；不落原始搜索词、响应正文、URL/查询参数、请求头、凭据或聊天内容。
+- 已接入 `r1.music.search` 失败路径，以及 `r1.music.control`/`r1.music.exit` 失败；诊断写入失败不影响原操作结果。
+- `diagnosticExport.ts` 新增 `musicFailures`，导出前二次净化：丢弃额外字段、跳过非法 traceId/时长，隐私标记新增 `searchQueriesIncluded:false`、`upstreamPayloadsIncluded:false`。
+- 验证：`r1MusicIpc` 4 项（含含敏感串的搜索失败、已知安全码、恶意 event payload 脱敏）与 `r1DataManagement` 7 项通过；typecheck 通过。真实诊断导出需集成包验证（当前窗口 alpha.17 不含此源码，不为此打包/重启）。
