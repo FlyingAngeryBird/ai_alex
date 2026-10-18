@@ -131,3 +131,13 @@
 - 查询效率实测（alpha.15，DEC-059 已生效）：自然“查一下 RFC 9110 简介和两个官方来源”→约 18s 受理、26/28/46s 进展、两次搜索合并 6 候选（单次上限 5，原 10/11），但 141s 仍以 partial“预算耗尽”结束。候选收敛有效、耗时未解决；DEC-060 增加“预算剩余<30s”一次性执行提示（不增预算/查询/读页）、模型请求前 progressBrief 更新、任务早收敛提示，实际效果待 alpha.16。
 - 回归修复：alpha.15“发起后台任务”仍报 `ARK_TOOL_SCOPE_OR_SCHEMA_INVALID`；诊断 `start_task Cannot read properties of undefined (reading 'map')`，定位 modelBoundary 对可选 delegation 数组未判空（DEC-057 引入）；已修并对缺省/空数组/显式值加测试，越界别名仍拒绝，不扩权。
 - 集成包 alpha.16：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha16-e2/`，源码 `164b354`，资产 3.5.7，ZIP 148,351,784 字节，SHA256 `1530c8fd6fa0bb386d9bf54d476117afaa0d35f574d082d60c16fe048fbc43ff`；typecheck + 相关 39 项测试通过；无 `.env`/凭据/用户库。真实复测需新二进制钥匙串授权一次；TXT/MD 原生保存框仍为人工步骤。
+
+## E2 最终结果（alpha.16 集成包真实窗口）
+
+- 链①（真实通过）：合成记忆 BLUE-42→普通会话回想→更正 BLUE-43；alpha.16 自然“忘掉我的合成测试代号”成功（memory entries 0，回复“已忘记…旧上下文停止使用”）；下一轮追问答“我不确定，没有查到有效代号”，不复活旧事实。否定保护与显式目标/版本确认保留，只操作合成记忆。
+- 链②（真实通过）：临时对话不读长期记忆；事项面板确认保存范围后，模型加载技能并实际保存「E2 临时保存验证 2」（itemId c11b0a5b…，v1），`receipts` 有 succeeded 保存回执（actionId 71f35eca…），不再出现“工具未开放”；退出临时后该事项保留、临时消息未落库（messages 无临时行、sessions 无临时行）、确认标记复位。
+- 链③（部分通过，Task 在飞重启未触发）：同包 alpha.15 一次重启后专注 running→paused（UI“已暂停”）、偏好与 3 事项/4 提醒保留、无重复写入；本轮多次尝试在 Task 运行中退出均未命中（任务先完成或 M01 ARK_REQUEST_TIMEOUT），因此“运行中 Task 重启→needs_resume”仅由单元/监督器测试覆盖（`r1TaskSupervisor.test.ts` 的 interrupted→needs_resume 用例），真实在飞重启仍为验证缺口，未见代码缺口。
+- 查询耗时（alpha.16，单独记录，不增预算）：一次自然“查 RFC 9110 发布时间”→约 36.8s 受理、59.4s 完成，4 候选/4 来源，completed（alpha.15 同类为 141s partial，单样本仍属体验区间）；另一次尝试 M01 ARK_REQUEST_TIMEOUT（供应商不稳定），不作为修复结论。
+- 包：alpha.16 `/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha16-e2/`，源码 `164b354`，资产 3.5.7，ZIP SHA256 `1530c8fd6fa0bb386d9bf54d476117afaa0d35f574d082d60c16fe048fbc43ff`；无新包。
+- 人工/外部：每个新验收包首次钥匙串授权由用户完成；TXT/MD 原生保存框仍为人工步骤；GitHub 推送网络超时（本地 `878a1e0`/远端 `7147f4b`，未强推未改远程）。
+- 合成对象：记忆已遗忘；事项「E2 临时保存验证 2」保留为可识别合成对象；临时聊天未落库；合成专注已停止、合成偏好已还原。
