@@ -67,3 +67,8 @@ alpha.2最终开发预览标签`r1-preview-1.0.0-alpha.2-build2`指向`9017bf8`�
 - 源码提交：`6a0f482`（修复：正文首个非空行与 Artifact 标题相同的 H1 时不再重复添加导出标题，TXT/MD 一致；保留正文与不同标题）。
 - 包：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha17-e4fix/`；ZIP `Seamo-AI-R1-1.0.0-alpha.17-mac-arm64.zip` 148,705,341 字节，SHA256 `c746ee0820184a41bc47463a1214588629dcfe798b1da7a8e129fa4b09631a5a`；资产 3.5.7、SQLite 12、bundle `com.seamo.ai.r1`，ad-hoc 未公证，无凭据/用户库。
 - alpha.16 包与升级前快照保留；已导出用户文件未覆盖（验证写入新文件 `~/Documents/E4-fix-check.txt/.md`，184B 且内容一致）。
+
+## 1.0.0-alpha.18（E5 集成候选，2026-10-18）
+- 源码：E5 批量修复（Esc 面板/音乐资料库/任务面板防丢失、音乐搜索错误码+重试、music_failure 脱敏诊断、任务面板 flush）。
+- 隔离验证：F06b/F06c/F07b/F08d/F09b/F01c/F11a Esc；搜索失败重试 mock；诊断 payload 脱敏。
+- 包信息待本条下方补：构建后填入源码提交、ZIP 字节/SHA256、路径；当前包不替换/重启用户 alpha.17 窗口。

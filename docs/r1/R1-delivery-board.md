@@ -131,7 +131,7 @@
 | --- | --- | --- |
 | F01a | 待验收 | 自动会话/连续会话代码与用户早期确认；自然20轮/30分钟/噪声需真机 |
 | F01b | 待验收 | 按住/Space入口与权限前检已有；按松/失焦/焦点组合待实包 |
-| F01c | 待验收 | 文字/字幕/混输已实现；输入法与切页待实包 |
+| F01c | 隔离实测部分/待验收 | 隔离开发实例实测：输入框 Space 不被全局 PTT 拦截、IME composition Enter 被阻止、切页后草稿保留；真机输入法/混输待实包 |
 | F01d | 待验收/用户 | 设备与权限入口已有；拒绝/拔插需系统授权 |
 | F02a | 已验证 | persona 真实读取；开场白真实模型成功；重启一致性待完整场景 |
 | F02b | 待验收 | 语义固定集盲评未做 |
@@ -147,29 +147,29 @@
 | F05c | 已验证 | E1 真实并排比较/选中第2候选 |
 | F05d | 已验证/待验收 | 部分结果、继续未完成步骤、隔离恢复；更多失败恢复待验 |
 | F06a | 已验证 | E1 候选保存 + E2 临时授权保存（真实回执） |
-| F06b | 待验收 | 更新/完成/撤销代码与测试；实包语音/页面联动待验 |
-| F06c | 待验收 | 可信删除UI确认/版本冲突代码；实包确认待验 |
+| F06b | 隔离已验证/待实包 | 隔离实例API：完成→关联提醒 cancelled_with_todo(todo_completed v2)；撤销→restored_after_undo(scheduled v3)；删除保留→reminder_kept；真机页面/语音联动待实包 |
+| F06c | 隔离已验证/待实包 | 隔离实例API：删除取消→cancelled_after_item_deletion(item_deleted)；过期确认被拒且事项保留；真机UI确认待实包 |
 | F06d | 已验证 | 真实保存框 TXT/MD 导出成功；alpha.17 修复同标题 H1 重复，新文件验证 184B/TXT=MD，既有用户文件未覆盖；取消分支返回 cancelled=true 且不改文件 |
 | F07a | 已验证 | E1 关联提醒 + E2 临时提醒创建 |
-| F07b | 待验收 | 改期/取消/版本测试；到期竞态待实包 |
+| F07b | 隔离已验证/待实包 | 隔离实例API：create v1→reschedule v2（同ID,scheduled）→cancel v3（cancelled,user_cancelled），list一致；到期竞态待实包 |
 | F07c | 已验证部分/待验收 | 播报审计 announcedAt 与早年真实播报用户确认；通知权限/勿扰待实包 |
 | F07d | 已验证部分 | E2 重启后专注 running→paused、合成专注启停；计时/音乐独立待实包 |
-| F08a | 部分可用/待验收 | 本地播放器链路已验证；有界检查：netease 备用曲目解析 URL 200 + 封面 + LRC；晴天原版仍缺、joox Yesterday 503、kuwo 不支持；真实播放/听测待解锁 |
-| F08b | 部分可用/待验收 | 备用曲目有精确候选且 netease 可解析；不静默替换；真实点歌/UI 播放待解锁 |
+| F08a | 部分可用/待验收 | 本地播放器链路已验证；有界检查：netease 备用曲目解析 URL 200 + 封面 + LRC；晴天原版仍缺、joox Yesterday 503、kuwo 不支持；真实音频听测/用户听感确认待完成 |
+| F08b | 部分可用/待验收 | 备用曲目有精确候选且 netease 可解析；不静默替换；真实点歌/UI 播放与用户听感确认待完成 |
 | F08c | 已验证（真实播放/队列/下一首/seek） | netease真实播放；暂停冻结/恢复；音量0→20保持playing；队列→下一首真实切歌；播放中seek到120s→position121.05+s、LRC立即重算，暂停seek45s→position45仍paused且LRC匹配；设备听测（用户听感）待确认 |
-| F08d | 待验收 | 收藏/反馈/跳过持久化；真实播放反馈待验 |
+| F08d | 隔离已验证/待实包 | 隔离实例API：收藏独立持久化；dislike/skip生成不同feedbackId与kind，队列不变；真实播放UI反馈待实包 |
 | F08e | 已验证（歌词时钟/音频驱动粒子） | 歌词随audio时钟变化；Analyser 44帧/39非零、sum约5200–6390，真实音频驱动粒子；用户主观听感/视觉确认待做 |
-| F08f | 已验证（降音/用户优先） | 合成TTS播报降音至base×0.2，用户中途改音量恢复至最新40%；暂停/静音/最新音量优先复测通过；真实用户语音边听边聊未验（钥匙串未恢复）；seek 未验；粒子视觉/听感待用户确认 |
+| F08f | 已验证（降音/用户优先） | 合成TTS播报降音至base×0.2，用户中途改音量恢复至最新40%；暂停/静音/最新音量优先复测通过；真实用户语音边听边聊未验（钥匙串未恢复）；seek 已在 alpha.17 真实验证；粒子视觉/听感待用户确认 |
 | F09a | 待验收 | 工作稿讨论/语义固定集 |
-| F09b | 待验收 | 材料/范围/长度限制已实现；超限实包待验 |
+| F09b | 隔离已验证/待实包 | 隔离实例API：内容>8000→ARTIFACT_CONTENT_INVALID、非法range→ARTIFACT_RANGE_INVALID，artifact版本/内容不变；实包UI粘贴/超限交互待验 |
 | F09c | 已验证 | E1 续改/撤销/保存；TXT/MD 真实导出成功；alpha.17 修复标题去重并验证 |
 | F10a | 待验收 | follow-up 交付代码；实包一次回访待验 |
 | F10b | 已验证（隔离真实UI） | 受控注入 needs_resume→UI提示“上次还有1项委托未完成/尚未重新执行”→继续→执行；已提交写入不重放；真实在飞重启待实包 |
 | F10c | 待验收 | DND/停止主动发声与审计代码；实包勿扰/停止待验 |
-| F11a | 已验证部分 | 真实renderer 900/700窄窗覆盖通过；整窗拖动/全页面原型对照待实包 |
+| F11a | 已验证部分 | 真实renderer 900/700窄窗覆盖通过；隔离实例Esc关闭设置/事项/音乐资料库通过（任务面板未保存flush守卫源码/单测）；全页面视觉/整窗拖动待用户实包 |
 | F11b | 已验证（隔离真实UI） | 隔离首次引导可跳过、不启麦克风/自动会话/自动记忆；缺配置状态真实；权限拒绝待系统授权 |
 | F11c | 已验证部分 | persona/prefs读取与reducedMotion重启持久；设备/模型变更实包待验 |
-| F11d | 已验证部分/人工 | 数据summary真实；备份/诊断/还原/回滚/抑制隔离62项测试通过；新增音乐失败诊断（仅provider/phase/安全码/上游状态/traceId/耗时，脱敏测试通过；源码待集成包）；安装包真实备份恢复待人工/实包 |
+| F11d | 已验证部分/人工 | 数据summary真实；备份/诊断/还原/回滚/抑制隔离62项测试通过；音乐失败诊断脱敏单测通过；隔离DB实际buildDiagnosticExport仅含安全字段、恶意额外字段丢弃、隐私标记false（原生保存框落盘本轮未完成）；安装包真实备份恢复待人工/实包 |
 | A/V | 待执行 | 关联 A/V 编号以现有原始索引为准，未执行项填待执行 |
 
 
@@ -207,3 +207,12 @@
 - A21–A24（音乐真实可用音源/设备）、A30/A49（真实火山语音/设备）、A19/A44（系统通知/勿扰/睡眠）以及签名公证/安装回退相关验收。
 
 **V 编号**：V13 候选上下文/比较/选中已有真实 E1 部分证据；语音 V13 与 V18–V21 原索引未在本轮执行，填待执行。
+
+
+## E5 本地闭环验证（2026-10-18，隔离开发实例；不读取/复制真实凭据，不操作真实用户库）
+
+- 环境：源码构建后以 `CFFIXED_USER_HOME` 隔离 userData 启动多个独立实例（CDP 9224/9225）；当前用户 alpha.17 窗口保持不动。真实凭据未读取/复制；隔离库为合成数据；不称正式安装通过。
+- 隔离 API 实测：F07b 改期/取消同 reminderId、版本 v1→v2→v3、状态 scheduled→scheduled→cancelled(user_cancelled) 一致；F06b 完成→提醒 cancelled_with_todo(todo_completed)、撤销→restored_after_undo、删除保留→reminder_kept；F06c 删除取消→cancelled_after_item_deletion、过期确认被拒且事项保留；F08d 收藏独立、dislike/skip 不同 feedbackId/kind、队列不变；F09b 长度(>8000)与非法range失败分别返回 ARTIFACT_CONTENT_INVALID/ARTIFACT_RANGE_INVALID，原版本/内容不变。
+- 输入/导航隔离实测：输入框 Space 未被全局 PTT 拦截、IME composition Enter 被阻止、切页后草稿保留；Esc 关闭设置/事项/音乐资料库。任务面板未保存 flush 守卫为源码+单测覆盖，未在隔离实例落真实任务编辑器场景。
+- 搜索失败/重试隔离实测：本地 mock 音乐 provider 返回 500 → 提示含 `MUSIC_PROVIDER_UNAVAILABLE` 与「重试搜索」；点击重试后 mock 请求数 3→6（再次真实发起）；切换 mock 成功响应后重试，提示清除、结果渲染。该结果仅证明隔离 mock 失败与重试路径，不代表真实互联网 provider 当前状态。
+- 诊断脱敏隔离实测：向隔离 DB 写入带 query/url/headers/body/chat 额外字段的 `music_failure` 事件，实际调用 `buildDiagnosticExport` 生成 payload：`musicFailures` 仅安全字段、非法 trace 行被跳过、隐私标记 `searchQueriesIncluded/upstreamPayloadsIncluded=false`，扫描无敏感串。原生保存框文件落盘本轮未完成（多 Electron 实例 AX 定位受限），不称导出文件验收通过。

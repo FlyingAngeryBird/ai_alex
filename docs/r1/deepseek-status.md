@@ -241,3 +241,9 @@
 - 验证：`r1MusicIpc` 4 项（含含敏感串的搜索失败、已知安全码、恶意 event payload 脱敏）与 `r1DataManagement` 7 项通过；typecheck 通过。真实诊断导出需集成包验证（当前窗口 alpha.17 不含此源码，不为此打包/重启）。
 - 导航补充（源码）：任务面板 Escape 关闭前先 flushEditing，未保存则保持打开并提示；侧栏/搜索面板 Escape 已关闭并回焦输入框。当前窗口 alpha.17 不含该源码，集成包再实测。
 - 任务面板防丢失（源码）：关闭按钮改为先 flushEditing，未保存则保持打开提示；面板因侧栏/视图导航隐藏时 watch(active) 做一次 best-effort flush；Escape 路径同样先 flush。typecheck+panelDismissal/r1MusicIpc 共5项通过；现窗口alpha.17不含、集成包再实测。
+
+
+## E5 本地闭环（隔离实例，2026-10-18）
+
+- 隔离源码实例（fake HOME，无真实凭据/用户库）验证：F06b/F06c 待办完成撤销与关联提醒去留/确认、F07b 提醒改期取消同ID状态一致、F08d 收藏/不喜欢/跳过区分、F09b 长度/范围失败保留原内容、F01c 输入Space/IME/切页草稿、Esc 关闭设置/事项/音乐资料库；搜索失败→重试（mock 3→6请求）→成功恢复；诊断 buildDiagnosticExport 仅安全字段、无敏感串。
+- 局限：任务面板未保存 flush 守卫未在隔离实例落真实任务编辑器；原生诊断保存框文件落盘未完成；mock 搜索不代表真实 provider；不称正式安装通过。当前用户 alpha.17 窗口未切换/重启。
