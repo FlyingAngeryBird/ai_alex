@@ -4,13 +4,13 @@
   "branch": "codex/seamo-r1",
   "generatedAt": "2026-10-18T21:00:00+08:00",
   "candidate": {
-    "appVersion": "1.0.0-alpha.19",
+    "appVersion": "1.0.0-alpha.20",
     "bundleId": "com.seamo.ai.r1",
-    "sourceCommit": "970bcbd2c90a8a298a7e70adcff8d8b8951d41f5",
-    "packageDir": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha19-e5-retention",
-    "zip": "Seamo-AI-R1-1.0.0-alpha.19-mac-arm64.zip",
-    "zipBytes": 148708256,
-    "zipSha256": "2b8a593dcc5699fbbb6984504b1ac87f4202e2c96266702da5ced0749ce6d941",
+    "sourceCommit": "c4af1f59b1fdae12735d0cbe0e14b06ac93d5d42",
+    "packageDir": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha20-r1-align",
+    "zip": "Seamo-AI-R1-1.0.0-alpha.20-mac-arm64.zip",
+    "zipBytes": 148709251,
+    "zipSha256": "230b9e9c5813c62e64eee96787fafb6fac5cd51d3aacce60940d88c41712e955",
     "signing": "local-ad-hoc",
     "notarized": false,
     "forbiddenFilesFound": false
@@ -54,7 +54,8 @@
       "E5 packaged isolated: alpha.18 Esc/search retry/edit retention failed-save+nav; alpha.19 valid-save single-Esc close after flush re-check",
       "alpha.19 prototype comparison (five pages/settings, wide/narrow/empty/failure/long) with documented diffs",
       "isolated install->upgrade->rollback alpha.18<->alpha.19 with synthetic data and schema 12 preservation",
-      "E5 focus completion/end-music rule; reminder DND/followup/missed-24h policy"
+      "E5 focus completion/end-music rule; reminder DND/followup/missed-24h policy",
+      "alpha.20 prototype alignment batch (home/music/items/memory/history/settings) with populated-history comparison"
     ],
     "pendingUserAcceptance": [
       "real user-voice listen-and-chat; particle/listening visual confirmation; system notification/microphone permissions; full A/V and full-page visual acceptance",

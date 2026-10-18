@@ -1,11 +1,12 @@
-# Seamo AI R1 内部验收候选交付报告（最终版，alpha.19）
+# Seamo AI R1 内部验收候选交付报告（最终版，alpha.20）
 
-> 结论：**alpha.19 是内部验收候选，尚不批准“全部完成”。** 功能代码/E5 交互缺口与可自主执行的验证已收口；真实语音听感、真实边听边聊、系统权限/通知、全页面视觉与全 A/V 场景、Developer ID 签名/公证与正式安装验收仍需人工或外部条件。
+> 结论：**alpha.20 是内部验收候选，尚不批准“全部完成”。** 功能代码/E5 交互缺口与可自主执行的验证已收口；真实语音听感、真实边听边聊、系统权限/通知、全页面视觉与全 A/V 场景、Developer ID 签名/公证与正式安装验收仍需人工或外部条件。
 
 ## 1. 最终候选与历史包（版本/时点明确）
 | 版本 | 源码提交 | 包路径 | ZIP 字节 | SHA256 | 说明 |
 | --- | --- | --- | --- | --- | --- |
-| **alpha.19（最终候选）** | `970bcbd` | `/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha19-e5-retention/` | 148,708,256 | `2b8a593dcc5699fbbb6984504b1ac87f4202e2c96266702da5ced0749ce6d941` | E5 防丢最终修复；当前 final candidate |
+| **alpha.20（最终候选）** | `c4af1f5` | `/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha20-r1-align/` | 148,709,251 | `230b9e9c5813c62e64eee96787fafb6fac5cd51d3aacce60940d88c41712e955` | 原型对齐批次；当前 final candidate |
+| alpha.19（保留） | `970bcbd` | `2026-10-18-alpha19-e5-retention` | 148,708,256 | `2b8a593d…` | E5 防丢候选 |
 | alpha.18（保留） | `ebbc613` | `/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha18-e5/` | 148,708,227 | `898ac18dddd2e2dc4069b719cfa304879ab7a178f43797ffcd235defe137ecc4` | E5 集成前一候选，编辑保存竞态已在 alpha.19 修复 |
 | alpha.17（保留） | `6a0f482` | `/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha17-e4fix/` | 148,705,341 | `c746ee0820184a41bc47463a1214588629dcfe798b1da7a8e129fa4b09631a5a` | 导出标题去重验证 |
 | alpha.16（保留） | `164b354` | `/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha16-e2/` | 148,351,784 | `1530c8fd6fa0bb386d9bf54d476117afaa0d35f574d082d60c16fe048fbc43ff` | E1/E2 主要真实窗口证据所在包 |
@@ -40,7 +41,7 @@
 - “音乐全部不可用”：**不再成立**。alpha.16/17 已验证 netease 备用曲目真实播放/歌词/seek；晴天等点名原版仍缺、joox 部分 503、kuwo 不支持，未静默替换。真实音源范围仍有限。
 - “TXT/MD 待保存”：**alpha.17 已真实验证导出**并写入新文件；既有用户导出未被覆盖。仅原生诊断保存框仍列人工步骤。
 - “Git 推送受阻”：代码/文档已用 SSH 推送；`gh` token 失效仅影响 PR 描述文本更新，不是分支同步阻断。
-- “alpha.16 完整性”：属于 alpha.16 时点证据；当前最终候选为 alpha.19，完整性/清单以本报告与 manifest 为准。
+- “alpha.16 完整性”：属于 alpha.16 时点证据；当前最终候选为 alpha.20，完整性/清单以本报告与 manifest 为准。
 
 ## 4. 41 项状态摘要
 逐项见 [R1-delivery-board.md](R1-delivery-board.md)。当前口径：

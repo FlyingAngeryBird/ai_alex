@@ -78,3 +78,8 @@ alpha.2最终开发预览标签`r1-preview-1.0.0-alpha.2-build2`指向`9017bf8`�
 - 源码 `970bcbd`：alpha.18 基础上修复任务编辑器有效保存后 Esc 竞态误报未保存（flushEditing 失败后 250ms 复核一次）；产品行为仅此一处变化。
 - 包：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha19-e5-retention/`；ZIP 148,708,256 字节，SHA256 `2b8a593dcc5699fbbb6984504b1ac87f4202e2c96266702da5ced0749ce6d941`；资产 3.5.7、SQLite 12、ad-hoc、无凭据/用户库。
 - alpha.18 包保留（源码 `ebbc613`，ZIP SHA256 `898ac18dddd2e2dc4069b719cfa304879ab7a178f43797ffcd235defe137ecc4`）；未替换/未重启用户当前 alpha.17 窗口。
+
+## 1.0.0-alpha.20（原型对齐批次，2026-10-18）
+- 源码 `c4af1f5`：首页问候/三快捷动作/真实上次聊到；音乐默认搜索+按需资料库；事项标题/未定时间；记忆相对日期；历史计数/本地标签/相对日期；设置说明入口与高级服务折叠；记忆 createdAt 透出。
+- 包：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha20-r1-align/`；ZIP 148,709,251 字节，SHA256 `230b9e9c5813c62e64eee96787fafb6fac5cd51d3aacce60940d88c41712e955`；资产3.5.7/SQLite12/ad-hoc/无凭据。
+- alpha.19 原包保留；用户 alpha.17 未替换/重启；原型对齐对照见 2026-10-18-alpha20-prototype-alignment.md。
