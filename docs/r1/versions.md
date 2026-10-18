@@ -16,7 +16,8 @@ R1 当前是开发预览：应用 ID `com.seamo.ai.r1`，数据目录 `~/Library
 
 ## 开发分支增量（2026-10-17 D1–D3）
 
-`codex/seamo-r1` 已包含 D1 事项删除/导出可信 UI 桥（DEC-053）、D2 查询→候选→保存/提醒完成合同（DEC-054）、D3 临时保存确认与播报审计（DEC-055）、D4 音乐本地闭环与死源退避。当前源码资产 3.5.2、工具 schema 3.2.0、SQLite 12。E1 更新包 `1.0.0-alpha.12`（包源 `8dd48f0`，资产 3.5.3）：
+`codex/seamo-r1` 已包含 D1 事项删除/导出可信 UI 桥（DEC-053）、D2 查询→候选→保存/提醒完成合同（DEC-054）、D3 临时保存确认与播报审计（DEC-055）、D4 音乐本地闭环与死源退避。当前源码资产 3.5.2、工具 schema 3.2.0、SQLite 12。E1 更新包 `1.0.0-alpha.15`（包源 `8e882b8`，资产 3.5.6）：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha15-e1/`，ZIP 148,348,837 字节，SHA256 `17577463e4333f7b84305ec070b045686f665336510ef69c04f5269a777a9f51`，本机 ad-hoc 签名、未公证。
+E1 更新包 `1.0.0-alpha.12`（包源 `8dd48f0`，资产 3.5.3）：
 `/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha12-e1/`，ZIP 148,343,367 字节，SHA256 `7c59d8c082476083eb286b8b2e112fc4b5c4bef920d091ce1e04c7ca7156d821`，本机 ad-hoc 签名、未公证。
 D5 内部验收包 `1.0.0-alpha.11`（包源 `29a2915`）保留在 `/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha11-d5/`。
 alpha.10 及更早安装包不含 D1–D5 提交；旧包不能直接打开 SQLite12 数据，回退需使用对应升级前快照。E1 升级前快照：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha11-d5/pre-alpha11-data-20261017-2332/`。
