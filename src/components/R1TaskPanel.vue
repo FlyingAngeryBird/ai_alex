@@ -10,7 +10,7 @@ function editorRef(key: string, value: unknown): void {
   if (value) editors.set(key, value as { flush(): Promise<boolean> })
   else editors.delete(key)
 }
-async function flushEditing(): Promise<boolean> {
+async function flushOnce(): Promise<boolean> {
   const selected = props.selected
   if (!selected) return true
   for (const artifact of selected.result?.artifacts ?? []) {
@@ -18,6 +18,12 @@ async function flushEditing(): Promise<boolean> {
     if (editor && !await editor.flush()) return false
   }
   return true
+}
+async function flushEditing(): Promise<boolean> {
+  if (await flushOnce()) return true
+  // The debounced apply may still be settling; re-check once before telling the user it is unsaved.
+  await new Promise(resolve => setTimeout(resolve, 250))
+  return await flushOnce()
 }
 defineExpose({ flushEditing })
 // Best-effort persistence when the panel hides because of sidebar/view navigation.
