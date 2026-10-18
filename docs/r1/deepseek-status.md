@@ -257,3 +257,11 @@
 - 编辑防丢（alpha.18）：向隔离DB注入合成任务+artifact打开编辑器；输入 8001 字后按 Esc，面板保持可见、textarea 保留 8001 字、错误“正文最多 8000 个字，当前文字已保留，请分段处理。”；此时点击侧栏「设置」被阻止（设置未打开、面板仍在、内容保留），点击「陪伴」同样保留内容。
 - 发现并修复：有效修改保存后立即 Esc，可能因 debounce apply 竞态误报“未保存”；`flushEditing` 现在失败后等待 250ms 再复核一次。alpha.19 包隔离实例验证：有效编辑后单次 Esc 面板关闭（visible=false），artifact 版本 3/内容为新正文。
 - 原生诊断保存框未自动落盘（多 Electron/多应用窗口 AX 定位不可靠）；已停止向任何应用发送按键，保留精确人工步骤：在隔离/候选包 设置→数据与诊断→导出诊断→系统保存框默认 `Seamo-R1-diagnostics.json`→点保存；文件应仅含版本/状态/安全错误码/阶段，无聊天/密钥/音频。不称该文件步骤已验收。
+
+## E5 邻近本地闭环：提醒投递/勿扰/回访/专注（alpha.19 包隔离实例，2026-10-18）
+
+- 提醒到期：标准提醒 `onDue` 事件 systemRequested=true、silent=false、kind=standard、deliveryId 存在；后续多次 tick 无重复投递（3 条提醒 3 个 delivery）。
+- 勿扰：preferences.doNotDisturb=true 时新提醒事件 silent=true（仍投递，不取消事项），恢复 DND=false 后正常。
+- 回访：kind=followup 提醒到期事件/状态正确，仅一次投递。
+- 专注：start(60s) v1 running→pause v2 paused(remaining 冻结 60)→resume v3 running(1.3s 后 remaining 58)→stop v4 stopped；getState 与事件版本一致。
+- 局限：系统通知权限/真实勿扰中心、结束音乐规则、休眠/唤醒、真实出声仍未验（系统/人工）；隔离实例不代表正式安装。

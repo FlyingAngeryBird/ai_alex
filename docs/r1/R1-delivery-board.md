@@ -152,8 +152,8 @@
 | F06d | 已验证 | 真实保存框 TXT/MD 导出成功；alpha.17 修复同标题 H1 重复，新文件验证 184B/TXT=MD，既有用户文件未覆盖；取消分支返回 cancelled=true 且不改文件 |
 | F07a | 已验证 | E1 关联提醒 + E2 临时提醒创建 |
 | F07b | 隔离已验证/待实包 | 隔离实例API：create v1→reschedule v2（同ID,scheduled）→cancel v3（cancelled,user_cancelled），list一致；到期竞态待实包 |
-| F07c | 已验证部分/待验收 | 播报审计 announcedAt 与早年真实播报用户确认；通知权限/勿扰待实包 |
-| F07d | 已验证部分 | E2 重启后专注 running→paused、合成专注启停；计时/音乐独立待实包 |
+| F07c | 已验证部分/待验收 | 隔离alpha.19包：标准提醒到期systemRequested=true/silent=false/kind=standard，多次tick无重复；DND=true时silent=true仍投递不取消；回访kind=followup一次投递；系统通知权限/勿扰中心待实包 |
+| F07d | 已验证部分 | E2重启专注running→paused；alpha.19隔离包 focus start/pause/resume/stop v1→v4，remaining 冻结/递减一致；结束音乐规则/休眠/真实计时听测待实包 |
 | F08a | 部分可用/待验收 | 本地播放器链路已验证；有界检查：netease 备用曲目解析 URL 200 + 封面 + LRC；晴天原版仍缺、joox Yesterday 503、kuwo 不支持；真实音频听测/用户听感确认待完成 |
 | F08b | 部分可用/待验收 | 备用曲目有精确候选且 netease 可解析；不静默替换；真实点歌/UI 播放与用户听感确认待完成 |
 | F08c | 已验证（真实播放/队列/下一首/seek） | netease真实播放；暂停冻结/恢复；音量0→20保持playing；队列→下一首真实切歌；播放中seek到120s→position121.05+s、LRC立即重算，暂停seek45s→position45仍paused且LRC匹配；设备听测（用户听感）待确认 |
@@ -163,9 +163,9 @@
 | F09a | 待验收 | 工作稿讨论/语义固定集 |
 | F09b | 隔离已验证/待实包 | 隔离实例API：内容>8000→ARTIFACT_CONTENT_INVALID、非法range→ARTIFACT_RANGE_INVALID，artifact版本/内容不变；实包UI粘贴/超限交互待验 |
 | F09c | 已验证 | E1 续改/撤销/保存；TXT/MD 真实导出成功；alpha.17 修复标题去重并验证 |
-| F10a | 待验收 | follow-up 交付代码；实包一次回访待验 |
+| F10a | 隔离已验证/待实包 | alpha.19隔离包 followup 提醒到期事件/状态正确、仅一次投递；实包真实回访/声音待验 |
 | F10b | 已验证（隔离真实UI） | 受控注入 needs_resume→UI提示“上次还有1项委托未完成/尚未重新执行”→继续→执行；已提交写入不重放；真实在飞重启待实包 |
-| F10c | 待验收 | DND/停止主动发声与审计代码；实包勿扰/停止待验 |
+| F10c | 隔离已验证部分/待实包 | alpha.19隔离包 DND=true 时提醒事件 silent=true 且仍投递；停止主动发声/系统勿扰中心/真实出声待实包 |
 | F11a | 已验证部分 | 真实renderer 900/700窄窗覆盖通过；隔离实例Esc关闭设置/事项/音乐资料库通过；任务面板关闭/Esc/侧栏/视图切换均先flush，失败保持面板打开且编辑可见（alpha.18隔离包实测8001字失败保留+设置/陪伴被阻止；alpha.19修复有效保存后单次Esc关闭）；全页面视觉/整窗拖动待用户实包 |
 | F11b | 已验证（隔离真实UI） | 隔离首次引导可跳过、不启麦克风/自动会话/自动记忆；缺配置状态真实；权限拒绝待系统授权 |
 | F11c | 已验证部分 | persona/prefs读取与reducedMotion重启持久；设备/模型变更实包待验 |
