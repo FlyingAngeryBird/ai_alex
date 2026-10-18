@@ -1,0 +1,49 @@
+{
+  "product": "Seamo AI R1",
+  "channel": "internal-acceptance",
+  "branch": "codex/seamo-r1",
+  "generatedAt": "2026-10-18T21:00:00+08:00",
+  "candidate": {
+    "appVersion": "1.0.0-alpha.16",
+    "bundleId": "com.seamo.ai.r1",
+    "sourceCommit": "164b3549d5ab8002d2ec6cf24fdd85ca6a4eb395",
+    "packageDir": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha16-e2",
+    "zip": "Seamo-AI-R1-1.0.0-alpha.16-mac-arm64.zip",
+    "zipBytes": 148351784,
+    "zipSha256": "1530c8fd6fa0bb386d9bf54d476117afaa0d35f574d082d60c16fe048fbc43ff",
+    "signing": "local-ad-hoc",
+    "notarized": false,
+    "forbiddenFilesFound": false
+  },
+  "versions": {
+    "assetRelease": "seamo-ai-r1-agent-assets-3.5.7",
+    "toolSchema": "3.2.1",
+    "sqliteSchema": 12,
+    "electron": "42.x",
+    "nodeRuntime": "bundled"
+  },
+  "remote": {
+    "origin": "https://github.com/FlyingAngeryBird/ai_alex.git",
+    "lastPushedCommit": "e0aed5c2ed7e7a377843d06b044e91b5950fde18",
+    "localAheadCommits": "docs/test-only commits after e0aed5c; push blocked by invalid GitHub token",
+    "pr": "https://github.com/FlyingAngeryBird/ai_alex/pull/1"
+  },
+  "dataPolicy": {
+    "userDataDir": "~/Library/Application Support/Seamo AI R1",
+    "preUpgradeSnapshot": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha11-d5/pre-alpha11-data-20261017-2332",
+    "doesNotShip": [".env", "credentials.bin", "user database"],
+    "oldPackagesPreserved": true
+  },
+  "status": {
+    "verified": ["E1 query/save/reminder/duplicate-save", "E2 memory forget/no-revive", "E2 temporary authorized save/exit cleanup", "E3 settings/data/backup/restore isolation", "isolated real-UI task recovery", "onboarding skip without mic", "narrow-window overlays"],
+    "pendingUserAcceptance": ["real voice/device/notifications", "music real playback/listen/lyrics/particles/ducking after screen unlock", "TXT/MD native save dialog", "install and rollback", "full prototype visual comparison"],
+    "externalBlocked": ["music target-track resources beyond alternate netease tracks", "Developer ID signing and notarization", "GitHub credentials renewal"],
+    "notClaimedComplete": true
+  },
+  "userActions": [
+    "Unlock Mac and allow one short local playback at low/zero volume for E4 real audio verification",
+    "Run `gh auth login` (or restore token) so local commits can be pushed and PR updated",
+    "Point save dialog to 'Save' for TXT/Markdown export verification",
+    "Provide Developer ID/signing conditions and perform install/rollback acceptance if required"
+  ]
+}
