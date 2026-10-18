@@ -4,13 +4,13 @@
   "branch": "codex/seamo-r1",
   "generatedAt": "2026-10-18T21:00:00+08:00",
   "candidate": {
-    "appVersion": "1.0.0-alpha.17",
+    "appVersion": "1.0.0-alpha.18",
     "bundleId": "com.seamo.ai.r1",
-    "sourceCommit": "6a0f4826b504bb987014417a5c88dcd22fc3b7d6",
-    "packageDir": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha17-e4fix",
-    "zip": "Seamo-AI-R1-1.0.0-alpha.17-mac-arm64.zip",
-    "zipBytes": 148705341,
-    "zipSha256": "c746ee0820184a41bc47463a1214588629dcfe798b1da7a8e129fa4b09631a5a",
+    "sourceCommit": "37a41cc6003a0423764bbbfd14a06068e9d22419",
+    "packageDir": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha18-e5",
+    "zip": "Seamo-AI-R1-1.0.0-alpha.18-mac-arm64.zip",
+    "zipBytes": 148708149,
+    "zipSha256": "594637c6f684bc7dea8f59302f244f2301455c59b18ef5b0f93bcff45459e92e",
     "signing": "local-ad-hoc",
     "notarized": false,
     "forbiddenFilesFound": false
@@ -49,14 +49,16 @@
       "isolated real-UI task recovery",
       "onboarding skip without mic",
       "narrow-window overlays",
-      "E4 real playback/analyser/queue-next/pause-mute-volume; export H1 dedupe in alpha.17 (new files only)"
+      "E4 real playback/analyser/queue-next/pause-mute-volume; export H1 dedupe in alpha.17 (new files only)",
+      "E5 isolated: F06b/F06c/F07b/F08d/F09b/F01c + Esc + mock search retry + diagnostics payload redaction"
     ],
     "pendingUserAcceptance": [
       "real voice/device/notifications",
       "music real playback/listen/lyrics/particles/ducking after screen unlock",
       "TXT/MD native save dialog",
       "install and rollback",
-      "full prototype visual comparison"
+      "full prototype visual comparison",
+      "real user-voice listen-and-chat; particle/listening visual feedback; native diagnostics save-file step"
     ],
     "externalBlocked": [
       "music target-track resources beyond verified netease tracks",

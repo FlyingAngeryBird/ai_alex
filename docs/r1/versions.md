@@ -71,4 +71,5 @@ alpha.2最终开发预览标签`r1-preview-1.0.0-alpha.2-build2`指向`9017bf8`�
 ## 1.0.0-alpha.18（E5 集成候选，2026-10-18）
 - 源码：E5 批量修复（Esc 面板/音乐资料库/任务面板防丢失、音乐搜索错误码+重试、music_failure 脱敏诊断、任务面板 flush）。
 - 隔离验证：F06b/F06c/F07b/F08d/F09b/F01c/F11a Esc；搜索失败重试 mock；诊断 payload 脱敏。
-- 包信息待本条下方补：构建后填入源码提交、ZIP 字节/SHA256、路径；当前包不替换/重启用户 alpha.17 窗口。
+- 包：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha18-e5/`；ZIP `Seamo-AI-R1-1.0.0-alpha.18-mac-arm64.zip` 148,708,149 字节，SHA256 `594637c6f684bc7dea8f59302f244f2301455c59b18ef5b0f93bcff45459e92e`；源码 `37a41cc`；资产 3.5.7、SQLite 12、ad-hoc 未公证、无凭据/用户库。
+- 该包为 E5 集成候选，未替换/未重启用户当前 alpha.17 窗口；隔离验证基于同产品源码提交（仅版本号差异）。

@@ -1,10 +1,10 @@
-# Seamo AI R1 内部验收包安装与回退（alpha.17）
+# Seamo AI R1 内部验收包安装与回退（alpha.18）
 
 ## 包信息
-- 路径：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha17-e4fix/`
-- App：`Seamo AI R1.app`；ZIP：`Seamo-AI-R1-1.0.0-alpha.17-mac-arm64.zip`（148,705,341 字节）
-- SHA256：`c746ee0820184a41bc47463a1214588629dcfe798b1da7a8e129fa4b09631a5a`
-- 源码：`6a0f482`（导出标题去重修复）；资产 3.5.7；工具 schema 3.2.1；SQLite 12；bundle id `com.seamo.ai.r1`；alpha.16 包保留可回退
+- 路径：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha18-e5/`
+- App：`Seamo AI R1.app`；ZIP：`Seamo-AI-R1-1.0.0-alpha.18-mac-arm64.zip`（148,708,149 字节）
+- SHA256：`594637c6f684bc7dea8f59302f244f2301455c59b18ef5b0f93bcff45459e92e`
+- 源码：`37a41cc`（E5 修复：Esc/搜索重试/诊断/任务面板 flush）；资产 3.5.7；工具 schema 3.2.1；SQLite 12；bundle id `com.seamo.ai.r1`；alpha.16/alpha.17 包保留可回退
 - 签名：本机 ad-hoc；**未 Developer ID 签名、未公证**；包内无 `.env`/凭据/用户数据库
 
 ## 安装
