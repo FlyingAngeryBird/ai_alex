@@ -279,6 +279,15 @@ async function checkVoiceConfiguration(mode: VoiceMode): Promise<void> {
   catch (error) { throw new Error(error instanceof Error && voiceConfigurationMessage(error.message) ? error.message : 'VOICE_CONFIGURATION_UNAVAILABLE') }
 }
 
+async function closeTaskPanel(): Promise<void> {
+  if (taskOpen.value) {
+    try {
+      const saved = await (taskPanel.value?.flushEditing() ?? true)
+      if (!saved) { conversation.addSystemMessage('工作稿修改尚未保存，任务面板保持打开；请先保存或撤销。'); return }
+    } catch { conversation.addSystemMessage('任务面板暂时无法关闭，请先保存或撤销修改后重试。'); return }
+  }
+  taskOpen.value = false
+}
 function closePanels(): void {
   taskOpen.value = false
   settingsOpen.value = false
@@ -1318,7 +1327,7 @@ onBeforeUnmount(() => {
 
     <R1TaskPanel ref="taskPanel" v-show="taskOpen" :active="taskOpen" :tasks="taskState.tasks.value" :selected="taskState.selected.value"
       :busy="taskState.busy.value" :loading="taskState.loading.value" :error="taskState.error.value"
-      @close="closePanels" @select="(id) => { taskState.selectedId.value = id }"
+      @close="closeTaskPanel" @select="(id) => { taskState.selectedId.value = id }"
       @control="taskState.control" @retry="taskState.refresh" />
     <R1SettingsPanel :devices="audioDevices" :system-reduced-motion="systemReducedMotion" :diagnostic-trace="() => ({ ...getLastLatencyTrace(), nativeVoice: nativeConversation.getDiagnostics() })" :native-diagnostics="nativeConversation.getDiagnostics" @open-history="openPanel('history')"
       :show-service-configuration="serviceConfigurationOpen"

@@ -2,6 +2,7 @@
 import R1WebResult from './R1WebResult.vue'
 import R1ArtifactEditor from './R1ArtifactEditor.vue'
 import { Pause, Play, X } from 'lucide-vue-next'
+import { watch } from 'vue'
 import type { R1Task, TaskStatus } from '../../electron/main/r1/taskSupervisor'
 const props = defineProps<{ tasks: R1Task[]; selected: R1Task | null; busy: boolean; error: string; loading: boolean; active?: boolean }>()
 const editors = new Map<string, { flush(): Promise<boolean> }>()
@@ -19,6 +20,8 @@ async function flushEditing(): Promise<boolean> {
   return true
 }
 defineExpose({ flushEditing })
+// Best-effort persistence when the panel hides because of sidebar/view navigation.
+watch(() => props.active, active => { if (active === false) void flushEditing() })
 const emit = defineEmits<{ close: []; select: [id: string]; control: [action: 'pause' | 'resume' | 'cancel']; retry: [] }>()
 const labels: Record<TaskStatus, string> = { accepted: '等待处理', running: '正在处理', waiting_input: '等待补充',
   paused: '已暂停', needs_resume: '等待继续', succeeded: '已完成', partially_succeeded: '部分完成', failed: '未完成', cancelled: '已取消' }
