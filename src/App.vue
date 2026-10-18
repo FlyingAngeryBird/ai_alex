@@ -325,6 +325,7 @@ watch([temporaryMode, () => conversation.messages.value.length], () => {
   if (temporaryMode.value) lastNormalTopic.value = null
   else if (conversation.messages.value.length === 0) void refreshLastNormalTopic()
 })
+watch(welcomeOpen, open => { if (!open) void refreshLastNormalTopic() })
 const reminderNotice = ref<import('../electron/main/r1/reminderScheduler').ReminderDueEvent | null>(null)
 let stopReminderNotice: (() => void) | null = null
 let stopMemoryInvalidation: (() => void) | null = null
