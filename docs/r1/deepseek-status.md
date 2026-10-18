@@ -141,3 +141,12 @@
 - 包：alpha.16 `/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha16-e2/`，源码 `164b354`，资产 3.5.7，ZIP SHA256 `1530c8fd6fa0bb386d9bf54d476117afaa0d35f574d082d60c16fe048fbc43ff`；无新包。
 - 人工/外部：每个新验收包首次钥匙串授权由用户完成；TXT/MD 原生保存框仍为人工步骤；GitHub 推送网络超时（本地 `878a1e0`/远端 `7147f4b`，未强推未改远程）。
 - 合成对象：记忆已遗忘；事项「E2 临时保存验证 2」保留为可识别合成对象；临时聊天未落库；合成专注已停止、合成偏好已还原。
+
+## E3 设置/数据/备份恢复与隔离验证（真实窗口 + 隔离集成）
+
+- 设置与配置：真实窗口读取 persona（Seamo AI/balanced/v2/voiceId）、preferences(v3)、onboarding(completed)；reducedMotion 合成变更在**同包一次重启**后仍保留，验证后已还原为 false（v3）；引导完成状态持久化。跳过引导路径 `finishWelcome('home')` 仅写 `onboarding.complete({skipped:true})` 并关闭弹窗，不启动麦克风；`onboarding.test.ts` 覆盖跳过持久化/拒绝额外授权字段/权限 0600/损坏状态。
+- 数据与恢复（隔离目录/DB，不触碰用户数据）：备份排除凭据与 legacy 原始 JSON、文件 0600、独占发布；诊断只含阶段/状态与数值 trace，含 `privacy` 声明，测试断言聊天正文/Key/原始音频不出现；还原前校验备份 schema（1..12）/integrity/外键/必需表，当前 schema 不符拒绝，失败保留当前库并生成 pre-restore 回滚副本；还原合并当前删除抑制/更正版本，旧备份不能复活已遗忘记忆或更正前事实（含 Topic）；保留当前自动记忆 opt-out 与偏好；清理预览需 owner/过期/未变更确认，删除只影响选中范围。
+- Task 重启恢复：新增**隔离集成测试**（标注 isolated integration）：running 任务在模拟进程中断后重开为 `needs_resume`（进度“应用已重新启动，等待你继续。”），`claimNext` 不自动执行，`resume` 后为 accepted（“准备继续，先核对已提交的步骤。”）再 running，已提交写入不重放、事项仍 1 条。真实在飞任务重启仍未在真实窗口触发（多次尝试任务先完成/云请求超时）；该项按隔离集成证据记录，真实包验收列为待验收。
+- 修复：`r1DataCleanup.test.ts` 硬编码 schema 11 改为 `R1_SCHEMA_VERSION`（当前 12）；E3 关联 10 文件 62 项测试通过、typecheck 通过。
+- 人工步骤（仅一项）：工作稿 TUI 导出时，系统保存框出现后由用户点“保存”（默认文件名/位置由系统框给出）；不阻塞其余功能。
+- 外部阻塞不变：音乐真实可用音源、Developer ID 签名/公证、真实设备听测与安装回退验收；当前候选包 alpha.16（源码 164b354/文档 e0aed5c 之后）。

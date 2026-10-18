@@ -177,6 +177,37 @@ describe('R1 TaskSupervisor identity, recovery and result publication', () => {
       temporary.close()
     } finally { db.close() }
   })
+  it('isolated integration: a running task restores as needs_resume and resumes without replay', () => {
+    const { db, supervisor, request, conversation, source } = setup()
+    try {
+      const items = new R1Items(db), artifacts = new R1Artifacts(db)
+      const executor = new R1TaskToolExecutor(supervisor, assets, items)
+      supervisor.accept({ ...request, authorizedAliases: ['read_file', 'write_todos', 'notes_create'] })
+      const active = supervisor.claimNext()!
+      executor.execute(active.lease, 'read_file', { file_path: '/skills/capture-item/SKILL.md' })
+      const saved = executor.execute(active.lease, 'notes_create', { type: 'note', title: '隔离恢复测试', content: '只写一次', mode: 'organized', sourceRefs: [] })
+      expect(saved.status).toBe('succeeded')
+      expect(items.list()).toHaveLength(1)
+      // Simulate an abrupt process restart: do not close the old instance (a graceful
+      // close would persist a different stop reason); a new supervisor recovers from DB.
+      const reopened = new R1TaskSupervisor(db, assets, () => 0)
+      const interrupted = reopened.get(active.lease.taskId)
+      expect(interrupted.status).toBe('needs_resume')
+      expect(interrupted.progressBrief).toBe('应用已重新启动，等待你继续。')
+      // No automatic execution after restart: only the already committed write exists.
+      expect(reopened.claimNext()).toBeNull()
+      expect(items.list()).toHaveLength(1)
+      const resumed = reopened.resume(active.lease.taskId, interrupted.goalVersion)
+      expect(resumed.status).toBe('accepted')
+      expect(resumed.progressBrief).toBe('准备继续，先核对已提交的步骤。')
+      const lease = reopened.claimNext()!.lease
+      // Resume must not replay the committed tool; the model/tool loop decides the next action.
+      expect(items.list()).toHaveLength(1)
+      expect(reopened.get(active.lease.taskId).status).toBe('running')
+      expect(reopened.steeringEvent(lease)).toBeUndefined()
+      reopened.close()
+    } finally { db.close() }
+  })
   it('validates plan dependencies without creating user Todos and pauses on system suspend', () => {
     const { db, supervisor, request } = setup()
     try {

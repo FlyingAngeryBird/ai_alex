@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
-import { openR1Database } from '../electron/main/r1/database'
+import { openR1Database, R1_SCHEMA_VERSION } from '../electron/main/r1/database'
 import { R1DataManagement } from '../electron/main/r1/dataManagement'
 import { R1Conversations } from '../electron/main/r1/conversations'
 import { R1MemoryStore } from '../electron/main/r1/memory'
@@ -94,7 +94,7 @@ it('upgrades an actual schema10 message layout without changing source identitie
  const before=new R1Conversations(s.db).messages(s.session)[0]
  s.db.close();const db=openR1Database(s.path)
  try{
-  expect(db.prepare('PRAGMA user_version').get()).toMatchObject({user_version:11})
+  expect(db.prepare('PRAGMA user_version').get()).toMatchObject({user_version: R1_SCHEMA_VERSION})
   expect(new R1Conversations(db).messages(s.session)[0]).toEqual(before)
   expect(new R1MemoryStore(db).sources(s.memory.memoryId)[0].messageId).toBe(before.messageId)
  }finally{db.close()}
