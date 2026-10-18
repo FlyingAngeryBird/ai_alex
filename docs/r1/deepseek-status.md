@@ -205,3 +205,23 @@
 - 人工最小操作：打开「钥匙串访问」→ 解锁 `login` 钥匙串（输入 macOS 登录密码）→ 回到 Seamo 设置点一次「重新读取服务配置」。完成后再继续真实语音边听边聊与模型相关验收。
 - 搜索失败仍未留 HTTP 状态码/错误日志：仅有渲染层“音乐搜索暂不可用”提示；单次只读复核 `music.search` 成功返回 10 条。不能定性网络/供应商/配置/适配；不称“瞬时外部失败”。未再重复请求。
 - 窗口状态：现窗口 alpha.17（切换发生在最新指示前），alpha.16 包保留；按指示不再切换/重启，等待上述钥匙串人工操作结果。
+
+## 授权弹窗准确状态（一次查看，2026-10-18 21:27）
+
+- 无可见系统钥匙串弹窗：`SecurityAgent` 进程不存在；`CoreServicesUIAgent` 无窗口/按钮；截图无授权框；Seamo 设置页字段显示「状态不可读，原配置保留」，底部「服务状态读取失败」。
+- `security show-keychain-info ~/Library/Keychains/login.keychain-db` 报 "The user name or passphrase you entered is not correct." → 当前会话无法读取/解锁 login 钥匙串；因此没有请求者/项目名/按钮可回报（无弹窗）。
+- 最小恢复步骤（用户操作）：打开「钥匙串访问」→ 左侧 login 钥匙串 → 点锁图标解锁（输入 macOS 登录密码）→ 回到 Seamo 设置点一次「重新读取服务配置」。若届时出现系统框，再准确回报请求者（预期 Seamo AI R1）、项目（预期 Seamo AI R1 Safe Storage）与按钮。不代输密码、不改 ACL、不删 vault/重填 Key。
+
+## 搜索失败归因（已有证据核查）
+
+- /tmp 应用 stderr 仅钥匙串错误与一条 `music_set_volume input_invalid`；无 music search HTTP 状态/错误日志。
+- 统一日志检索无相关条目；`event_log` 仅记忆事件；无 music.search 回执。
+- 数据库 receipts 可分类的是播放/seek 失败：`music.play MUSIC_RESOURCES_EXHAUSTED`（13:18:30Z）、`music.seek MUSIC_DEVICE_PLAY_FAILED`（13:18:34Z）——支持“seek 因播放失败未验”，不能用于搜索归因。
+- 结论：此前搜索失败**无日志/状态码证据，归因待定**；之后单次请求成功返回 10 条，不称网络/供应商/配置/适配任一原因。未再重复请求。
+
+## 导航/输入/失败恢复修复（源码，待集成包实测）
+
+- Escape 关闭侧栏/搜索面板（settings/items/memory/history/search），不关闭有未保存编辑的 task 面板；关闭后焦点回输入框。
+- Escape 关闭音乐资料库。
+- 音乐搜索失败提示带错误码，并在资料库提供「重试搜索」；搜索成功清除提示。
+- 测试：`tests/panelDismissal.test.ts` 1 项、`musicBridge/musicIpc/musicMelodyFlow` 21 项通过；typecheck 通过。真实 UI 行为需集成包验证（本轮按指示不打包/不切换）。

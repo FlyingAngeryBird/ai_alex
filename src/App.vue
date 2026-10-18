@@ -9,6 +9,7 @@ import R1MemoryConfirmationDialog from '@/components/R1MemoryConfirmationDialog.
 import R1ItemActionDialog from '@/components/R1ItemActionDialog.vue'
 import type { MemoryConfirmation } from '../electron/main/r1/memoryConfirmations'
 import R1TaskPanel from '@/components/R1TaskPanel.vue'
+import { hasDismissiblePanel } from '@/services/panelDismissal'
 import R1TaskCompletionNotice from '@/components/R1TaskCompletionNotice.vue'
 import { useNativeConversation } from '@/composables/useNativeConversation'
 import { useTasks } from '@/composables/useTasks'
@@ -876,6 +877,16 @@ async function handleKeyUp(event: KeyboardEvent): Promise<void> {
 
 async function handleKeyDown(event: KeyboardEvent): Promise<void> {
   if (memoryConfirmation.value) return
+  if (event.key === 'Escape') {
+    if (itemAction.value || welcomeOpen.value) return
+    if (hasDismissiblePanel({ settingsOpen: settingsOpen.value, itemsOpen: itemsOpen.value,
+      memoryOpen: memoryOpen.value, historyOpen: historyOpen.value, searchOpen: searchOpen.value })) {
+      event.preventDefault()
+      closePanels()
+      composer.value?.focusInput()
+    }
+    return
+  }
   const target = event.target
   if (target instanceof HTMLElement && (target.isContentEditable ||
     ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return

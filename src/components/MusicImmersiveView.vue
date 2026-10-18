@@ -310,6 +310,7 @@ function lyricStyle(distance: number): Record<string, string> {
         :data-results="searchResultsVisible"
         aria-label="歌曲搜索"
         @submit.prevent="submitSearch"
+        @keydown.esc.prevent="libraryOpen = false"
       >
         <div class="r1-music-library-head"><span>{{ activeTab === 'search' ? '寻找音乐' : activeTab === 'queue' ? '播放队列' : '我喜欢的' }}</span><button type="button" aria-label="关闭音乐资料库" @click="libraryOpen = false"><X :size="17" /></button></div>
         <div class="music-tabs">
@@ -342,6 +343,9 @@ function lyricStyle(distance: number): Record<string, string> {
             />
             <button class="search-button" type="submit" aria-label="搜索歌曲">⌕</button>
           </div>
+          <p v-if="notice && activeTab === 'search'" class="r1-music-notice r1-music-search-error" role="status">
+            {{ notice }}<button type="button" class="music-retry" @click="submitSearch">重试搜索</button>
+          </p>
           <div v-if="showSearchHistory" class="search-history">
             <span class="history-label">最近搜索</span>
             <button
@@ -609,7 +613,7 @@ function lyricStyle(distance: number): Record<string, string> {
 .r1-track-title{flex:1;min-width:0;border:0;background:none;text-align:left;color:var(--r1-text);font-size:13px;cursor:pointer}.r1-track-title small{display:block;color:var(--r1-muted);font-size:11px;margin-top:5px}
 .r1-music-progress{width:100%;appearance:none;background:linear-gradient(to right,var(--r1-gold,#e8cd8c) var(--progress),#2d3032 var(--progress));height:3px;margin:0;cursor:pointer}.r1-music-progress::-webkit-slider-thumb{appearance:none;width:8px;height:8px;border-radius:50%;background:var(--r1-gold,#e8cd8c)}
 .feedback-control{position:relative}.feedback-menu{position:absolute;bottom:calc(100% + 8px);left:0;min-width:146px;background:#1a2222;border:1px solid #46534b;border-radius:5px;padding:4px;box-shadow:0 12px 28px #0008;z-index:12}.feedback-menu button{display:block;width:100%;text-align:left;padding:9px 8px;color:#c9d5ca;font-size:11px;border:0;background:none;cursor:pointer}.feedback-menu button:hover{background:#2a3933}
-.r1-music-notice{font-size:12px;line-height:1.7;color:var(--r1-muted)}.r1-music-confirm-backdrop{position:fixed;inset:0;background:#0009;z-index:100;display:grid;place-items:center}.r1-music-confirm{width:min(420px,90vw);padding:28px;background:var(--r1-surface,#101216);border:1px solid var(--r1-line);border-radius:8px}.r1-music-confirm h3{font-size:20px;color:var(--r1-text);font-weight:500}.r1-music-confirm p{font-size:13px;line-height:1.8;color:var(--r1-muted)}.r1-music-confirm button{margin:12px 20px 0 0;background:none;border:0;color:var(--r1-aqua);cursor:pointer}
+.r1-music-notice{font-size:12px;line-height:1.7;color:var(--r1-muted)}.r1-music-search-error{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.music-retry{background:none;border:1px solid var(--r1-line);border-radius:6px;color:var(--r1-aqua);font-size:12px;padding:3px 8px;cursor:pointer}.r1-music-confirm-backdrop{position:fixed;inset:0;background:#0009;z-index:100;display:grid;place-items:center}.r1-music-confirm{width:min(420px,90vw);padding:28px;background:var(--r1-surface,#101216);border:1px solid var(--r1-line);border-radius:8px}.r1-music-confirm h3{font-size:20px;color:var(--r1-text);font-weight:500}.r1-music-confirm p{font-size:13px;line-height:1.8;color:var(--r1-muted)}.r1-music-confirm button{margin:12px 20px 0 0;background:none;border:0;color:var(--r1-aqua);cursor:pointer}
 .r1-music-volume{display:flex;align-items:center;gap:8px;margin-left:auto;color:var(--r1-muted)}
 .r1-music-volume input{width:76px;height:3px;accent-color:var(--r1-aqua)}
 .lyrics--speaking{opacity:.2;transition:opacity .2s ease}

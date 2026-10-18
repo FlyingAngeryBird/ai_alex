@@ -727,7 +727,7 @@ export function useMusic(options: UseMusicOptions = {}) {
       await ensureBridge()
       const result = await r1.search({ keyword: normalizedQuery, sourcePreference: sourcePreferenceOverride })
       if (generation !== searchGeneration || stopped) return searchResults.value
-      musicNotice.value = result.ok ? '' : '音乐搜索暂不可用，请检查网络或切换音源。'
+      musicNotice.value = result.ok ? '' : `音乐搜索暂不可用（${result.error.code}），请重试或切换音源。`
       searchResults.value = result.ok ? result.data : []; searchResultsVisible.value = true
       return searchResults.value
     }
@@ -738,11 +738,13 @@ export function useMusic(options: UseMusicOptions = {}) {
     if (generation !== searchGeneration || stopped) return searchResults.value
 
     if (!searchResult.ok) {
+      musicNotice.value = `音乐搜索暂不可用（${searchResult.error.code}），请重试或切换音源。`
       searchResults.value = []
       searchResultsVisible.value = true
       return []
     }
 
+    musicNotice.value = ''
     searchResults.value = searchResult.data.tracks
     searchResultsVisible.value = true
     void addSearchHistory(normalizedQuery)
