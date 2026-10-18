@@ -150,3 +150,5 @@
 - 修复：`r1DataCleanup.test.ts` 硬编码 schema 11 改为 `R1_SCHEMA_VERSION`（当前 12）；E3 关联 10 文件 62 项测试通过、typecheck 通过。
 - 人工步骤（仅一项）：工作稿 TUI 导出时，系统保存框出现后由用户点“保存”（默认文件名/位置由系统框给出）；不阻塞其余功能。
 - 外部阻塞不变：音乐真实可用音源、Developer ID 签名/公证、真实设备听测与安装回退验收；当前候选包 alpha.16（源码 164b354/文档 e0aed5c 之后）。
+- F11a 窄窗覆盖（真实 renderer 视口模拟，非整窗拖动）：900×1000 时侧栏 84px、设置面板 x=84/宽 816 覆盖内容区；700×1000 时侧栏变底部 64px、设置面板 x=0/宽 700 全宽覆盖，与原型窄窗层级一致。整窗手动拖动验收仍待实包。
+- GitHub 凭据当前失效（`gh` token invalid，push 报 could not read Username），本地 `a8926ca` 未推送、远端 `e0aed5c`；需用户重新 `gh auth login` 或恢复网络凭据，未强推/未改远程。
