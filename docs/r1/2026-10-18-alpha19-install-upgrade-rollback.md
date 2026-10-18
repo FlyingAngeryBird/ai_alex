@@ -26,3 +26,9 @@
 ## 5. 结论
 - 本机隔离 install → upgrade → rollback 三步可执行且数据在 alpha.18/alpha.19 间保持；schema 12 双向兼容。
 - 未发现安装/升级/回退代码阻断；剩余为 Gatekeeper/钥匙串人工步骤与 Developer ID/公证。
+
+## alpha.19↔alpha.20（最终候选追加验证，2026-10-18）
+- 安装 alpha.19 于独立目录/fake HOME，创建合成待办、提醒、记忆各1条；`user_version=12`。
+- 升级 alpha.20（源码 `c4af1f5`）：原待办/提醒可读，新增记录成功，`user_version=12`，build-info 显示 alpha.20。
+- 回退 alpha.19（源码 `970bcbd`）：alpha.20 期间新增的记录仍可读，原提醒可读，`user_version=12`。
+- 未触碰用户 alpha.17 数据/窗口；隔离目录已清理；Gatekeeper/钥匙串/Developer ID 仍按人工/外部条件处理。

@@ -32,7 +32,7 @@
 - 专注（alpha.19 隔离包）：start→pause→resume→stop v1→v4 状态/remaining 一致；60s 完成 remaining0/v2+deliveryId；`endMusicRule=pause_user_selected_track` 完成时暂停用户选中曲目。
 - 音乐失败诊断（源码+单测）：`music_failure` 仅 provider/phase/安全错误码/upstreamStatus/traceId/耗时；实际 `buildDiagnosticExport` 对恶意额外字段脱敏、无敏感串、隐私标记 false；原生保存框文件落盘为人工步骤。
 - E5 本地闭环（隔离 API）：F06b 完成/撤销与关联提醒去留、F06c 删除保留/取消/过期确认拒绝、F07b 改期取消同 ID/版本一致、F08d 收藏/dislike/skip 区分、F09b 长度/范围失败保留内容、F01c Space/IME/切页草稿。
-- 安装/升级/回退（隔离目录+合成数据，alpha.18↔alpha.19）：install→upgrade→rollback 三步均启动成功，SQLite 12；alpha.19 新增数据在回退 alpha.18 后仍可读；未触碰用户 alpha.17。详见 [install-upgrade-rollback](2026-10-18-alpha19-install-upgrade-rollback.md)。
+- 安装/升级/回退（隔离目录+合成数据，alpha.18↔alpha.19 与 alpha.19↔alpha.20）：install→upgrade→rollback 三步均启动成功，SQLite 12；alpha.19 新增数据在回退 alpha.18 后仍可读；未触碰用户 alpha.17。详见 [install-upgrade-rollback](2026-10-18-alpha19-install-upgrade-rollback.md)。
 
 ### 原型对照
 - 五页面/设置辅助层、宽/窄窗、空/失败/长文已对照：结构整体一致；差异与明确视觉缺陷见 [原型对照](2026-10-18-alpha19-prototype-comparison.md)（含设置顶部空白“查看首次使用说明”按钮样式缺陷）。本对照不替代用户视觉验收。
