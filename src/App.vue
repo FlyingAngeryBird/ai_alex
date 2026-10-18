@@ -198,12 +198,15 @@ const itemsOpen = ref(false)
 const taskState = useTasks(window.seamoR1.tasks)
 const taskOpen = ref(false)
 const latestTaskCompletion = computed(() => taskState.completionNotices.value.at(-1) ?? null)
-function viewTaskCompletion(): void {
+async function viewTaskCompletion(): Promise<void> {
   const notice = latestTaskCompletion.value
   if (!notice) return
-  taskState.selectedId.value = notice.taskId; openTask(); taskState.dismissCompletion(notice.key)
+  taskState.selectedId.value = notice.taskId
+  await openTask()
+  if (taskOpen.value) taskState.dismissCompletion(notice.key)
 }
-function openTask(): void {
+async function openTask(): Promise<void> {
+  if (!await prepareTaskPanelLeave()) return
   closePanels()
   if (!taskState.selected.value) taskState.selectedId.value = taskState.tasks.value.at(-1)?.taskId ?? null
   taskOpen.value = true
@@ -261,7 +264,25 @@ const serviceLabel = computed(() => {
     : voice ? '文字待配置 · 实时语音已配置' : '对话服务未配置 · 前往设置'
 })
 
-function openPanel(panel: 'settings' | 'items' | 'search' | 'memory' | 'history'): void {
+async function prepareTaskPanelLeave(): Promise<boolean> {
+  if (!taskOpen.value) return true
+  try {
+    const saved = await (taskPanel.value?.flushEditing() ?? true)
+    if (!saved) { conversation.addSystemMessage('工作稿修改尚未保存，任务面板保持打开；请先保存或撤销。'); return false }
+    return true
+  } catch { conversation.addSystemMessage('任务面板暂时无法保存，请先保存或撤销修改后重试。'); return false }
+}
+async function closeTaskPanel(): Promise<void> {
+  if (!await prepareTaskPanelLeave()) return
+  taskOpen.value = false
+}
+async function leaveTaskPanel(action?: () => void): Promise<void> {
+  if (!await prepareTaskPanelLeave()) return
+  action?.()
+  closePanels()
+}
+async function openPanel(panel: 'settings' | 'items' | 'search' | 'memory' | 'history'): Promise<void> {
+  if (!await prepareTaskPanelLeave()) return
   serviceConfigurationOpen.value = false
   taskOpen.value = false
   settingsOpen.value = panel === 'settings'
@@ -271,23 +292,16 @@ function openPanel(panel: 'settings' | 'items' | 'search' | 'memory' | 'history'
   historyOpen.value = panel === 'history'
   if (panel === 'search') searchEverOpened.value = true
 }
-function openServiceSettings(field: CredentialField = 'VOLCENGINE_ARK_API_KEY'): void {
-  openPanel('settings'); serviceConfigurationField.value = field; serviceConfigurationOpen.value = true
+async function openServiceSettings(field: CredentialField = 'VOLCENGINE_ARK_API_KEY'): Promise<void> {
+  await openPanel('settings')
+  if (!settingsOpen.value) return
+  serviceConfigurationField.value = field; serviceConfigurationOpen.value = true
 }
 async function checkVoiceConfiguration(mode: VoiceMode): Promise<void> {
   try { credentialStatus.value = await checkVoiceReadiness(window.seamoR1, mode); credentialReadFailed.value = false }
   catch (error) { throw new Error(error instanceof Error && voiceConfigurationMessage(error.message) ? error.message : 'VOICE_CONFIGURATION_UNAVAILABLE') }
 }
 
-async function closeTaskPanel(): Promise<void> {
-  if (taskOpen.value) {
-    try {
-      const saved = await (taskPanel.value?.flushEditing() ?? true)
-      if (!saved) { conversation.addSystemMessage('工作稿修改尚未保存，任务面板保持打开；请先保存或撤销。'); return }
-    } catch { conversation.addSystemMessage('任务面板暂时无法关闭，请先保存或撤销修改后重试。'); return }
-  }
-  taskOpen.value = false
-}
 function closePanels(): void {
   taskOpen.value = false
   settingsOpen.value = false
@@ -890,14 +904,7 @@ async function handleKeyDown(event: KeyboardEvent): Promise<void> {
     if (itemAction.value || welcomeOpen.value) return
     if (taskOpen.value) {
       event.preventDefault()
-      void (async () => {
-        try {
-          const saved = await (taskPanel.value?.flushEditing() ?? true)
-          if (!saved) { conversation.addSystemMessage('工作稿修改尚未保存，任务面板保持打开；请先保存或撤销。'); return }
-          taskOpen.value = false
-          composer.value?.focusInput()
-        } catch { conversation.addSystemMessage('任务面板暂时无法关闭，请先保存或撤销修改后重试。') }
-      })()
+      void closeTaskPanel().then(() => { if (!taskOpen.value) composer.value?.focusInput() })
       return
     }
     if (hasDismissiblePanel({ settingsOpen: settingsOpen.value, itemsOpen: itemsOpen.value,
@@ -941,6 +948,7 @@ function handleVisibilityChange(): void { if (document.hidden) cancelPushToTalk(
 async function handleContinueTopic(topic: import('../electron/main/r1/topics').R1Topic): Promise<void> {
   nativeAutoRequested.value = false; nativeResumeGeneration = null; ++autoListenModeGeneration
   await nativeConversation.stop(); conversation.disableAutoListen(); releaseAssistantAudio()
+  if (!await prepareTaskPanelLeave()) return
   closePanels(); music.closeImmersive()
   await handleSendText(`接着「${topic.title}」聊`)
 }
@@ -1239,16 +1247,16 @@ onBeforeUnmount(() => {
 <template>
   <main class="r1-shell" :data-view="viewMode" :class="{ 'r1-has-side-panel': hasSidePanel, 'r1-has-wide-panel': searchOpen || taskOpen, 'r1-reduce-motion': reducedMotion }">
     <header class="r1-app-header">
-      <button class="r1-brand" type="button" @click="music.closeImmersive(); closePanels()"
+      <button class="r1-brand" type="button" @click="leaveTaskPanel(() => music.closeImmersive())"
         aria-label="返回 Seamo 陪伴首页"><AudioLines :size="25" /><span>Seamo <em>AI</em></span></button>
       <time>{{ currentDate }}</time>
       <div class="r1-header-right"><button v-if="taskState.tasks.value.length && !taskOpen" type="button" class="r1-header-task" @click="openTask">查看委托</button><span class="r1-mic-state"><Mic v-if="microphoneCapturing" :size="14" /><MicOff v-else :size="14" />{{ microphoneCapturing ? '正在收音' : '麦克风未开启' }}</span></div>
     </header>
     <nav class="r1-rail" aria-label="主导航">
       <button type="button" :aria-current="viewMode === 'conversation' && !hasSidePanel && !searchOpen ? 'page' : undefined"
-        aria-label="陪伴" @click="music.closeImmersive(); closePanels()"><MessageCircle :size="20" /><span>陪伴</span></button>
+        aria-label="陪伴" @click="leaveTaskPanel(() => music.closeImmersive())"><MessageCircle :size="20" /><span>陪伴</span></button>
       <button type="button" :aria-current="viewMode === 'music' ? 'page' : undefined"
-        aria-label="音乐" @click="music.openImmersive(); closePanels()"><Headphones :size="20" /><span>音乐</span></button>
+        aria-label="音乐" @click="leaveTaskPanel(() => music.openImmersive())"><Headphones :size="20" /><span>音乐</span></button>
       <i class="r1-rail-divider" />
       <button type="button" :aria-current="memoryOpen ? 'page' : undefined" aria-label="记忆"
         @click="openPanel('memory')"><Brain :size="20" /><span>记忆</span></button>
