@@ -24,20 +24,44 @@
   },
   "remote": {
     "origin": "https://github.com/FlyingAngeryBird/ai_alex.git",
-    "lastPushedCommit": "e0aed5c2ed7e7a377843d06b044e91b5950fde18",
+    "lastPushedCommit": "0e7d0a224804c12af4024cb2aee84cf1211d656d",
     "localAheadCommits": "docs/test-only commits after e0aed5c; push blocked by invalid GitHub token",
-    "pr": "https://github.com/FlyingAngeryBird/ai_alex/pull/1"
+    "pr": "https://github.com/FlyingAngeryBird/ai_alex/pull/1",
+    "pushTransport": "ssh (git@github.com) ; HTTPS gh token still invalid",
+    "prBodyUpdate": "pending valid GitHub token; code/branch already synced"
   },
   "dataPolicy": {
     "userDataDir": "~/Library/Application Support/Seamo AI R1",
     "preUpgradeSnapshot": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-17-alpha11-d5/pre-alpha11-data-20261017-2332",
-    "doesNotShip": [".env", "credentials.bin", "user database"],
+    "doesNotShip": [
+      ".env",
+      "credentials.bin",
+      "user database"
+    ],
     "oldPackagesPreserved": true
   },
   "status": {
-    "verified": ["E1 query/save/reminder/duplicate-save", "E2 memory forget/no-revive", "E2 temporary authorized save/exit cleanup", "E3 settings/data/backup/restore isolation", "isolated real-UI task recovery", "onboarding skip without mic", "narrow-window overlays"],
-    "pendingUserAcceptance": ["real voice/device/notifications", "music real playback/listen/lyrics/particles/ducking after screen unlock", "TXT/MD native save dialog", "install and rollback", "full prototype visual comparison"],
-    "externalBlocked": ["music target-track resources beyond alternate netease tracks", "Developer ID signing and notarization", "GitHub credentials renewal"],
+    "verified": [
+      "E1 query/save/reminder/duplicate-save",
+      "E2 memory forget/no-revive",
+      "E2 temporary authorized save/exit cleanup",
+      "E3 settings/data/backup/restore isolation",
+      "isolated real-UI task recovery",
+      "onboarding skip without mic",
+      "narrow-window overlays"
+    ],
+    "pendingUserAcceptance": [
+      "real voice/device/notifications",
+      "music real playback/listen/lyrics/particles/ducking after screen unlock",
+      "TXT/MD native save dialog",
+      "install and rollback",
+      "full prototype visual comparison"
+    ],
+    "externalBlocked": [
+      "music target-track resources beyond alternate netease tracks",
+      "Developer ID signing and notarization",
+      "GitHub credentials renewal"
+    ],
     "notClaimedComplete": true
   },
   "userActions": [
