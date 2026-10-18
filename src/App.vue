@@ -1183,6 +1183,8 @@ watch(() => ({ notice: reminderNotice.value ? reminderNotice.value.deliveryId ? 
 }, { flush: 'sync' })
 
 onMounted(() => {
+  void refreshLastNormalTopic()
+  window.setTimeout(() => { if (!lastNormalTopic.value && !temporaryMode.value) void refreshLastNormalTopic() }, 1000)
   stopItemAction = window.seamoR1.items.onAction(value => {
     itemAction.value = value
     itemActionBusy.value = false
