@@ -272,3 +272,9 @@
 - 专注结束音乐规则：先播放 netease《月亮代表我的心》（音量 0 静音），start(60s, endMusicRule=pause_user_selected_track, endTargetTrackKey=netease:1847408145)；60s 后 focus completed(remaining0) 且 music playState=paused（position≈66.6s）；证明用户选中曲目在专注结束时暂停。
 - 提醒错过策略（重启注入）：due 25h 前的提醒 → status=missed/deliveryStatus=missed；due 2h 前的提醒 → status=due/deliveryStatus=system_requested（按 <=24h 恢复投递），与 24h 策略一致。
 - 局限：休眠/唤醒、真实系统通知权限/勿扰中心、专注冲突/新时长、真实听感仍未验；隔离实例不称正式安装。
+
+
+## 最终交付统一（alpha.19，2026-10-18）
+- 原型对照：五页面/设置辅助层宽/窄窗、空/失败/长文已截图逐项对照，证据在 docs/r1/evidence/2026-10-18-alpha19-ui/；明确差异：首页文案/快捷入口、事项标题/分组标签、历史副标题/搜索、音乐资料库默认展开、设置真实分区 vs 原型摘录；明确视觉缺陷：设置顶部“查看首次使用说明”按钮为空白白块（样式缺陷，代码冻结未打包修复）。
+- 安装/升级/回退：独立目录+fake HOME+synthetic data 实测 alpha.18→alpha.19→回退 alpha.18，SQLite 12，数据保留；未触碰用户 alpha.17；系统 Gatekeeper/钥匙串/Developer ID 单列。
+- final-acceptance-report/manifest/install-rollback 已按 alpha.19 统一，旧结论（音乐全不可用/TXT-MD待保存/Git受阻/alpha.16全量）标注版本时点并更正；不宣称全部完成。

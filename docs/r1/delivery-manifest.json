@@ -51,28 +51,26 @@
       "narrow-window overlays",
       "E4 real playback/analyser/queue-next/pause-mute-volume; export H1 dedupe in alpha.17 (new files only)",
       "E5 isolated: F06b/F06c/F07b/F08d/F09b/F01c + Esc + mock search retry + diagnostics payload redaction",
-      "E5 packaged isolated: alpha.18 Esc/search retry/edit retention failed-save+nav; alpha.19 valid-save single-Esc close after flush re-check"
+      "E5 packaged isolated: alpha.18 Esc/search retry/edit retention failed-save+nav; alpha.19 valid-save single-Esc close after flush re-check",
+      "alpha.19 prototype comparison (five pages/settings, wide/narrow/empty/failure/long) with documented diffs",
+      "isolated install->upgrade->rollback alpha.18<->alpha.19 with synthetic data and schema 12 preservation",
+      "E5 focus completion/end-music rule; reminder DND/followup/missed-24h policy"
     ],
     "pendingUserAcceptance": [
-      "real voice/device/notifications",
-      "music real playback/listen/lyrics/particles/ducking after screen unlock",
-      "TXT/MD native save dialog",
-      "install and rollback",
-      "full prototype visual comparison",
-      "real user-voice listen-and-chat; particle/listening visual feedback; native diagnostics save-file step",
-      "native diagnostics save dialog file step (manual); real user-voice listen-and-chat; A/V human/system scenarios"
+      "real user-voice listen-and-chat; particle/listening visual confirmation; system notification/microphone permissions; full A/V and full-page visual acceptance",
+      "native diagnostics save dialog (manual step only)",
+      "Developer ID signing/notarization and formal install/rollback acceptance"
     ],
     "externalBlocked": [
-      "music target-track resources beyond verified netease tracks",
-      "Developer ID signing and notarization",
-      "keychain authorization for model/TTS/real voice 边听边聊"
+      "Developer ID signing/notarization",
+      "real music sources beyond verified netease tracks and remaining target tracks"
     ],
     "notClaimedComplete": true
   },
   "userActions": [
-    "If the system keychain prompt appears: enter macOS login password and choose Allow/Always Allow for Seamo AI R1 Safe Storage, then tell me; do not refill keys",
-    "Confirm whether music/particles were actually seen/heard; user voice 边听边聊 listening step after keychain authorization",
-    "Run gh auth login if PR description text should be updated (code already pushed via SSH)",
-    "Install/rollback acceptance and Developer ID signing conditions if required"
+    "Unlock login keychain (Keychain Access) and click 重新读取服务配置 once in Settings; then enable real voice listen-and-chat verification",
+    "Confirm music audibility/lyrics/particles subjectively (do not ask for another automated pass)",
+    "Open Settings → 数据与诊断 → 导出诊断, then click 保存 in the system dialog and verify no chat/keys/audio",
+    "Provide Developer ID/notarization conditions and perform formal install/rollback acceptance if required"
   ]
 }
