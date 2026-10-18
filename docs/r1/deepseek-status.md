@@ -239,3 +239,4 @@
 - 已接入 `r1.music.search` 失败路径，以及 `r1.music.control`/`r1.music.exit` 失败；诊断写入失败不影响原操作结果。
 - `diagnosticExport.ts` 新增 `musicFailures`，导出前二次净化：丢弃额外字段、跳过非法 traceId/时长，隐私标记新增 `searchQueriesIncluded:false`、`upstreamPayloadsIncluded:false`。
 - 验证：`r1MusicIpc` 4 项（含含敏感串的搜索失败、已知安全码、恶意 event payload 脱敏）与 `r1DataManagement` 7 项通过；typecheck 通过。真实诊断导出需集成包验证（当前窗口 alpha.17 不含此源码，不为此打包/重启）。
+- 导航补充（源码）：任务面板 Escape 关闭前先 flushEditing，未保存则保持打开并提示；侧栏/搜索面板 Escape 已关闭并回焦输入框。当前窗口 alpha.17 不含该源码，集成包再实测。

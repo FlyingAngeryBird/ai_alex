@@ -879,6 +879,18 @@ async function handleKeyDown(event: KeyboardEvent): Promise<void> {
   if (memoryConfirmation.value) return
   if (event.key === 'Escape') {
     if (itemAction.value || welcomeOpen.value) return
+    if (taskOpen.value) {
+      event.preventDefault()
+      void (async () => {
+        try {
+          const saved = await (taskPanel.value?.flushEditing() ?? true)
+          if (!saved) { conversation.addSystemMessage('工作稿修改尚未保存，任务面板保持打开；请先保存或撤销。'); return }
+          taskOpen.value = false
+          composer.value?.focusInput()
+        } catch { conversation.addSystemMessage('任务面板暂时无法关闭，请先保存或撤销修改后重试。') }
+      })()
+      return
+    }
     if (hasDismissiblePanel({ settingsOpen: settingsOpen.value, itemsOpen: itemsOpen.value,
       memoryOpen: memoryOpen.value, historyOpen: historyOpen.value, searchOpen: searchOpen.value })) {
       event.preventDefault()
