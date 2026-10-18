@@ -160,3 +160,4 @@
 - 有界真实检查（仅元数据/URL，不下载不播放）：netease 对备用曲目“月亮代表我的心（邓丽君）”“Yesterday (Remastered)（The Beatles）”均命中原艺人/曲名候选并解析出 audioUrl，HEAD 返回 200 audio/mpeg（约 8.36MB / 4.95MB），封面可用、LRC 分别 34/20 行；joox 对“Yesterday”资源不可用（此前 503），joox 搜索中仍有“告白氣球/周杰倫”等精确候选，未将其冒充为原曲；kuwo 仍服务端不支持；netease 对“晴天/周杰伦”原版仍无精确候选。结论修正：**不是所有音乐都不可用**，之前阻塞是曲目/来源特定；不静默替换点名歌曲，未新增供应商。
 - 代码核对（无新缺口）：`useMusic` 仅在 `audio.play()` 成功后把状态置 playing（实际音频决定播放）；歌词位置由 timeupdate 的 `audio.currentTime` 更新；`MusicDucking` 的 base 音量与语音衰减 factor 分离，用户在降音期间改音量/静音会作用于最新 base，恢复不会复活用户暂停或旧音量；粒子分析用 AnalyserNode 真音频，分析失败才降级。相关单元/流程测试在 D4/此前批次已覆盖，本批未重跑已通过段。
 - 未完成/环境阻塞：当前 Mac 屏幕已锁定/熄灭，无法操作真实音乐视图或进行真实音频/歌词/粒子/边听边聊听测（且不希望在无人时出声）。需用户解锁后允许一次短时本地播放验证（可低音量/音量0）。
+- E4 环境限制补充：显示器已关闭/锁定时，真实窗口的 `<Transition mode="out-in">` 离开过渡不结束，音乐视图不挂载（DOM 中 conversation 停在 view-fade-leave-active）；这是隐藏窗口 rAF/过渡时钟停摆的环境现象，不是产品缺陷。已尝试 reducedMotion 与强制 transitionend 均不能替代真实窗口；合成 reducedMotion 已还原为 false(v5)。真实音乐播放/歌词/粒子/降音/边听边聊需等用户解锁屏幕后验证，届时可低音量或音量0进行。
