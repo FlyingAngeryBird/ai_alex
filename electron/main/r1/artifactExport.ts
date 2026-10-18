@@ -10,6 +10,14 @@ export type ArtifactExportOptions = {
   /** Trusted check re-run after the native dialog and immediately before writing. */
   assertCurrent?: () => void
 }
+export function artifactExportContent(title: string, content: string, format: 'txt' | 'md'): string {
+  const firstNonEmptyLine = content.split(/\r?\n/).find(line => line.trim() !== '')
+  const heading = firstNonEmptyLine?.match(/^#\s+(.+?)\s*$/)
+  // Keep a body that already starts with the same H1; never duplicate the title for txt/md.
+  if (heading && heading[1].trim() === title.trim()) return content.endsWith('\n') ? content : `${content}\n`
+  return `${format === 'md' ? '# ' : ''}${title}\n\n${content}\n`
+}
+
 export async function exportArtifact(artifacts: R1Artifacts, input: ArtifactExportInput,
   owner: () => string | null, choose: (name: string, extension: string) => Promise<string | null>,
   options: ArtifactExportOptions = {}) {
@@ -27,7 +35,7 @@ export async function exportArtifact(artifacts: R1Artifacts, input: ArtifactExpo
   const current = artifacts.get(input.artifactId, scope)
   if (current.version !== snapshot.version) throw new Error('VERSION_CONFLICT')
   assertCurrent()
-  const content = input.format === 'md' ? `# ${snapshot.title}\n\n${snapshot.content}\n` : `${snapshot.title}\n\n${snapshot.content}\n`
+  const content = artifactExportContent(snapshot.title, snapshot.content, input.format)
   await writeFile(path, content, { encoding: 'utf8', mode: 0o600 })
   if (!options.db) return { cancelled: false as const, artifactId: snapshot.artifactId, version: snapshot.version, path }
   const data = { path, format: input.format, itemVersions: [] as { itemId: string; version: number }[],

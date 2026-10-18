@@ -49,3 +49,26 @@ it('exports real SQLite revisions, rejects a concurrent revision and preserves t
     expect(artifacts.get(first.artifactId)).toMatchObject({ version: 2, content: '第二版🙂' })
   } finally { db.close(); await rm(directory, { recursive: true }) }
 })
+
+it('does not duplicate an existing leading H1 that equals the artifact title for txt and md', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'r1-export-h1-'))
+  const body = '# 出门前检查清单\n\n- 钥匙：带好。\n- 手机：带好。\n'
+  const artifacts = { get: () => ({ artifactId: 'a', version: 4, title: '出门前检查清单', content: body }) } as unknown as R1Artifacts
+  try {
+    for (const format of ['txt', 'md'] as const) {
+      const path = join(folder, `plain.${format}`)
+      await exportArtifact(artifacts, { artifactId: 'a', expectedVersion: 4, format }, () => null, async () => path)
+      expect(await readFile(path, 'utf8')).toBe(body)
+    }
+    const artifactsWithLeadingBlank = { get: () => ({ artifactId: 'b', version: 1, title: '稿件', content: '\n\n# 稿件\n\n正文\n' }) } as unknown as R1Artifacts
+    const path = join(folder, 'leading.txt')
+    await exportArtifact(artifactsWithLeadingBlank, { artifactId: 'b', expectedVersion: 1, format: 'txt' }, () => null, async () => path)
+    expect(await readFile(path, 'utf8')).toBe('\n\n# 稿件\n\n正文\n')
+    const different = { get: () => ({ artifactId: 'c', version: 1, title: '标题A', content: '# 标题B\n\n正文' }) } as unknown as R1Artifacts
+    const txt = join(folder, 'different.txt'); const md = join(folder, 'different.md')
+    await exportArtifact(different, { artifactId: 'c', expectedVersion: 1, format: 'txt' }, () => null, async () => txt)
+    await exportArtifact(different, { artifactId: 'c', expectedVersion: 1, format: 'md' }, () => null, async () => md)
+    expect(await readFile(txt, 'utf8')).toBe('标题A\n\n# 标题B\n\n正文\n')
+    expect(await readFile(md, 'utf8')).toBe('# 标题A\n\n# 标题B\n\n正文\n')
+  } finally { await rm(folder, { recursive: true }) }
+})
