@@ -4,16 +4,17 @@
   "branch": "codex/seamo-r1",
   "generatedAt": "2026-10-18T21:00:00+08:00",
   "candidate": {
-    "appVersion": "1.0.0-alpha.20",
+    "appVersion": "1.0.0-alpha.21",
     "bundleId": "com.seamo.ai.r1",
-    "sourceCommit": "c4af1f59b1fdae12735d0cbe0e14b06ac93d5d42",
-    "packageDir": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-18-alpha20-r1-align",
-    "zip": "Seamo-AI-R1-1.0.0-alpha.20-mac-arm64.zip",
-    "zipBytes": 148709251,
-    "zipSha256": "230b9e9c5813c62e64eee96787fafb6fac5cd51d3aacce60940d88c41712e955",
+    "sourceCommit": "4221ac9f2db343ae288f1badb4c567f21b6d51d8",
+    "packageDir": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-19-alpha21-e6",
+    "zip": "Seamo-AI-R1-1.0.0-alpha.21-mac-arm64.zip",
+    "zipBytes": 148709464,
+    "zipSha256": "2d4dbff978a2e18151ff01b6c85f5df9eb5dfc5b05fee7b1219584877df8f88a",
     "signing": "local-ad-hoc",
     "notarized": false,
-    "forbiddenFilesFound": false
+    "forbiddenFilesFound": false,
+    "assetReleaseId": "seamo-ai-r1-agent-assets-3.5.8"
   },
   "versions": {
     "assetRelease": "seamo-ai-r1-agent-assets-3.5.7",
@@ -56,7 +57,9 @@
       "isolated install->upgrade->rollback alpha.18<->alpha.19 with synthetic data and schema 12 preservation",
       "E5 focus completion/end-music rule; reminder DND/followup/missed-24h policy",
       "alpha.20 prototype alignment batch (home/music/items/memory/history/settings) with populated-history comparison",
-      "alpha.19<->alpha.20 isolated install/upgrade/rollback with synthetic data preserved"
+      "alpha.19<->alpha.20 isolated install/upgrade/rollback with synthetic data preserved",
+      "E6 real Ark set: F02b persona 3/3, F04b automatic-memory 7/7 + sensitive confirmation 2/2, F04c recall/ambiguity 5/5, F09a discussion/edit 2/2",
+      "serialized-null and ARK length-reason confirmed fixes with tests; full 107 files/688 tests"
     ],
     "pendingUserAcceptance": [
       "real user-voice listen-and-chat; particle/listening visual confirmation; system notification/microphone permissions; full A/V and full-page visual acceptance",

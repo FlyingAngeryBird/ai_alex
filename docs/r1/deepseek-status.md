@@ -286,3 +286,5 @@
 - 包：alpha.20 源码 c4af1f5，ZIP 148,709,251 字节，SHA256 230b9e9c…；alpha.19 保留；用户 alpha.17 未替换/重启。
 
 - alpha.20 快捷动作补证：三个动作真实发送用户文本（“今天有点累…/帮我查查周末安静的去处/帮我整理一下产品方案的思路”），未配置服务均返回 ARK_NOT_CONFIGURED；真实普通历史上次话题按钮可点击并真实发送“接着「…」聊”。仅隔离实例，无真实凭据。
+
+- E6 小真实模型集（2026-10-19，资产3.5.8）：F02b 3/3、F04b 自动提取7/7+敏感确认2/2、F04c 单话题3/3+歧义2/2、F09a 讨论1/1+显式改稿1/1。确认修复：memory_recall category 字符串"null"、memory_remember/update validUntil 字符串"null"、ARK incomplete reason=length 分类；未扩大权限/预算。真实集使用现有项目环境凭据的正常读取，未输出/复制密钥；alpha.17 设置UI钥匙串仍不可用，真实语音未验证。证据 docs/r1/evidence/2026-10-19-e6/。
