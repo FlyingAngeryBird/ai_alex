@@ -26,3 +26,6 @@
 - 原生诊断保存框：设置→数据与诊断→导出诊断→系统框默认 `Seamo-R1-diagnostics.json`→点“保存”；核对文件不含聊天/密钥/音频。该步骤为人工，不代点/不向其他应用发按键。
 - 钥匙串、Gatekeeper、系统通知/麦克风权限均为用户/系统步骤；不代输密码、不改 ACL、不删 vault/重填 Key。
 - Developer ID 签名与公证、正式安装包下载与系统级卸载验收为独立外部条件，不由本机隔离验证覆盖。
+
+## alpha.20↔alpha.21（E6 追加）
+- 隔离目录/fake HOME/合成数据：alpha.20→alpha.21 原数据保留+新写入成功，SQLite 12；回退 alpha.20 后 alpha.21 新增记录仍可读，SQLite 12。alpha.20 保留；未触碰用户 alpha.17。
