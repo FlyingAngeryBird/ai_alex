@@ -4,13 +4,13 @@
   "branch": "codex/seamo-r1",
   "generatedAt": "2026-10-18T21:00:00+08:00",
   "candidate": {
-    "appVersion": "1.0.0-alpha.22",
+    "appVersion": "1.0.0-alpha.23",
     "bundleId": "com.seamo.ai.r1",
-    "sourceCommit": "5b291b92a89579c99bf6e0e7b85fd7a5678445eb",
-    "packageDir": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-19-alpha22-f04a",
-    "zip": "Seamo-AI-R1-1.0.0-alpha.22-mac-arm64.zip",
-    "zipBytes": 148712396,
-    "zipSha256": "b9d9681a6cccc81ae8c8c51f93a33a97f758130bd6640e740546fdc897ccf5ec",
+    "sourceCommit": "c4a390dd53208063a8291707c703ccbc0b9b5aad",
+    "packageDir": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-19-alpha23-e8",
+    "zip": "Seamo-AI-R1-1.0.0-alpha.23-mac-arm64.zip",
+    "zipBytes": 148713656,
+    "zipSha256": "920c0b00daeeabed81fc597791290c7c4325112bf8d6fe6a3ef7a506b709fb9b",
     "signing": "local-ad-hoc",
     "notarized": false,
     "forbiddenFilesFound": false,
@@ -60,7 +60,8 @@
       "alpha.19<->alpha.20 isolated install/upgrade/rollback with synthetic data preserved",
       "E6 real Ark set: F02b persona 3/3, F04b automatic-memory 7/7 + sensitive confirmation 2/2, F04c recall/ambiguity 5/5, F09a discussion/edit 2/2",
       "serialized-null and ARK length-reason confirmed fixes with tests; full 107 files/688 tests",
-      "F04a fixed 20-case set run5 18/20 (90%) after retrieval/routing fixes; original dataset/scoring preserved; failed runs retained"
+      "F04a fixed 20-case set run5 18/20 (90%) after retrieval/routing fixes; original dataset/scoring preserved; failed runs retained",
+      "E8 credential failure classification/recover path targeted tests; non-model focus conflict/new duration, in-app reminder delivery, device status, diagnostic summary"
     ],
     "pendingUserAcceptance": [
       "real user-voice listen-and-chat; particle/listening visual confirmation; system notification/microphone permissions; full A/V and full-page visual acceptance",

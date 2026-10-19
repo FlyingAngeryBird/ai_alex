@@ -92,3 +92,7 @@ alpha.2最终开发预览标签`r1-preview-1.0.0-alpha.2-build2`指向`9017bf8`�
 - 源码 `5b291b9`：保留否定偏好检索、避开/忌口→不喜欢规范化；PR01/PR03/SK01/SK05 memory-first 规则；资产 3.5.9、PR03 2.2.5；模型/预算/固定集/scoring 未改。
 - F04a 20 例固定集：run1 14/20、run2 13/20、run4 17/20、run5 18/20（90%，通过）；失败样本与分类保留在 evidence/2026-10-19-e6/f04a-classification.md。
 - 包：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-19-alpha22-f04a/`；ZIP 148,712,396 字节，SHA256 `b9d9681a6cccc81ae8c8c51f93a33a97f758130bd6640e740546fdc897ccf5ec`；SQLite12、ad-hoc、未公证、无凭据/用户库。
+
+## 1.0.0-alpha.23（E8 配置恢复/本机功能候选，2026-10-19）
+- 源码 `c4a390d`：凭据读取失败分类、准确恢复提示、显式 recover（旧加密文件保留备份，不删除/不改 ACL/无明文）；资产3.5.9。
+- 包：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-19-alpha23-e8/`；ZIP 148,713,656字节，SHA256 `920c0b00daeeabed81fc597791290c7c4325112bf8d6fe6a3ef7a506b709fb9b`；SQLite12、ad-hoc、未公证、无凭据/用户库。alpha.22实际App与旧包保留。

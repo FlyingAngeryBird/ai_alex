@@ -1,10 +1,10 @@
-# Seamo AI R1 内部候选安装/升级/回退（alpha.22）
+# Seamo AI R1 内部候选安装/升级/回退（alpha.23）
 
 ## 包信息
-- 最终候选：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-19-alpha22-f04a/`
-  - `Seamo AI R1.app`；ZIP `Seamo-AI-R1-1.0.0-alpha.22-mac-arm64.zip`（148,712,396 字节）
-  - SHA256 `b9d9681a6cccc81ae8c8c51f93a33a97f758130bd6640e740546fdc897ccf5ec`
-  - 源码 `5b291b9`；资产 3.5.9、工具 schema 3.2.1、SQLite 12、bundle `com.seamo.ai.r1`
+- 最终候选：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-19-alpha23-e8/`
+  - `Seamo AI R1.app`；ZIP `Seamo-AI-R1-1.0.0-alpha.23-mac-arm64.zip`（148,713,656 字节）
+  - SHA256 `920c0b00daeeabed81fc597791290c7c4325112bf8d6fe6a3ef7a506b709fb9b`
+  - 源码 `c4a390d`；资产 3.5.9、工具 schema 3.2.1、SQLite 12、bundle `com.seamo.ai.r1`
   - 本机 ad-hoc 签名，**未 Developer ID、未公证**；包内无 `.env`/凭据/用户库
 - 保留历史包：alpha.18（`ebbc613`，SHA `898ac18d…`）、alpha.17（`6a0f482`，SHA `c746ee08…`）、alpha.16（`164b354`，SHA `1530c8fd…`），均未替换用户 alpha.17 窗口。
 
