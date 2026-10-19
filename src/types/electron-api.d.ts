@@ -49,6 +49,7 @@ export type LingliChannel =
   | 'r1.reminders.cancel'
   | 'r1.credentials.status'
   | 'r1.credentials.save'
+  | 'r1.credentials.recover'
   | 'r1.search.web'
   | 'r1.search.open'
   | 'tts.speak'

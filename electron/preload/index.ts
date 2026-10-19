@@ -87,6 +87,7 @@ export const exposedChannels = [
   'r1.reminders.cancel',
   'r1.credentials.status',
   'r1.credentials.save',
+  'r1.credentials.recover',
   'r1.services.check',
   'r1.services.cancel',
   'r1.search.web',
@@ -313,7 +314,8 @@ function exposeLingliApi(
     },
     credentials: {
       status: () => invokeR1('r1.credentials.status'),
-      save: (patch) => invokeR1('r1.credentials.save', patch)
+      save: (patch) => invokeR1('r1.credentials.save', patch),
+      recover: (patch) => invokeR1('r1.credentials.recover', patch)
     },
     services: {
       check: (input) => invokeR1('r1.services.check', input),

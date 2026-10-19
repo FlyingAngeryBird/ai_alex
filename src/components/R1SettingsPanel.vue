@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { X } from 'lucide-vue-next'
 import type { AutomaticMemoryState } from '../../electron/main/r1/automaticMemory'
 import type { MemoryPolicy } from '../../electron/main/r1/memoryPolicy'
@@ -115,6 +115,10 @@ const credentialInputs = reactive<Partial<Record<CredentialField, string>>>({})
 const credentialStatus = ref<CredentialStatus | null>(null)
 const credentialLoading = ref(false)
 const credentialFailureCode = ref('')
+const recoveryArmed = ref(false)
+const recoveryAvailable = computed(() => Boolean(!credentialStatus.value && credentialFailureCode.value &&
+  ['CREDENTIAL_DECRYPT_FAILED', 'CREDENTIAL_FILE_INVALID', 'CREDENTIAL_LOAD_FAILED'].includes(credentialFailureCode.value) &&
+  credentialFields.some(field => Boolean(credentialInputs[field.key]?.trim()))))
 let credentialRetryTimer: number | null = null
 let credentialRetryCount = 0
 const checks = reactive<Partial<Record<ServiceCheckTarget, ServiceCheckReport>>>({})
@@ -226,6 +230,35 @@ async function savePersona(): Promise<void> {
   } finally {
     busy.value = false
   }
+}
+
+async function recoverCredentials(): Promise<void> {
+  if (busy.value) return
+  const patch: CredentialPatch = {}
+  for (const field of credentialFields) {
+    const value = credentialInputs[field.key]?.trim()
+    if (value) patch[field.key] = value
+  }
+  if (!Object.keys(patch).length) { message.value = '请先填写要重建的服务配置。'; return }
+  busy.value = true
+  try {
+    const result = await window.seamoR1.credentials.recover(patch)
+    if (!result.ok) {
+      message.value = result.error.code === 'SYSTEM_SECRET_STORAGE_UNAVAILABLE'
+        ? '系统安全存储仍不可用，暂时无法重建配置；旧加密文件保留，未删除。请先恢复系统钥匙串访问后再试。'
+        : '重建未完成；旧加密文件保留，未删除。请重试或联系维护者。'
+      return
+    }
+    credentialStatus.value = result.data
+    credentialFailureCode.value = ''
+    recoveryArmed.value = false
+    for (const field of credentialFields) credentialInputs[field.key] = ''
+    emit('credentialsChanged', result.data)
+    invalidateChecks()
+    message.value = '新的加密配置已保存；无法读取的旧加密文件已保留为备份，未删除。'
+  } catch {
+    message.value = '重建未完成；旧加密文件保留，未删除。请重试或联系维护者。'
+  } finally { busy.value = false }
 }
 
 async function saveCredentials(): Promise<void> {
@@ -355,6 +388,13 @@ async function clearCredential(field: CredentialField): Promise<void> {
         <p v-if="!credentialStatus" role="status">服务配置{{ credentialLoading ? '读取中…' : '暂时不可读；已保存文件保留' }}</p>
         <button v-if="!credentialStatus" type="button" :disabled="credentialLoading || busy" @click="refreshCredentials">{{ credentialLoading ? '读取中…' : '重新读取服务配置' }}</button>
         <p v-if="!credentialStatus && credentialFailureCode" role="status">读取失败阶段：{{ credentialFailureCode === 'SYSTEM_SECRET_STORAGE_UNAVAILABLE' ? '系统安全存储不可用' : credentialFailureCode === 'CREDENTIAL_DECRYPT_FAILED' ? '加密配置无法解密' : credentialFailureCode === 'CREDENTIAL_FILE_INVALID' ? '加密配置文件格式无效' : '配置读取失败' }}。加密文件与数据已保留。</p>
+        <p v-if="!credentialStatus && recoveryAvailable && !recoveryArmed" class="r1-settings-hint">如果旧配置无法恢复，可在下方“模型与语音服务配置”中填写新值后重建本机加密配置；旧加密文件会保留为备份，不会删除或修改钥匙串 ACL。</p>
+        <button v-if="!credentialStatus && recoveryAvailable && !recoveryArmed" type="button" :disabled="busy" @click="recoveryArmed = true">用新填写内容重建加密配置</button>
+        <div v-if="recoveryArmed" role="alertdialog" aria-label="确认重建加密配置" class="r1-settings-recovery-confirm">
+          <p>将用你填写的新值创建一个新的加密配置。当前无法读取的旧加密文件会保留为备份，不会删除、重置或修改 ACL。</p>
+          <button type="button" :disabled="busy" @click="recoveryArmed = false">取消</button>
+          <button type="button" :disabled="busy" @click="recoverCredentials">确认重建</button>
+        </div>
         <p v-if="credentialStatus">对话模型：{{ credentialStatus.VOLCENGINE_ARK_API_KEY && credentialStatus.VOLCENGINE_ARK_MODEL ? '密钥与模型已填写，实际连接待请求验证' : '未配置' }}</p>
         <p v-if="credentialStatus">原生实时对话 3.0：{{ credentialStatus.VOLCENGINE_REALTIME_API_KEY && (persona?.voiceId || credentialStatus.VOLCENGINE_REALTIME_VOICE) ? '密钥与音色已填写，实际连接待请求验证' : '未配置完整：需要密钥与音色' }}</p>
         <div class="r1-settings-check"><button type="button" :disabled="busy || !!checking" @click="checkService('ark')">{{ checking === 'ark' ? '检测中…' : '检测对话模型' }}</button><span role="status">{{ checkLabel(checks.ark) }}</span></div>

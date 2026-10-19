@@ -141,6 +141,23 @@ describe('R1 encrypted credential vault', () => {
     expect(readFileSync(path)).toEqual(before)
     expect(() => vault.save({ VOLCENGINE_ARK_MODEL: 'x' })).toThrow('CREDENTIAL_DECRYPT_FAILED')
   })
+  it('explicitly re-encrypts after an unreadable vault while preserving the old encrypted file as backup', () => {
+    const path = makePath()
+    new CredentialVault(path, storage).save({ VOLCENGINE_ARK_API_KEY: 'old-secret' })
+    const oldBytes = readFileSync(path)
+    const broken = new CredentialVault(path, { ...storage, decryptString() { throw new Error('auth denied') } })
+    expect(() => broken.load()).toThrow('CREDENTIAL_DECRYPT_FAILED')
+    expect(broken.recover({ VOLCENGINE_ARK_MODEL: 'new-model' })).toMatchObject({ VOLCENGINE_ARK_MODEL: true, VOLCENGINE_ARK_API_KEY: false })
+    expect(readFileSync(path).toString()).not.toContain('new-model')
+    expect(readFileSync(path)).not.toEqual(oldBytes)
+    expect(() => readFileSync(`${path}.recovered-`)).toThrow()
+    const backups = require('node:fs').readdirSync(require('node:path').dirname(path)).filter((name: string) => name.endsWith('.bak'))
+    expect(backups).toHaveLength(1)
+    expect(readFileSync(join(require('node:path').dirname(path), backups[0]))).toEqual(oldBytes)
+    delete process.env.VOLCENGINE_ARK_MODEL
+    expect(new CredentialVault(path, storage).load()).toMatchObject({ VOLCENGINE_ARK_MODEL: true, VOLCENGINE_ARK_API_KEY: false })
+    expect(() => broken.recover({ VOLCENGINE_ARK_API_KEY: 'again' })).toThrow('CREDENTIAL_RECOVERY_NOT_REQUIRED')
+  })
   it('returns an unavailable IPC result and retries the preserved vault after the system is unlocked', () => {
     const path = makePath()
     new CredentialVault(path, storage).save({ VOLCENGINE_REALTIME_API_KEY: 'test-native' })

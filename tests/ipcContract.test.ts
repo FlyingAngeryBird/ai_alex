@@ -90,6 +90,7 @@ describe('IPC contract', () => {
       'r1.reminders.cancel',
       'r1.credentials.status',
       'r1.credentials.save',
+      'r1.credentials.recover',
       'r1.services.check',
       'r1.services.cancel',
       'r1.search.web',

@@ -83,20 +83,7 @@ export class CredentialVault {
     if (this.loadFailure) this.load()
     if (!this.storage.isEncryptionAvailable()) throw new Error('SYSTEM_SECRET_STORAGE_UNAVAILABLE')
     if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('INVALID_CREDENTIAL_PATCH')
-    const next = { ...this.values }
-    for (const [field, value] of Object.entries(patch)) {
-      if (!CREDENTIAL_FIELDS.includes(field as CredentialField)) throw new Error('CREDENTIAL_FIELD_NOT_ALLOWED')
-      if (value === null) {
-        delete next[field as CredentialField]
-      } else if (typeof value === 'string' && value.trim() && value.length <= 1000 && !/[\r\n\x00]/.test(value)) {
-        if (field === 'VOLCENGINE_REALTIME_VOICE' && !/^[A-Za-z0-9_.-]{1,200}$/.test(value.trim())) {
-          throw new Error('INVALID_REALTIME_VOICE')
-        }
-        next[field as CredentialField] = value.trim()
-      } else {
-        throw new Error('INVALID_CREDENTIAL_VALUE')
-      }
-    }
+    const next = this.validatePatch(this.values, patch)
     const encrypted = this.storage.encryptString(JSON.stringify(next))
     mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 })
     const temporaryPath = `${this.path}.tmp`
@@ -110,6 +97,50 @@ export class CredentialVault {
     }
     this.applyToRuntime()
     return this.status()
+  }
+
+  /** Explicit recovery after an unreadable vault: preserve the old encrypted file as a backup,
+   * then write a new vault from the user's newly entered values. No old plaintext is needed. */
+  recover(patch: CredentialPatch): CredentialStatus {
+    if (!this.loadFailure) throw new Error('CREDENTIAL_RECOVERY_NOT_REQUIRED')
+    if (!this.storage.isEncryptionAvailable()) throw new Error('SYSTEM_SECRET_STORAGE_UNAVAILABLE')
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch) || !Object.keys(patch).length) throw new Error('INVALID_CREDENTIAL_PATCH')
+    const next = this.validatePatch({}, patch)
+    const backupPath = `${this.path}.recovered-${new Date().toISOString().replace(/[:.]/g, '-')}.bak`
+    let moved = false
+    try {
+      if (existsSync(this.path)) { renameSync(this.path, backupPath); moved = true }
+      const encrypted = this.storage.encryptString(JSON.stringify(next))
+      mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 })
+      const temporaryPath = `${this.path}.tmp`
+      writeFileSync(temporaryPath, encrypted, { mode: 0o600 })
+      renameSync(temporaryPath, this.path)
+    } catch (error) {
+      if (moved) { try { renameSync(backupPath, this.path) } catch { /* leave backup as the only intact copy */ } }
+      throw error
+    }
+    this.values = next
+    this.loadFailure = null
+    this.currentRevision++
+    for (const field of CREDENTIAL_FIELDS) { if (next[field]) process.env[field] = next[field]; else delete process.env[field] }
+    this.applyToRuntime()
+    this.loading = false
+    return this.status()
+  }
+
+  private validatePatch(base: Partial<Record<CredentialField, string>>, patch: CredentialPatch): Partial<Record<CredentialField, string>> {
+    const next = { ...base }
+    for (const [field, value] of Object.entries(patch)) {
+      if (!CREDENTIAL_FIELDS.includes(field as CredentialField)) throw new Error('CREDENTIAL_FIELD_NOT_ALLOWED')
+      if (value === null) delete next[field as CredentialField]
+      else if (typeof value === 'string' && value.trim() && value.length <= 1000 && !/[\r\n\x00]/.test(value)) {
+        if (field === 'VOLCENGINE_REALTIME_VOICE' && !/^[A-Za-z0-9_.-]{1,200}$/.test(value.trim())) {
+          throw new Error('INVALID_REALTIME_VOICE')
+        }
+        next[field as CredentialField] = value.trim()
+      } else throw new Error('INVALID_CREDENTIAL_VALUE')
+    }
+    return next
   }
 
   private applyToRuntime(): void {

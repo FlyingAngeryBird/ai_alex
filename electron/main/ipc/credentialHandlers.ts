@@ -7,7 +7,7 @@ type IpcMainLike = {
 
 export function registerCredentialHandlers(vault: CredentialVault, ipc: IpcMainLike = ipcMain): void {
   const failed = (error: unknown) => {
-    const allowed = ['SYSTEM_SECRET_STORAGE_UNAVAILABLE', 'CREDENTIAL_DECRYPT_FAILED', 'CREDENTIAL_FILE_INVALID', 'CREDENTIAL_LOAD_FAILED', 'CREDENTIAL_LOAD_PENDING', 'INVALID_CREDENTIAL_PATCH',
+    const allowed = ['SYSTEM_SECRET_STORAGE_UNAVAILABLE', 'CREDENTIAL_DECRYPT_FAILED', 'CREDENTIAL_FILE_INVALID', 'CREDENTIAL_LOAD_FAILED', 'CREDENTIAL_LOAD_PENDING', 'CREDENTIAL_RECOVERY_NOT_REQUIRED', 'INVALID_CREDENTIAL_PATCH',
       'CREDENTIAL_FIELD_NOT_ALLOWED', 'INVALID_CREDENTIAL_VALUE', 'INVALID_REALTIME_VOICE']
     const code = error instanceof Error && allowed.includes(error.message) ? error.message : 'CREDENTIAL_SAVE_FAILED'
     return { ok: false, error: { code, message: code } }
@@ -19,6 +19,13 @@ export function registerCredentialHandlers(vault: CredentialVault, ipc: IpcMainL
   ipc.handle('r1.credentials.save', (_event, payload) => {
     try {
       return { ok: true, data: vault.save(payload as CredentialPatch) }
+    } catch (error) {
+      return failed(error)
+    }
+  })
+  ipc.handle('r1.credentials.recover', (_event, payload) => {
+    try {
+      return { ok: true, data: vault.recover(payload as CredentialPatch) }
     } catch (error) {
       return failed(error)
     }
