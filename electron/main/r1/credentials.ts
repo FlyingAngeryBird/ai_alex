@@ -59,8 +59,9 @@ export class CredentialVault {
       this.loading = false
       return this.status()
     } catch (error) {
-      this.loadFailure = error instanceof Error && error.message === 'SYSTEM_SECRET_STORAGE_UNAVAILABLE'
-        ? 'SYSTEM_SECRET_STORAGE_UNAVAILABLE' : 'CREDENTIAL_LOAD_FAILED'
+      const message = error instanceof Error ? error.message : ''
+      this.loadFailure = message === 'SYSTEM_SECRET_STORAGE_UNAVAILABLE' ? 'SYSTEM_SECRET_STORAGE_UNAVAILABLE'
+        : message === 'CREDENTIAL_FILE_INVALID' ? 'CREDENTIAL_FILE_INVALID' : 'CREDENTIAL_DECRYPT_FAILED'
       this.values = {}
       for (const field of CREDENTIAL_FIELDS) delete process.env[field]
       this.currentRevision++

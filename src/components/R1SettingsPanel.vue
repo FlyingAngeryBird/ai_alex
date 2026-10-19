@@ -114,6 +114,7 @@ const credentialFields: { key: CredentialField; label: string; secret: boolean }
 const credentialInputs = reactive<Partial<Record<CredentialField, string>>>({})
 const credentialStatus = ref<CredentialStatus | null>(null)
 const credentialLoading = ref(false)
+const credentialFailureCode = ref('')
 let credentialRetryTimer: number | null = null
 let credentialRetryCount = 0
 const checks = reactive<Partial<Record<ServiceCheckTarget, ServiceCheckReport>>>({})
@@ -182,9 +183,17 @@ async function refreshCredentials(): Promise<void> {
       if (credentialRetryCount <= 3) {
         credentialRetryTimer = window.setTimeout(() => { credentialRetryTimer = null; if (!disposed) void refreshCredentials() }, 1000)
       }
-    } else { credentialStatus.value = null; message.value = result.error.code === 'SYSTEM_SECRET_STORAGE_UNAVAILABLE'
-      ? '系统钥匙串暂时不可用。请手动解锁 login 钥匙串后重试；已保存的加密配置保留。'
-      : '服务配置暂时无法解密。加密文件保留，未覆盖；请检查系统安全存储后重试。' }
+    } else {
+      credentialStatus.value = null
+      credentialFailureCode.value = result.error.code
+      message.value = result.error.code === 'SYSTEM_SECRET_STORAGE_UNAVAILABLE'
+        ? '系统安全存储当前不可用，无法读取已保存配置；加密文件和已保存数据均保留。可能原因包括系统钥匙串访问/授权、登录会话或应用签名身份，不一定是钥匙串未解锁。恢复路径：先打开“钥匙串访问”检查 login 钥匙串是否可访问，再回到这里点“重新读取服务配置”；若仍失败，需要系统层修复或稳定签名，应用不会删除、重置或明文回退配置。'
+        : result.error.code === 'CREDENTIAL_FILE_INVALID'
+          ? '已保存的加密配置文件格式无效；文件保留、未被覆盖。请不要删除文件，联系维护者核对配置后重试。'
+          : result.error.code === 'CREDENTIAL_DECRYPT_FAILED'
+            ? '已保存的加密配置无法解密（常见于应用签名身份变化或钥匙串条目访问被拒）；加密文件保留、未覆盖。恢复路径：先重新读取；若仍失败，需要稳定签名或重新提供配置，本应用不会删除旧文件或使用明文回退。'
+            : '服务配置暂时无法读取；已保存的加密文件保留，未覆盖。请重试或联系维护者核对系统安全存储。'
+    }
   } catch {
     if (!disposed) message.value = '服务配置状态暂时无法读取。'
   } finally { credentialLoading.value = false }
@@ -345,6 +354,7 @@ async function clearCredential(field: CredentialField): Promise<void> {
         <summary><h3>服务状态与诊断</h3></summary>
         <p v-if="!credentialStatus" role="status">服务配置{{ credentialLoading ? '读取中…' : '暂时不可读；已保存文件保留' }}</p>
         <button v-if="!credentialStatus" type="button" :disabled="credentialLoading || busy" @click="refreshCredentials">{{ credentialLoading ? '读取中…' : '重新读取服务配置' }}</button>
+        <p v-if="!credentialStatus && credentialFailureCode" role="status">读取失败阶段：{{ credentialFailureCode === 'SYSTEM_SECRET_STORAGE_UNAVAILABLE' ? '系统安全存储不可用' : credentialFailureCode === 'CREDENTIAL_DECRYPT_FAILED' ? '加密配置无法解密' : credentialFailureCode === 'CREDENTIAL_FILE_INVALID' ? '加密配置文件格式无效' : '配置读取失败' }}。加密文件与数据已保留。</p>
         <p v-if="credentialStatus">对话模型：{{ credentialStatus.VOLCENGINE_ARK_API_KEY && credentialStatus.VOLCENGINE_ARK_MODEL ? '密钥与模型已填写，实际连接待请求验证' : '未配置' }}</p>
         <p v-if="credentialStatus">原生实时对话 3.0：{{ credentialStatus.VOLCENGINE_REALTIME_API_KEY && (persona?.voiceId || credentialStatus.VOLCENGINE_REALTIME_VOICE) ? '密钥与音色已填写，实际连接待请求验证' : '未配置完整：需要密钥与音色' }}</p>
         <div class="r1-settings-check"><button type="button" :disabled="busy || !!checking" @click="checkService('ark')">{{ checking === 'ark' ? '检测中…' : '检测对话模型' }}</button><span role="status">{{ checkLabel(checks.ark) }}</span></div>
