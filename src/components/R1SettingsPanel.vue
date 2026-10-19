@@ -191,7 +191,7 @@ async function refreshCredentials(): Promise<void> {
       credentialStatus.value = null
       credentialFailureCode.value = result.error.code
       message.value = result.error.code === 'SYSTEM_SECRET_STORAGE_UNAVAILABLE'
-        ? '系统安全存储当前不可用，无法读取已保存配置；加密文件和已保存数据均保留。可能原因包括系统钥匙串访问/授权、登录会话或应用签名身份，不一定是钥匙串未解锁。恢复路径：先打开“钥匙串访问”检查 login 钥匙串是否可访问，再回到这里点“重新读取服务配置”；若仍失败，需要系统层修复或稳定签名，应用不会删除、重置或明文回退配置。'
+        ? '系统安全存储当前不可用，无法读取已保存配置；加密文件和已保存数据均保留。当前证据不能证明 login 钥匙串已锁定，也不应把“解锁 login”当成唯一解法；不要重置钥匙串或修改 ACL。恢复路径：先重新读取；若系统安全存储持续不可用，需要稳定签名或系统安全存储修复，应用不会删除、重置或明文回退配置。'
         : result.error.code === 'CREDENTIAL_FILE_INVALID'
           ? '已保存的加密配置文件格式无效；文件保留、未被覆盖。请不要删除文件，联系维护者核对配置后重试。'
           : result.error.code === 'CREDENTIAL_DECRYPT_FAILED'
@@ -388,10 +388,10 @@ async function clearCredential(field: CredentialField): Promise<void> {
         <p v-if="!credentialStatus" role="status">服务配置{{ credentialLoading ? '读取中…' : '暂时不可读；已保存文件保留' }}</p>
         <button v-if="!credentialStatus" type="button" :disabled="credentialLoading || busy" @click="refreshCredentials">{{ credentialLoading ? '读取中…' : '重新读取服务配置' }}</button>
         <p v-if="!credentialStatus && credentialFailureCode" role="status">读取失败阶段：{{ credentialFailureCode === 'SYSTEM_SECRET_STORAGE_UNAVAILABLE' ? '系统安全存储不可用' : credentialFailureCode === 'CREDENTIAL_DECRYPT_FAILED' ? '加密配置无法解密' : credentialFailureCode === 'CREDENTIAL_FILE_INVALID' ? '加密配置文件格式无效' : '配置读取失败' }}。加密文件与数据已保留。</p>
-        <p v-if="!credentialStatus && recoveryAvailable && !recoveryArmed" class="r1-settings-hint">如果旧配置无法恢复，可在下方“模型与语音服务配置”中填写新值后重建本机加密配置；旧加密文件会保留为备份，不会删除或修改钥匙串 ACL。</p>
+        <p v-if="!credentialStatus && recoveryAvailable && !recoveryArmed" class="r1-settings-hint">如果旧配置无法恢复，可在下方“模型与语音服务配置”中填写新值后重建本机加密配置。新加密配置只包含本次填写的字段；留空字段视为未配置，不会从不可读的旧配置合并或恢复。旧加密文件会保留为备份，不会删除、重置或修改钥匙串 ACL。</p>
         <button v-if="!credentialStatus && recoveryAvailable && !recoveryArmed" type="button" :disabled="busy" @click="recoveryArmed = true">用新填写内容重建加密配置</button>
         <div v-if="recoveryArmed" role="alertdialog" aria-label="确认重建加密配置" class="r1-settings-recovery-confirm">
-          <p>将用你填写的新值创建一个新的加密配置。当前无法读取的旧加密文件会保留为备份，不会删除、重置或修改 ACL。</p>
+          <p>此操作不会自动执行，也不会修复系统安全存储不可用。新加密配置只包含你本次填写的字段；留空字段视为未配置，不会从旧加密文件合并或恢复。当前无法读取的旧加密文件会保留为备份，不会删除、重置或修改 ACL。</p>
           <button type="button" :disabled="busy" @click="recoveryArmed = false">取消</button>
           <button type="button" :disabled="busy" @click="recoverCredentials">确认重建</button>
         </div>

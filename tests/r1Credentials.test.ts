@@ -158,6 +158,17 @@ describe('R1 encrypted credential vault', () => {
     expect(new CredentialVault(path, storage).load()).toMatchObject({ VOLCENGINE_ARK_MODEL: true, VOLCENGINE_ARK_API_KEY: false })
     expect(() => broken.recover({ VOLCENGINE_ARK_API_KEY: 'again' })).toThrow('CREDENTIAL_RECOVERY_NOT_REQUIRED')
   })
+  it('restores the old encrypted bytes when a recovery write fails', () => {
+    const path = makePath()
+    new CredentialVault(path, storage).save({ VOLCENGINE_ARK_API_KEY: 'old-secret' })
+    const oldBytes = readFileSync(path)
+    const failing = new CredentialVault(path, { ...storage,
+      decryptString() { throw new Error('auth denied') },
+      encryptString() { throw new Error('disk write failed') } })
+    expect(() => failing.load()).toThrow('CREDENTIAL_DECRYPT_FAILED')
+    expect(() => failing.recover({ VOLCENGINE_ARK_MODEL: 'new-model' })).toThrow('disk write failed')
+    expect(readFileSync(path)).toEqual(oldBytes)
+  })
   it('returns an unavailable IPC result and retries the preserved vault after the system is unlocked', () => {
     const path = makePath()
     new CredentialVault(path, storage).save({ VOLCENGINE_REALTIME_API_KEY: 'test-native' })

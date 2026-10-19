@@ -1,0 +1,47 @@
+{
+  "checkedAt": "2026-10-19T14:16:00+08:00",
+  "scope": "E8_missing_or_default_keychain_diagnosis_read_only",
+  "observed": {
+    "keychainAccessUI": "main window only; System keychain selected; no visible Allow/Touch ID prompt",
+    "userScreenshotPrompt": "Keychain Not Found — cannot find a keychain to store Seamo AI R1 Key; buttons Cancel / Reset to Defaults; user advised Cancel",
+    "resetClicked": false
+  },
+  "securityFrameworkReadOnly": {
+    "loginKeychain": {
+      "path": "/Users/sea/Library/Keychains/login.keychain-db",
+      "exists": true,
+      "fileType": "Mac OS X Keychain File",
+      "openStatus": 0,
+      "getStatus": 0,
+      "flags": 7,
+      "unlocked": true,
+      "readPermission": true,
+      "writePermission": true
+    },
+    "systemKeychain": { "openStatus": 0, "getStatus": 0, "flags": 2, "unlocked": false, "readPermission": true, "writePermission": false },
+    "defaultKeychain": { "result": 0, "path": "/Users/sea/Library/Keychains/login.keychain-db" },
+    "searchList": { "result": 0, "count": 2, "includesLogin": true },
+    "appItem": { "service": "Seamo AI R1 Safe Storage", "account": "Seamo AI R1 Key", "present": true }
+  },
+  "diagnosis": [
+    "The missing/default-keychain explanation is not supported at the Security framework level: default path and search list resolve to the existing login keychain, and login is unlocked/read/write.",
+    "The Keychain Not Found prompt is therefore not proof of a locked or missing login keychain and must not be used to justify Reset to Defaults, creating/resetting keychains, or ACL changes.",
+    "Remaining likely app access cause: safeStorage availability / item ACL / ad-hoc signing identity; no valid codesigning identity is installed and previews have different ad-hoc CDHash values.",
+    "No exact Allow/Touch ID prompt currently exists, so no user authentication step should be requested now."
+  ],
+  "safeNextStep": {
+    "userAuthenticationRequiredNow": false,
+    "action": "Do not reset defaults or recreate any keychain. Preserve vault, app data and packages. Continue with a signed-build/system-level diagnosis; the app must not auto-run recovery or imply that rebuilding fixes unavailable system encryption.",
+    "appRecoveryConstraints": [
+      "user enters new secrets only in the app UI and explicitly confirms",
+      "new vault contains only newly entered fields; blank fields become unconfigured and are not merged from unreadable old data",
+      "old encrypted bytes are preserved as backup; failed writes roll back to the old encrypted vault",
+      "recovery is never automatic and does not repair an unavailable system secure store"
+    ]
+  },
+  "actualState": {
+    "actualApp": "alpha.22 remains running; candidate alpha.23 preserved; no rebuild/switch for wording",
+    "candidatePackage": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-19-alpha23-e8"
+  },
+  "f04a": { "onePass": "18/20=90%, not stability", "residual": ["M03", "M13"], "missingRun3Raw": true, "furtherReruns": "none" }
+}
