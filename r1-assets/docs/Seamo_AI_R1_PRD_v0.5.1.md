@@ -3238,7 +3238,7 @@ DEC-R1-MUSIC-023 补充：沿用原型已有“退出播放”按钮，类型化
 
 ```json
 {
-  "releaseId": "seamo-ai-r1-agent-assets-3.5.7",
+  "releaseId": "seamo-ai-r1-agent-assets-3.5.8",
   "schemaVersion": "3.2.1",
   "providerPolicy": {
     "primary": "volcengine",

@@ -153,6 +153,8 @@ it('recalls only real valid memories through the registered tool and excludes fo
     const saved = store.addManual({ content: '喜欢无糖茶', category: 'preference' })
     const recall = s.tools.execute('memory_recall', { query: '无糖茶', category: 'preference' }, 'recall')
     expect(recall).toMatchObject({ status: 'succeeded', data: { matchStatus: 'matched', memories: [{ memoryId: saved.memoryId, content: saved.content, version: 1 }] } })
+    expect(s.tools.execute('memory_recall', { query: '无糖茶', category: 'null' }, 'recall-string-null'))
+      .toMatchObject({ status: 'succeeded', data: { matchStatus: 'matched', memories: [{ memoryId: saved.memoryId }] } })
     store.forget(saved.memoryId, saved.version)
     expect(s.tools.execute('memory_recall', { query: '无糖茶' }, 'after-forget')).toMatchObject({ status: 'succeeded', data: { matchStatus: 'no_match', memories: [] } })
   } finally { s.tasks.close(); s.db.close() }

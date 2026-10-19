@@ -125,7 +125,7 @@ export function createArkResponsesProvider(options: { env?: Environment;
       if (input.signal?.aborted) invalid('ARK_REQUEST_CANCELLED')
       if (timeout.aborted) invalid('ARK_REQUEST_TIMEOUT')
       input.boundary.assertCurrent?.()
-      if (body?.status === 'incomplete' && body.incomplete_details?.reason === 'max_output_tokens') invalid('ARK_OUTPUT_BUDGET_EXHAUSTED')
+      if (body?.status === 'incomplete' && ['max_output_tokens', 'length'].includes(String(body.incomplete_details?.reason))) invalid('ARK_OUTPUT_BUDGET_EXHAUSTED')
       if (body?.status === 'incomplete' && body.incomplete_details?.reason === 'content_filter') invalid('ARK_RESPONSE_FILTERED')
       if (!body || body.error || body.status !== 'completed' || typeof body.id !== 'string' || !body.id) {
         // Diagnostic only: provider status/reason/code, never prompt or reply text.

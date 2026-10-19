@@ -21,14 +21,15 @@
                   "profile",
                   "preference",
                   "ongoing",
-                  "conclusion"
+                  "conclusion",
+                  "null"
                 ]
               },
               {
                 "type": "null"
               }
             ],
-            "description": "可选的严格分类过滤。只有用户明确限定分类时填写；通常省略或null，不要按问题猜类别，以免遗漏别类中的相关事实。"
+            "description": "可选的严格分类过滤。只有用户明确限定分类时填写；通常省略或传实际 JSON null，不要按问题猜类别，以免遗漏别类中的相关事实。字符串 \"null\" 兼容为未限定。"
           }
         },
         "required": [

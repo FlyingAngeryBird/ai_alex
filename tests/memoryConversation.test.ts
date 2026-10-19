@@ -56,6 +56,15 @@ describe('explicit memory conversation commits and revocation', () => {
       expect(s.memory.list().entries).toHaveLength(1)
     } finally { s.close() }
   })
+  it('normalizes a serialized "null" validUntil as no expiry without losing the explicit source', () => {
+    const s = setup()
+    try {
+      const { source, tools } = s.turn('请记住，我喜欢无糖绿茶。')
+      const saved = tools.execute('memory_remember', { content: '喜欢无糖绿茶', category: 'preference', sourceRefs: [source.turnId], validUntil: 'null' }, 'remember-null-expiry')
+      expect(saved).toMatchObject({ status: 'succeeded', data: { validUntil: null, memory: { version: 1 } } })
+      expect(s.memory.list().entries[0]).toMatchObject({ content: '喜欢无糖绿茶', expiresAt: null })
+    } finally { s.close() }
+  })
   it('rejects unrequested, quoted, negated, sensitive and guessed-expiry writes without saving', () => {
     const s = setup()
     try {

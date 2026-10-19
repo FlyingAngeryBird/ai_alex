@@ -87,7 +87,7 @@ describe('Ark Responses native tool protocol', () => {
     await expect(adapter.request({ boundary: boundary(), messages, signal: controller.signal }))
       .rejects.toMatchObject({ code: 'ARK_REQUEST_CANCELLED' })
   })
-  it.each([['max_output_tokens', 'ARK_OUTPUT_BUDGET_EXHAUSTED'], ['content_filter', 'ARK_RESPONSE_FILTERED'], ['private detail', 'ARK_RESPONSE_NOT_COMPLETED']])('labels incomplete reason %s without publishing partial calls', async (reason, code) => {
+  it.each([['max_output_tokens', 'ARK_OUTPUT_BUDGET_EXHAUSTED'], ['length', 'ARK_OUTPUT_BUDGET_EXHAUSTED'], ['content_filter', 'ARK_RESPONSE_FILTERED'], ['private detail', 'ARK_RESPONSE_NOT_COMPLETED']])('labels incomplete reason %s without publishing partial calls', async (reason, code) => {
     const adapter = createArkResponsesProvider({ env, fetch: async () => new Response(JSON.stringify({
       id: 'partial', status: 'incomplete', output: [call], incomplete_details: { reason }
     })) })

@@ -28,10 +28,17 @@ for (const [caseId, temporary, text] of [['sensitive_cancel', false, '请记住�
     const context = { sessionId, sessionGeneration: 1, turnId: source.turnId, currentTime: source.createdAt,
       timezone: scope.timezone, temporary, contextVersion: 1, personaVersion: 1, deletionEpoch: 0,
       selectedEntity: null, availableToolAliases: [], loadedSkillIds: ['SK01'], recentTurns: conversations.modelTurns(sessionId), memories: [], activeTasks: [] }
-    const driver = new R1ConversationDriver(db, assets, tasks, createArkResponsesProvider({ timeoutMs: 30000 }), () => persona, [])
+    let calls = []
+    const provider = createArkResponsesProvider({ timeoutMs: 30000, fetch: async (url, init) => {
+      const response = await fetch(url, init)
+      const body = await response.clone().json()
+      calls.push(...(body.output ?? []).filter(item => item.type === 'function_call').map(item => ({ name: item.name, args: JSON.parse(item.arguments) })))
+      return response
+    } })
+    const driver = new R1ConversationDriver(db, assets, tasks, provider, () => persona, [])
     const start = performance.now()
     const reply = await driver.reply({ scope, context, messages: [{ role: 'user', content: text }] })
-    if (!pending || memory.list().entries.length || !reply.reply.includes('还没有保存')) throw new Error('PENDING_WITHOUT_WRITE_REQUIRED')
+    if (!pending || memory.list().entries.length || !reply.reply.includes('还没有保存')) { console.log(JSON.stringify({ caseId, status: 'failed', code: 'PENDING_WITHOUT_WRITE_REQUIRED', reply: reply.reply, calls, pending: pending ? { content: pending.content, sensitive: pending.sensitive, requiresSelection: pending.requiresSelection } : null })); process.exitCode = 1; continue }
     const view = pending
     if (temporary) manager.commit(7, view.confirmationId); else manager.cancel(7, view.confirmationId)
     const passed = temporary ? !mode && memory.list().entries.length === 1 &&
@@ -40,6 +47,6 @@ for (const [caseId, temporary, text] of [['sensitive_cancel', false, '请记住�
       memoryCount: memory.list().entries.length, temporaryAfter: mode, finalReply: reply.reply, elapsedMs: Math.round(performance.now() - start),
       scope: 'ark_to_domain_confirmation_with_scripted_user_choice', database: 'isolated-in-memory', assetReleaseId: assets.releaseId }))
     if (!passed) process.exitCode = 1
-  } catch (error) { console.log(JSON.stringify({ caseId, status: 'failed', code: error.code ?? error.message })); process.exitCode = 1 }
+  } catch (error) { console.log(JSON.stringify({ caseId, status: 'failed', code: error.code ?? error.message, calls })); process.exitCode = 1 }
   finally { tasks.close(); db.close() }
 }

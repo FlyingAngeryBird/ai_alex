@@ -8,6 +8,11 @@ export type MemorySaveCandidate = { operation: 'remember' | 'update'; content: s
   validUntil: string | null; memoryId?: string; expectedVersion?: number }
 export const isSensitiveMemory = (source: string, content: string): boolean =>
   /健康|病|诊断|药|疼|痛|发烧|发热|咳嗽|失眠|眩晕|晕厥|呕吐|腹泻|就诊|就医|住院|体检|过敏|怀孕|抑郁|焦虑症|手术|血压|血糖|财务|收入|薪资|工资|存款|负债|欠款|资产|银行卡|身份证|护照|密码|密钥|验证码|住址|手机号|电话|邮箱|性取向|宗教|政治|\b\d{11,}\b/.test(`${source}\n${content}`)
+const memoryCategoryFilter = (value: unknown): R1Memory['category'] | null =>
+  value === 'profile' || value === 'preference' || value === 'ongoing' || value === 'conclusion' ? value : null
+/** Some structured model outputs serialize JSON null as the string "null". */
+const memoryExpiry = (value: unknown): string | null =>
+  value === null || value === undefined || value === 'null' || value === '' ? null : String(value)
 
 /** Authorization check after the model proposes a tool; it does not select or route actions.
  * Ambiguous/quoted instructions and sensitive writes require a separate confirmation flow. */
@@ -36,40 +41,40 @@ export class R1MemoryTools {
   }
   prepare(alias: 'memory_remember' | 'memory_update', args: Record<string, unknown>): MemorySaveCandidate {
     this.authorize(alias === 'memory_remember' ? 'remember' : 'update')
-    this.expiry(args.validUntil as string | null)
+    this.expiry(memoryExpiry(args.validUntil))
     if (alias === 'memory_remember') {
       if ((args.sourceRefs as string[]).some(ref => ![this.source.messageId, this.source.turnId].includes(ref))) throw new Error('MEMORY_SOURCE_NOT_AVAILABLE')
-      return { operation: 'remember', content: args.content as string, category: args.category as R1Memory['category'], validUntil: args.validUntil as string | null ?? null }
+      return { operation: 'remember', content: args.content as string, category: args.category as R1Memory['category'], validUntil: memoryExpiry(args.validUntil) }
     }
     const current = this.target(args.memoryId as string, args.expectedVersion as number)
     return { operation: 'update', content: args.content as string, category: current.category, memoryId: current.memoryId,
-      expectedVersion: current.version, validUntil: args.validUntil === undefined ? current.expiresAt : args.validUntil as string | null }
+      expectedVersion: current.version, validUntil: args.validUntil === undefined ? current.expiresAt : memoryExpiry(args.validUntil) }
   }
   execute(alias: string, args: Record<string, unknown>): { data: Record<string, unknown>; entityId?: string; entityVersion?: number; invalidatedEpoch?: number } {
     if (alias === 'memory_recall') {
       const policy = this.store.retrievalPolicy(), deadline = performance.now() + policy.budgetMs
       const assertBudget = () => { if (performance.now() > deadline) throw new Error('MEMORY_RECALL_TIMEOUT') }
-      const memories = this.store.recall(args.query as string, false, args.category as R1Memory['category'] | null ?? null, assertBudget)
+      const memories = this.store.recall(args.query as string, false, memoryCategoryFilter(args.category), assertBudget)
       const topics = this.topics?.recall(args.query as string, { limit: policy.limit, assertBudget }).map(topicContext) ?? []
       assertBudget()
       for (const memory of memories) this.known.set(memory.memoryId, memory)
       return { data: { matchStatus: memories.length || topics.length ? 'matched' : 'no_match', memories: memories.map(memoryView), ...(this.topics ? { topics } : {}) } }
     }
     if (alias === 'memory_remember') {
-      this.authorize('remember'); this.sensitive(args.content as string); this.expiry(args.validUntil as string | null)
+      this.authorize('remember'); this.sensitive(args.content as string); this.expiry(memoryExpiry(args.validUntil))
       const refs = args.sourceRefs as string[]
       if (refs.some(ref => ![this.source.messageId, this.source.turnId].includes(ref))) throw new Error('MEMORY_SOURCE_NOT_AVAILABLE')
       const previous = this.store.recall(args.content as string, false, args.category as R1Memory['category']).find(memory => memory.content === (args.content as string).trim())
       const memory = this.store.remember({ content: args.content as string, category: args.category as R1Memory['category'],
-        sourceMessageIds: [this.source.messageId], expiresAt: args.validUntil as string | null ?? null })
+        sourceMessageIds: [this.source.messageId], expiresAt: memoryExpiry(args.validUntil) })
       this.known.set(memory.memoryId, memory)
       return { entityId: memory.memoryId, entityVersion: memory.version, data: { memory: memoryView(memory), validUntil: memory.expiresAt, merged: Boolean(previous) } }
     }
     if (alias === 'memory_update') {
-      this.authorize('update'); this.sensitive(args.content as string); this.expiry(args.validUntil as string | null)
+      this.authorize('update'); this.sensitive(args.content as string); this.expiry(memoryExpiry(args.validUntil))
       const current = this.target(args.memoryId as string, args.expectedVersion as number)
       const memory = this.store.update({ memoryId: current.memoryId, expectedVersion: current.version, content: args.content as string,
-        category: current.category, sourceMessageIds: [this.source.messageId], expiresAt: args.validUntil as string | null | undefined })
+        category: current.category, sourceMessageIds: [this.source.messageId], expiresAt: memoryExpiry(args.validUntil) })
       return { entityId: memory.memoryId, entityVersion: memory.version, invalidatedEpoch: memory.deletionEpoch,
         data: { memory: memoryView(memory), validUntil: memory.expiresAt, merged: false } }
     }
