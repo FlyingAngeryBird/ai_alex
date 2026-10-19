@@ -1,0 +1,61 @@
+{
+  "checkedAt": "2026-10-19T11:09:30+08:00",
+  "scope": "controlled_actual_app_handoff_alpha17_to_alpha21",
+  "app": {
+    "version": "1.0.0-alpha.21",
+    "sourceCommit": "4221ac9f2db343ae288f1badb4c567f21b6d51d8",
+    "assetReleaseId": "seamo-ai-r1-agent-assets-3.5.8",
+    "package": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-19-alpha21-e6/Seamo AI R1.app",
+    "rebuiltForHandoff": false
+  },
+  "preSwitch": {
+    "from": "alpha.17 (2026-10-18-alpha17-e4fix)",
+    "micState": "off",
+    "activeTasks": 0,
+    "dialogOrEditorOpen": false,
+    "focusedElement": "BODY",
+    "quitMethod": "normal app quit",
+    "dataSnapshot": {
+      "path": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-19-alpha21-e6/user-data-snapshot-before-handoff",
+      "r1SqliteSha256": "ec564f5c17ed248a0fcac5685ab95c31f0d5eeb073d35e82ad093d5b700bbfe2"
+    }
+  },
+  "actualApp": {
+    "normalUserData": true,
+    "fakeHome": false,
+    "envVolcengineCount": 0,
+    "windowOpened": true,
+    "micOff": true,
+    "activeTasks": 0,
+    "savedDataAccessible": true,
+    "data": { "historySessionsLoaded": 20, "historySummary": "20+ 个话题", "items": 4, "memories": 0 },
+    "uiChecks": {
+      "home": "greeting/3 quick actions/last real topic",
+      "items": "title 手边的事",
+      "history": "SEAMO / PERSONAL SPACE; 本地记录; search present",
+      "music": "library closed by default; default search present",
+      "settings": "welcome link readable/transparent; 服务状态与诊断 collapsible"
+    }
+  },
+  "savedConfigRead": {
+    "status": "failed",
+    "requester": "Seamo AI R1",
+    "safeStorageItem": "Seamo AI R1 Safe Storage",
+    "safeError": "Keychain lookup failed: NSOSStatusErrorDomain Code=-25293 (errKCAuthFailed / errSecAuthFailed)",
+    "visibleMessage": "系统钥匙串暂时不可用。请手动解锁 login 钥匙串后重试；已保存的加密配置保留。",
+    "visibleSystemDialog": false,
+    "retriesPerformed": 0,
+    "vaultDeleted": false,
+    "aclChanged": false,
+    "envCopiedIntoApp": false
+  },
+  "preserved": {
+    "alpha17Package": true,
+    "alpha19Package": true,
+    "alpha20Package": true,
+    "userDataSnapshot": true,
+    "oldData": true
+  },
+  "notRun": ["real voice/listen-and-chat", "music playback/system permission checks requiring saved config", "signing/notarization"],
+  "remainingMinimumAction": "User unlocks the login keychain once and allows Seamo AI R1 Safe Storage (or enters the login password at the macOS prompt), then app Settings → 重新读取服务配置 once; do not delete vault or change ACL."
+}
