@@ -2,7 +2,7 @@
 
 ## 结论
 - **应用可用**：alpha.22 实际窗口正常（Finder/LaunchServices），麦克风关闭；本批代码修复在 **alpha.23** 候选（未切换实际 App）。
-- **保存配置访问仍不可用，但不是 login 钥匙串缺失/锁定**：Security framework 只读核验显示默认钥匙串和 search list 都指向存在的 login，`SecKeychainGetStatus` flags=7（unlocked/read/write）；login 文件存在且是 Keychain File。用户看到的是 Keychain Access “Keychain Not Found … Cancel / Reset to Defaults”，已取消，未重置。当前没有可见 Allow/Touch ID 提示，因此不再要求用户认证或解锁。
+- **保存配置访问仍不可用，但不是 login 钥匙串缺失/锁定**：Security framework 只读核验显示默认钥匙串和 search list 都指向存在的 login，`SecKeychainGetStatus` flags=7（unlocked/read/write）；login 文件存在且是 Keychain File。用户看到的是 Keychain Access “Keychain Not Found … Cancel / Reset to Defaults”，已取消，未重置。Keychain Access 侧栏确认“登录”仍在默认钥匙串下，System 只是当前列表选择；没有可见 Allow/Touch ID 提示，因此不再要求用户认证或解锁，也没有可安全执行的用户恢复步骤。
 - 剩余可能原因是应用 safeStorage/条目 ACL/签名身份（0 个有效签名身份，各预览 ad-hoc CDHash 不同）；`credentials.bin` 307 字节原样保留，未删除/改 ACL/未使用明文/env fallback。
 
 ## 已确认/修复的应用原因
