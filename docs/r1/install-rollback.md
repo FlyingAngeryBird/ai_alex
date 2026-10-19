@@ -29,3 +29,6 @@
 
 ## alpha.20↔alpha.21（E6 追加）
 - 隔离目录/fake HOME/合成数据：alpha.20→alpha.21 原数据保留+新写入成功，SQLite 12；回退 alpha.20 后 alpha.21 新增记录仍可读，SQLite 12。alpha.20 保留；未触碰用户 alpha.17。
+
+## alpha.21↔alpha.22（F04a 修复候选追加）
+- 隔离目录/fake HOME/合成数据：alpha.21→alpha.22 原数据保留+新写入成功，SQLite12；回退 alpha.21 后 alpha.22 新增记录仍可读，SQLite12。alpha.21/20/19 原包保留；未触碰用户实际 alpha.21 的 userData 与快照。
