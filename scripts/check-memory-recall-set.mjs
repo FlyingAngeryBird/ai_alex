@@ -53,8 +53,9 @@ const provider=createArkResponsesProvider({timeoutMs:30000,fetch:async(url,init)
 const driver=new R1ConversationDriver(db,assets,tasks,provider,()=>persona,[]),results=[]
 try{
  const limit=Number(process.env.SEAMO_MEMORY_CASE_LIMIT||20)
+ const wanted=new Set((process.env.SEAMO_MEMORY_CASE_IDS||'').split(',').filter(Boolean))
  console.log(JSON.stringify({scope:'recall_evaluation_config',datasetSha256,assetReleaseId:assets.releaseId,modelProfile:'configured_ark',historyUsed:false}))
- for(const [id,,fact,question,pattern] of cases.slice(0,limit)){
+ for(const [id,,fact,question,pattern] of cases.slice(0,limit).filter(c=>!wanted.size||wanted.has(c[0]))){
   observed=new Set();calls=[];const sessionId=conversations.start(),source=conversations.append({sessionId,turnId:randomUUID(),role:'user',body:question,status:'final'}),started=Date.now()
   try{
    const result=await driver.reply({scope:{source,timezone:'Asia/Shanghai',temporary:false,persistenceConfirmed:false,assertCurrent(){}},messages:[{role:'user',content:question}],context:{sessionId,sessionGeneration:1,turnId:source.turnId,currentTime:source.createdAt,timezone:'Asia/Shanghai',temporary:false,contextVersion:1,personaVersion:1,deletionEpoch:0,selectedEntity:null,availableToolAliases:[],loadedSkillIds:['SK01'],recentTurns:[],memories:[],activeTasks:[]}})
