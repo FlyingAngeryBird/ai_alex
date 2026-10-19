@@ -7,7 +7,7 @@ const voiceStages = ['space_up', 'asr_final', 'llm_request_start', 'llm_response
   'llm_done', 'tts_session_ready', 'tts_first_push', 'tts_first_audio', 'tts_play_invoked', 'tts_play_start', 'tts_play_end'] as const
 const eventKinds = new Set(['memory_context_invalidated', 'memory_forgotten', 'topic_saved', 'tool_committed'])
 export function buildDiagnosticExport(db: R1Database, metadata: { appVersion: string; assetRelease: string; platform: string; osRelease: string; configurationRevision: number;
-  electronVersion: string; nodeVersion: string; configured: Record<string, boolean>; serviceChecks: ServiceCheckReport[] }, voiceTrace: unknown) {
+  electronVersion: string; nodeVersion: string; configured: Record<string, boolean> | null; credentialStorageState?: string; serviceChecks: ServiceCheckReport[] }, voiceTrace: unknown) {
   const trace: Record<string, number> = {}
   const nativeVoice: Record<string, number | string> = {}
   if (voiceTrace && typeof voiceTrace === 'object' && 'nativeVoice' in voiceTrace) {
@@ -43,7 +43,7 @@ export function buildDiagnosticExport(db: R1Database, metadata: { appVersion: st
   return { format: 'seamo-r1-diagnostics', formatVersion: 1, createdAt: new Date().toISOString(), schema: R1_SCHEMA_VERSION,
     runtime: { appVersion: metadata.appVersion, assetRelease: metadata.assetRelease, platform: metadata.platform, osRelease: metadata.osRelease,
       electronVersion: metadata.electronVersion, nodeVersion: metadata.nodeVersion },
-    configurationRevision: metadata.configurationRevision, configured: metadata.configured, serviceChecks: metadata.serviceChecks.map(check => ({ service: check.service, status: check.status,
+    configurationRevision: metadata.configurationRevision, configured: metadata.configured, credentialStorageState: ['ready', 'CREDENTIAL_LOAD_PENDING', 'SYSTEM_SECRET_STORAGE_UNAVAILABLE', 'SYSTEM_SECRET_STORAGE_TIMEOUT', 'CREDENTIAL_LOAD_FAILED', 'CREDENTIAL_DECRYPT_FAILED', 'CREDENTIAL_FILE_INVALID'].includes(metadata.credentialStorageState ?? '') ? metadata.credentialStorageState : 'unknown', serviceChecks: metadata.serviceChecks.map(check => ({ service: check.service, status: check.status,
       code: check.code, checkedAt: check.checkedAt, durationMs: check.durationMs, scope: check.scope, configurationRevision: check.configurationRevision,
       ...(safeNativeFailureDetails(check.details) ? { details: safeNativeFailureDetails(check.details) } : {}) })),
     trace: { clock: 'renderer_performance_now_ms', stages: trace, nativeVoice, crossProcessLatencyCalculated: false }, events, receipts, musicFailures,

@@ -18,7 +18,7 @@ let db, diagnostics
 void app.whenReady().then(async () => {
   db = openR1Database(join(directory, 'test.sqlite'))
   const vault = new CredentialVault(join(directory, 'credentials.bin'))
-  vault.load()
+  await vault.load()
   diagnostics = new R1ServiceDiagnostics(vault, loadR1PromptAssets(resolve('r1-assets')), new R1PersonaStore(db))
   app.on('window-all-closed', () => app.quit())
   app.on('before-quit', () => { diagnostics?.close(); db?.close(); rmSync(directory, { recursive: true, force: true }) })

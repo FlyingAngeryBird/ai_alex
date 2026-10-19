@@ -151,6 +151,7 @@ export type R1Api = {
   }
   credentials: {
     status(): Promise<R1Result<CredentialStatus>>
+    reload(): Promise<R1Result<CredentialStatus>>
     save(patch: CredentialPatch): Promise<R1Result<CredentialStatus>>
     recover(patch: CredentialPatch): Promise<R1Result<CredentialStatus>>
   }

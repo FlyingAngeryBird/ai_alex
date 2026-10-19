@@ -29,7 +29,7 @@ const finish = (code, extra = {}) => { const value = JSON.stringify({ ...report,
 log({ stage: 'vault_loading' })
 const vault = new CredentialVault(join(app.getPath('appData'), 'Seamo AI R1', 'credentials.bin'))
 let credentialsReady = false
-try { vault.load(); credentialsReady = true } catch { credentialsReady = false }
+try { await vault.load(); credentialsReady = true } catch { credentialsReady = false }
 log({ stage: 'vault_loaded', available: credentialsReady })
 if (!credentialsReady) finish('blocked_credentials_unavailable', { code: 'CREDENTIAL_VAULT_UNREADABLE' })
 else try {

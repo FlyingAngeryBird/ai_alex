@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { DatabaseSync } from 'node:sqlite'
@@ -126,12 +126,17 @@ it('routes actual file/restore handlers and treats native dialog cancellation as
   const s = fixture(), handlers = new Map<string, (event: unknown, input?: unknown) => unknown>(), restart = vi.fn()
   const dialogs = { save: vi.fn(async (_kind: string): Promise<string | null> => null), open: vi.fn(async (): Promise<string | null> => null) }
   const event = { sender: { id: 9, isDestroyed: () => false, once: vi.fn() } }
-  registerDataHandlers(s.data, s.db, { vault: { status: () => ({ VOLCENGINE_ARK_API_KEY: false }) } as never, assetRelease: '2.5.1', diagnostics: () => null, requestRestart: restart },
+  registerDataHandlers(s.data, s.db, { vault: { revision: 2, status: () => { throw new Error('CREDENTIAL_DECRYPT_FAILED') }, diagnosticStatus: () => ({ state: 'CREDENTIAL_DECRYPT_FAILED', configured: null }) } as never, assetRelease: '2.5.1', diagnostics: () => null, requestRestart: restart },
     { handle: (channel, handler) => handlers.set(channel, handler as never) }, dialogs)
   try {
     expect(await handlers.get('r1.data.exportBackup')!(event)).toMatchObject({ ok: true, data: { cancelled: true } })
     expect(await handlers.get('r1.data.prepareRestore')!(event)).toMatchObject({ ok: true, data: { cancelled: true } })
     expect(await handlers.get('r1.data.exportDiagnostics')!(event)).toMatchObject({ ok: true, data: { cancelled: true } })
+    const diagnosticPath = join(s.directory, 'diagnostics.json')
+    dialogs.save.mockResolvedValueOnce(diagnosticPath)
+    expect(await handlers.get('r1.data.exportDiagnostics')!(event)).toMatchObject({ ok: true, data: { cancelled: false } })
+    expect(JSON.parse(readFileSync(diagnosticPath, 'utf8'))).toMatchObject({ credentialStorageState: 'CREDENTIAL_DECRYPT_FAILED', configured: null, privacy: { credentialsIncluded: false } })
+    expect(statSync(diagnosticPath).mode & 0o777).toBe(0o600)
     const source = join(s.directory, 'source.sqlite'); await createR1Backup(s.db, source)
     let resolveDialog!: (path: string) => void
     dialogs.open.mockImplementationOnce(() => new Promise(resolve => { resolveDialog = resolve }))

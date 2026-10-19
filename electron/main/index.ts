@@ -346,7 +346,7 @@ void app.whenReady().then(async () => {
   }
   createMainWindow()
   setTimeout(() => {
-    try { credentialVault?.load() } catch { /* failure state kept; settings offers a safe re-read */ }
+    void credentialVault?.load().catch(() => { /* failure state kept; settings offers an explicit re-read */ })
   }, 0)
   r1Focus?.startScheduler()
   if (r1Database) {

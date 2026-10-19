@@ -70,9 +70,10 @@ export function registerDataHandlers(data: R1DataManagement, db: R1Database, opt
     const path = await dialogs.save('diagnostic')
     if (!path || event.sender.isDestroyed()) return { cancelled: true }
     data.assertAvailable()
+    const credentialState = options.vault.diagnosticStatus()
     const report = buildDiagnosticExport(db, { appVersion: app.getVersion(), assetRelease: options.assetRelease, platform: process.platform,
       osRelease: release(), electronVersion: process.versions.electron ?? '', nodeVersion: process.versions.node,
-      configurationRevision: options.vault.revision, configured: options.vault.status(), serviceChecks: options.diagnostics()?.latestReports() ?? [] }, (input as { voiceTrace?: unknown } | undefined)?.voiceTrace)
+      configurationRevision: options.vault.revision, configured: credentialState.configured, credentialStorageState: credentialState.state, serviceChecks: options.diagnostics()?.latestReports() ?? [] }, (input as { voiceTrace?: unknown } | undefined)?.voiceTrace)
     writeFileSync(path, JSON.stringify(report, null, 2), { flag: 'wx', mode: 0o600 })
     return { cancelled: false, fileName: basename(path) }
   })
