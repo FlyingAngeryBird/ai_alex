@@ -1,6 +1,6 @@
 const normalize = (value: string) => value.normalize('NFKC').toLocaleLowerCase()
 // Retrieval noise only: these words describe a lookup, not a remembered entity.
-const wrappers = /用户|关于|相关|记忆|记录|偏好|喜好|喜欢|习惯|我的|你的|什么|是否|哪(?:个|类|些)|通常|平时|时候|之前|以前|一周中|请问|一下|[我你他的了是在和与吗呢啊哦呀叫这那里中]/gu
+const wrappers = /用户|关于|相关|记忆|记录|偏好|喜好|习惯|我的|你的|什么|是否|哪(?:个|类|些)|通常|平时|时候|之前|以前|一周中|请问|一下|[我你他的了是在和与吗呢啊哦呀叫这那里中]/gu
 const fallbackNoise = new Set([...'有上下以不每更先再用希望'])
 const hasTerm = (text: string, term: string) => /^[a-z0-9]+$/.test(term)
   ? new RegExp(`(?:^|[^a-z0-9])${term}(?=$|[^a-z0-9])`).test(text) : text.includes(term)
@@ -33,6 +33,9 @@ export function rankMemoryCandidates<T extends { content: string }>(rows: T[], q
       for (const character of characters) if (!fallbackNoise.has(character) && frequency(character)) fallback.add(character)
     }
   }
+  // Negated/avoided preferences are lexically distinct from the stored fact's
+  // “不喜欢” wording; normalize this one common paraphrase before ranking.
+  if (/避开|忌口|不吃|过敏|不能吃|讨厌/.test(normalized) && frequency('不喜欢')) preferred.add('不喜欢')
   const leastFrequent = preferred.size ? Math.min(...[...preferred].map(frequency)) : 0
   const specific = [...preferred].filter(term => frequency(term) === leastFrequent)
   const ranked = rows.map((row, index) => {

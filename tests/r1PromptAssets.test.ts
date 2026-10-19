@@ -14,7 +14,7 @@ describe('R1 released prompt assets', () => {
         userAddress: '海', style: '温和而简洁' })
       const assets = loadR1PromptAssets(resolve('r1-assets'))
       const text = assets.compose(saved, modelContext({ personaVersion: saved.version }))
-      expect(assets.releaseId).toBe('seamo-ai-r1-agent-assets-3.5.8')
+      expect(assets.releaseId).toBe('seamo-ai-r1-agent-assets-3.5.9')
       expect(assets.schemaVersion).toBe('3.2.1')
       expect(assets.taskSearchPolicy()).toEqual({ candidates: 5 })
       expect(assets.memoryRecallPolicy()).toEqual({ limit: 5, budgetMs: 200 })

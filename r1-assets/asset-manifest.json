@@ -1,6 +1,6 @@
 {
-  "releaseId": "seamo-ai-r1-agent-assets-3.5.8",
-  "version": "3.5.8",
+  "releaseId": "seamo-ai-r1-agent-assets-3.5.9",
+  "version": "3.5.9",
   "files": [
     {
       "path": ".gitignore",
@@ -25,27 +25,27 @@
     {
       "path": "config/prompt-registry.json",
       "bytes": 4487,
-      "sha256": "6b0dac41e19f994f81a3c2e3eea3ce93e9bd74e557064ca3d6cebe332ac53e1b"
+      "sha256": "c6f1b4748a2a4d5d3076ec88f926de8c79c3109e75fb345f10afa0b2cf0b2d46"
     },
     {
       "path": "config/runtime.defaults.json",
       "bytes": 5244,
-      "sha256": "3e6ede5505a72331d4e33800d1b81678f252fd51d3c899ca1527a48748161ed8"
+      "sha256": "513624ce02b249d57831497b44f4075c61fd03e0365ae7e1c0355d1a8637e6bd"
     },
     {
       "path": "config/skill-registry.json",
       "bytes": 4143,
-      "sha256": "50697c22621e3d1fc1c0002fca2a498dcb05ae2c809780b274a84c7ae393b81b"
+      "sha256": "efaca7470903a85d1072c338085d86e67f547d25017f9c7476bfd4449fdbb257"
     },
     {
       "path": "contracts/tool-catalog.json",
-      "bytes": 225158,
-      "sha256": "8de13bf29cf68515e15407b389833c3a632fef11c21c83f23612808dd7ca5619"
+      "bytes": 225543,
+      "sha256": "56c668f43ede78618bd6a22b44bcb97c8e0013abe38ba21d2b6745d957cca7ac"
     },
     {
       "path": "docs/AGENT_ASSET_APPENDIX.md",
-      "bytes": 163388,
-      "sha256": "cc72f9aae797c520c0679dc29c504a3fc8d6afd2e9537405ee5ef69f46da84d0"
+      "bytes": 165352,
+      "sha256": "2f2d60625b374a436399eaccc17cb690326abe10457abbde34b0d4f91b831134"
     },
     {
       "path": "docs/ARCHITECTURE_CONTRACT.md",
@@ -74,8 +74,8 @@
     },
     {
       "path": "docs/Seamo_AI_R1_PRD_v0.5.1.md",
-      "bytes": 337641,
-      "sha256": "7f5a7798cd10de439e2bdb17b8c9089c271243e4564b330c06fabe6c57bf2f74"
+      "bytes": 339605,
+      "sha256": "cfeba2b15174aea62d022fa9f2a14f2028092dd944edaab56314811800fd59a3"
     },
     {
       "path": "evals/behavior-cases.jsonl",
@@ -94,8 +94,8 @@
     },
     {
       "path": "prompts/conversation.md",
-      "bytes": 12015,
-      "sha256": "e3c7c29eadfa6608a88808a4579325304e7b6d299dac11396c11c8d938ede88a"
+      "bytes": 12698,
+      "sha256": "96b9a5b0704c41ab6a1b6d8d7fbd99fed5003ac7f9bd7ff09a6437beb8695747"
     },
     {
       "path": "prompts/memory-extract.md",
@@ -119,8 +119,8 @@
     },
     {
       "path": "prompts/shared-policy.md",
-      "bytes": 2293,
-      "sha256": "ca185cc773682698c530f49e529980d1298b54b466db33ca88f662224efa7812"
+      "bytes": 3126,
+      "sha256": "0cce1812e8028482eecbab473767566db21f4f0f096bce48255be77a9691fd62"
     },
     {
       "path": "prompts/task-delivery.md",
@@ -249,8 +249,8 @@
     },
     {
       "path": "skills/companion-chat/SKILL.md",
-      "bytes": 2499,
-      "sha256": "3ad8b2394b711a21aeb88f06929642f10fb3893df50c27df23aaad7c12bbf03e"
+      "bytes": 2734,
+      "sha256": "bb46bf0085dcce1f5728c6dbfbf4df7b837b4438d49a7a5e57889a30abc044aa"
     },
     {
       "path": "skills/companion-chat/references/examples.md",
@@ -259,8 +259,8 @@
     },
     {
       "path": "skills/music-companion/SKILL.md",
-      "bytes": 3253,
-      "sha256": "903f56d85ef5228c04a3332318c7fea05a7f485d9f9be969c3ce7d9c13c2ad48"
+      "bytes": 3466,
+      "sha256": "3755ff94ff62cf3cf6170789596ca3f7518d14a71d91a36f1c0f084a39983322"
     },
     {
       "path": "skills/music-companion/references/examples.md",
