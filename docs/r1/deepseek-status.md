@@ -288,3 +288,5 @@
 - alpha.20 快捷动作补证：三个动作真实发送用户文本（“今天有点累…/帮我查查周末安静的去处/帮我整理一下产品方案的思路”），未配置服务均返回 ARK_NOT_CONFIGURED；真实普通历史上次话题按钮可点击并真实发送“接着「…」聊”。仅隔离实例，无真实凭据。
 
 - E6 小真实模型集（2026-10-19，资产3.5.8）：F02b 3/3、F04b 自动提取7/7+敏感确认2/2、F04c 单话题3/3+歧义2/2、F09a 讨论1/1+显式改稿1/1。确认修复：memory_recall category 字符串"null"、memory_remember/update validUntil 字符串"null"、ARK incomplete reason=length 分类；未扩大权限/预算。真实集使用现有项目环境凭据的正常读取，未输出/复制密钥；alpha.17 设置UI钥匙串仍不可用，真实语音未验证。证据 docs/r1/evidence/2026-10-19-e6/。
+
+- F04a 固定集（2026-10-19）：run1 14/20、run2 13/20、run4 17/20、run5 18/20（90%）通过；失败按检索/上下文、工具路由、schema、provider、回答语义分类；修复保留否定偏好检索与 memory-first 路由；未改数据集/scoring/模型/预算，失败运行保留；alpha.22候选，alpha.21实际App保留。

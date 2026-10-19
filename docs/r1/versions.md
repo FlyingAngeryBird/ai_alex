@@ -87,3 +87,8 @@ alpha.2最终开发预览标签`r1-preview-1.0.0-alpha.2-build2`指向`9017bf8`�
 ## 1.0.0-alpha.21（E6 真实模型修复批次，2026-10-19）
 - 源码 `4221ac9`：修复 memory_recall category/validUntil 序列化 null、ARK incomplete reason=length 分类；资产 3.5.8；E6 小真实集通过。
 - 包：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-19-alpha21-e6/`；ZIP 148,709,464 字节，SHA256 `2d4dbff978a2e18151ff01b6c85f5df9eb5dfc5b05fee7b1219584877df8f88a`；SQLite 12、ad-hoc、未公证、无凭据/用户库。alpha.20/19 保留；用户 alpha.17 未替换。
+
+## 1.0.0-alpha.22（F04a 固定集修复，2026-10-19）
+- 源码 `5b291b9`：保留否定偏好检索、避开/忌口→不喜欢规范化；PR01/PR03/SK01/SK05 memory-first 规则；资产 3.5.9、PR03 2.2.5；模型/预算/固定集/scoring 未改。
+- F04a 20 例固定集：run1 14/20、run2 13/20、run4 17/20、run5 18/20（90%，通过）；失败样本与分类保留在 evidence/2026-10-19-e6/f04a-classification.md。
+- 包：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-19-alpha22-f04a/`；ZIP 148,712,396 字节，SHA256 `b9d9681a6cccc81ae8c8c51f93a33a97f758130bd6640e740546fdc897ccf5ec`；SQLite12、ad-hoc、未公证、无凭据/用户库。
