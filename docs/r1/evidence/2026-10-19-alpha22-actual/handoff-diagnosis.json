@@ -1,0 +1,69 @@
+{
+  "checkedAt": "2026-10-19T11:31:00+08:00",
+  "scope": "controlled_alpha21_to_alpha22_handoff_and_saved_config_diagnosis",
+  "alpha22": {
+    "version": "1.0.0-alpha.22",
+    "sourceCommit": "5b291b92a89579c99bf6e0e7b85fd7a5678445eb",
+    "assetReleaseId": "seamo-ai-r1-agent-assets-3.5.9",
+    "package": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-19-alpha22-f04a/Seamo AI R1.app",
+    "launch": "Finder/LaunchServices (not direct binary)",
+    "windowVisible": true,
+    "micOff": true,
+    "rebuiltForHandoff": false
+  },
+  "preHandoff": {
+    "alpha21Idle": { "micOff": true, "activeTasks": 0, "dialogOrEditorOpen": false, "focusedElement": "BODY" },
+    "snapshot": {
+      "path": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-19-alpha22-f04a/user-data-snapshot-before-handoff",
+      "r1SqliteSha256": "418d617dc01553f243660134ea24f153a6e5cebab44d0d3e03d984f8ce116ba5",
+      "counts": { "sessions": 49, "messages": 177, "items": 4, "memories": 0, "activeTasks": 0 }
+    }
+  },
+  "launchIssueAndFix": {
+    "observed": "After abrupt prior app stops, normal Finder/LaunchServices launch could leave a running process with no visible window; CLI open -a also logged task_name_for_pid failure and produced no process.",
+    "confirmedAppRuntimeCause": "Stale Electron single-instance runtime artifacts (SingletonLock/SingletonCookie/SingletonSocket) from prior abrupt stops.",
+    "fixApplied": "Removed only those runtime lock files under userData (not vault, config, database or ACL), then launched via Finder; alpha.22 window opened.",
+    "vaultOrUserDataDeleted": false
+  },
+  "savedConfigDiagnosis": {
+    "visibleStatus": "服务状态读取失败 · 前往设置; 系统钥匙串暂时不可用。请手动解锁 login 钥匙串后重试；已保存的加密配置保留。",
+    "keychainItem": {
+      "service": "Seamo AI R1 Safe Storage",
+      "account": "Seamo AI R1 Key",
+      "createdAt": "2026-10-16T07:07:27Z",
+      "present": true
+    },
+    "osAuthEvidence": {
+      "securityShowKeychainInfoExit": 51,
+      "securityShowKeychainInfoError": "SecKeychainCopySettings login.keychain-db: The user name or passphrase you entered is not correct.",
+      "aclDumpError": "SecKeychainItemCopyAccess: The user name or passphrase you entered is not correct.",
+      "visibleSecurityAgentDialog": false
+    },
+    "signingEvidence": {
+      "validCodeSigningIdentities": 0,
+      "alpha17Cdhash": "c7b57a1971d9b7007655c4624ff5d10fa14370ca",
+      "alpha21Cdhash": "45da73a50eda5c6297b66dc60ae9e9e4cb57ba85",
+      "alpha22Cdhash": "1a07dd114515166067abff1445a0d2835388154a",
+      "allAdHoc": true,
+      "teamIdentifierSet": false
+    },
+    "vault": { "path": "~/Library/Application Support/Seamo AI R1/credentials.bin", "bytes": 307, "modified": "2026-10-17T12:34:54+08:00", "preserved": true },
+    "classification": [
+      "OS/session/login-keychain authentication is the primary confirmed blocker: system Security APIs fail for keychain settings and ACL access, not only the app -25293 lookup.",
+      "Different ad-hoc signatures/no code-signing identity are a contributing ACL risk; stable signing remains external.",
+      "App load/retry handling only catches startup failure and displays the generic message; no crash, no repeated retry, and it is not the root cause."
+    ],
+    "notDone": ["vault deletion", "ACL reset/change", "plaintext/env credential fallback", "repeated unlock attempts", "new provider/model"]
+  },
+  "preserved": {
+    "alpha17Package": true, "alpha19Package": true, "alpha20Package": true, "alpha21Package": true,
+    "userDataSnapshot": true, "credentialsVault": true
+  },
+  "f04a": {
+    "status": "one 18/20=90% fixed-set pass, not a stability claim",
+    "residualFailures": ["M03", "M13"],
+    "missingRunLimitation": "run3 exploratory raw JSON was removed during an interim prompt revert; its failure IDs are recorded in f04a-classification.md, not as raw evidence.",
+    "furtherReruns": "none; no provider change"
+  },
+  "notRun": ["real voice/listen-and-chat", "music playback requiring saved config", "system permission checks requiring saved config", "signing/notarization"]
+}
