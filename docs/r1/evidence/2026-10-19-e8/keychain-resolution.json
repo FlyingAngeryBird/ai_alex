@@ -83,5 +83,13 @@
     ],
     "missingRun3Raw": true,
     "furtherReruns": "none"
+  },
+  "safeRelaunchAfterResolution": {
+    "action": "quit alpha.22 normally, clear only stale Singleton runtime files, relaunch same alpha.22 via Finder/LaunchServices",
+    "windowOpened": true,
+    "micOff": true,
+    "serviceStatusVisible": "服务状态读取失败 · 前往设置",
+    "keychainLookupErrorLogObserved": false,
+    "conclusion": "login keychain is not missing/locked and no auth prompt exists; saved-config access still fails at app safeStorage/ACL/signing level."
   }
 }
