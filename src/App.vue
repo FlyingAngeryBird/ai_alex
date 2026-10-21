@@ -108,6 +108,7 @@ const speechPlayer = createAssistantSpeech({
 const nativeAutoRequested = ref(false)
 const realtimeSearch = ref<import('../electron/main/r1/realtimeSearch').RealtimeSearchState | null>(null)
 const realtimeSearchBusy = computed(() => !!realtimeSearch.value && ['searching', 'reading', 'waiting'].includes(realtimeSearch.value.phase))
+const settingsPanel = ref<InstanceType<typeof R1SettingsPanel> | null>(null)
 const taskPanel = ref<InstanceType<typeof R1TaskPanel> | null>(null)
 const memoryConfirmation = ref<MemoryConfirmation | null>(null)
 const itemAction = ref<import('../electron/main/r1/itemActions').ItemActionView | null>(null)
@@ -201,15 +202,15 @@ const latestTaskCompletion = computed(() => taskState.completionNotices.value.at
 async function viewTaskCompletion(): Promise<void> {
   const notice = latestTaskCompletion.value
   if (!notice) return
-  taskState.selectedId.value = notice.taskId
-  await openTask()
-  if (taskOpen.value) taskState.dismissCompletion(notice.key)
+  if (await openTask(notice.taskId)) taskState.dismissCompletion(notice.key)
 }
-async function openTask(): Promise<void> {
-  if (!await prepareTaskPanelLeave()) return
+async function openTask(targetId?: string): Promise<boolean> {
+  if (!await prepareTaskPanelLeave()) return false
   closePanels()
+  if (targetId) taskState.selectedId.value = targetId
   if (!taskState.selected.value) taskState.selectedId.value = taskState.tasks.value.at(-1)?.taskId ?? null
   taskOpen.value = true
+  return true
 }
 const searchOpen = ref(false)
 const searchEverOpened = ref(false)
@@ -217,6 +218,7 @@ const memoryOpen = ref(false)
 const historyOpen = ref(false)
 const textBusy = ref(false)
 const composer = ref<InstanceType<typeof R1Composer> | null>(null)
+const composerExtraHeight = ref(0)
 const credentialStatus = ref<CredentialStatus | null>(null)
 const credentialReadFailed = ref(false)
 let credentialRetryTimer: number | null = null
@@ -235,7 +237,11 @@ async function finishWelcome(target: 'home' | 'settings' | 'services'): Promise<
   } catch { welcomeError.value = '引导状态暂时无法保存，请重试。' }
   finally { welcomeBusy.value = false }
 }
-const currentDate = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())
+const currentDate = ref('')
+let dateTimer: ReturnType<typeof setInterval> | undefined
+function updateCurrentDate(): void { currentDate.value = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date()) }
+onMounted(() => { updateCurrentDate(); dateTimer = setInterval(updateCurrentDate, 30_000) })
+onBeforeUnmount(() => clearInterval(dateTimer))
 const hasSidePanel = computed(() => settingsOpen.value || itemsOpen.value || memoryOpen.value || historyOpen.value)
 const microphoneCapturing = computed(() => nativeConversation.active.value || keyboardRecorder.isRecording.value || realtimeRecorder.isRecording.value)
 function applyCredentialStatus(credentials: Awaited<ReturnType<typeof window.seamoR1.credentials.status>>): boolean {
@@ -265,6 +271,7 @@ const serviceLabel = computed(() => {
 })
 
 async function prepareTaskPanelLeave(): Promise<boolean> {
+  if (settingsOpen.value && settingsPanel.value && !settingsPanel.value.canLeave()) return false
   if (!taskOpen.value) return true
   try {
     const saved = await (taskPanel.value?.flushEditing() ?? true)
@@ -302,13 +309,15 @@ async function checkVoiceConfiguration(mode: VoiceMode): Promise<void> {
   catch (error) { throw new Error(error instanceof Error && voiceConfigurationMessage(error.message) ? error.message : 'VOICE_CONFIGURATION_UNAVAILABLE') }
 }
 
-function closePanels(): void {
+function closePanels(): boolean {
+  if (settingsOpen.value && settingsPanel.value && !settingsPanel.value.canLeave()) return false
   taskOpen.value = false
   settingsOpen.value = false
   itemsOpen.value = false
   searchOpen.value = false
   memoryOpen.value = false
   historyOpen.value = false
+  return true
 }
 const temporaryMode = ref(false)
 const lastNormalTopic = ref<string | null>(null)
@@ -914,7 +923,7 @@ async function handleKeyUp(event: KeyboardEvent): Promise<void> {
 }
 
 async function handleKeyDown(event: KeyboardEvent): Promise<void> {
-  if (memoryConfirmation.value) return
+  if (event.defaultPrevented || memoryConfirmation.value || document.querySelector('[aria-modal="true"]')) return
   if (event.key === 'Escape') {
     if (itemAction.value || welcomeOpen.value) return
     if (taskOpen.value) {
@@ -925,8 +934,7 @@ async function handleKeyDown(event: KeyboardEvent): Promise<void> {
     if (hasDismissiblePanel({ settingsOpen: settingsOpen.value, itemsOpen: itemsOpen.value,
       memoryOpen: memoryOpen.value, historyOpen: historyOpen.value, searchOpen: searchOpen.value })) {
       event.preventDefault()
-      closePanels()
-      composer.value?.focusInput()
+      if (closePanels()) composer.value?.focusInput()
     }
     return
   }
@@ -1267,7 +1275,7 @@ onBeforeUnmount(() => {
       <button class="r1-brand" type="button" @click="leaveTaskPanel(() => music.closeImmersive())"
         aria-label="返回 Seamo 陪伴首页"><AudioLines :size="25" /><span>Seamo <em>AI</em></span></button>
       <time>{{ currentDate }}</time>
-      <div class="r1-header-right"><button v-if="taskState.tasks.value.length && !taskOpen" type="button" class="r1-header-task" @click="openTask">查看委托</button><span class="r1-mic-state"><Mic v-if="microphoneCapturing" :size="14" /><MicOff v-else :size="14" />{{ microphoneCapturing ? '正在收音' : '麦克风未开启' }}</span></div>
+      <div class="r1-header-right"><button v-if="taskState.tasks.value.length && !taskOpen" type="button" class="r1-header-task" @click="openTask()">查看委托</button><span class="r1-mic-state"><Mic v-if="microphoneCapturing" :size="14" /><MicOff v-else :size="14" />{{ microphoneCapturing ? '正在收音' : '麦克风未开启' }}</span></div>
     </header>
     <nav class="r1-rail" aria-label="主导航">
       <button type="button" :aria-current="viewMode === 'conversation' && !hasSidePanel && !searchOpen ? 'page' : undefined"
@@ -1286,7 +1294,7 @@ onBeforeUnmount(() => {
           @click="openPanel('settings')"><Settings2 :size="20" /><span>设置</span></button>
       </div>
     </nav>
-    <section class="r1-main-space" aria-label="Seamo 陪伴空间">
+    <section class="r1-main-space" :style="{ '--r1-composer-extra': `${composerExtraHeight}px` }" aria-label="Seamo 陪伴空间">
       <R1FocusChip v-if="focus.active.value && focus.state.value" :focus="focus.state.value" :busy="focus.busy.value"
         @pause="focus.control('pause')" @resume="focus.control('resume')" @stop="focus.control('stop')" />
       <div class="r1-particle-space" :data-mode="viewMode">
@@ -1347,6 +1355,7 @@ onBeforeUnmount(() => {
         :busy="textBusy || conversation.isListening.value || conversation.particleState.value === 'thinking' || assistantAudioPlaying"
         :is-listening="conversation.isListening.value" :temporary-mode="temporaryMode"
         :service-label="serviceLabel" :music-active="viewMode === 'music'"
+        @layout-height="(extra) => { composerExtraHeight = extra }"
         @send="handleSendText" @voice-press-start="beginPushToTalk()" @voice-press-end="endPushToTalk()" @voice-press-cancel="cancelPushToTalk"
         @toggle-temporary="handleToggleTemporary" @toggle-auto-listen="toggleAutoListen"
         @open-service-settings="openServiceSettings"
@@ -1357,7 +1366,7 @@ onBeforeUnmount(() => {
       :busy="taskState.busy.value" :loading="taskState.loading.value" :error="taskState.error.value"
       @close="closeTaskPanel" @select="(id) => { taskState.selectedId.value = id }"
       @control="taskState.control" @retry="taskState.refresh" />
-    <R1SettingsPanel :devices="audioDevices" :system-reduced-motion="systemReducedMotion" :diagnostic-trace="() => ({ ...getLastLatencyTrace(), nativeVoice: nativeConversation.getDiagnostics() })" :native-diagnostics="nativeConversation.getDiagnostics" @open-history="openPanel('history')"
+    <R1SettingsPanel ref="settingsPanel" :devices="audioDevices" :system-reduced-motion="systemReducedMotion" :diagnostic-trace="() => ({ ...getLastLatencyTrace(), nativeVoice: nativeConversation.getDiagnostics() })" :native-diagnostics="nativeConversation.getDiagnostics" @open-history="openPanel('history')"
       :show-service-configuration="serviceConfigurationOpen"
       :service-configuration-field="serviceConfigurationField"
       v-if="settingsOpen"
@@ -1404,7 +1413,7 @@ onBeforeUnmount(() => {
       @view="viewTaskCompletion" @dismiss="taskState.dismissCompletion(latestTaskCompletion.key)" />
     <aside v-if="!welcomeOpen && !temporaryMode && !reminderNotice && !focusNotice && !latestTaskCompletion && taskState.recoveryTasks.value.length" class="r1-reminder-toast" role="status">
       <div><strong>上次还有 {{ taskState.recoveryTasks.value.length }} 项委托未完成</strong><p>尚未重新执行。选择继续后，会先核对已保存的结果。</p></div>
-      <button type="button" @click="taskState.selectedId.value = taskState.recoveryTasks.value[0]!.taskId; openTask(); taskState.dismissRecovery()">查看委托</button>
+      <button type="button" @click="async () => { if (await openTask(taskState.recoveryTasks.value[0]!.taskId)) taskState.dismissRecovery() }">查看委托</button>
       <button type="button" @click="taskState.dismissRecovery()">稍后</button>
     </aside>
   </main>

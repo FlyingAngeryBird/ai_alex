@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { Bell, Check, FileText, NotebookPen, Plus, Search, Timer, Trash2, X } from 'lucide-vue-next'
+import { itemReminder, itemScheduleGroup } from '@/utils/itemSchedule'
+import { vModalFocus } from '@/utils/modalFocus'
 import R1ItemActionDialog from '@/components/R1ItemActionDialog.vue'
 import type { Item, Reminder } from '../../electron/shared/r1Api'
 
@@ -26,20 +28,18 @@ const filtered = computed(() => items.value.filter(item => item.kind === tab.val
   `${item.title} ${item.body}`.toLocaleLowerCase().includes(query.value.trim().toLocaleLowerCase())))
 const groups = computed(() => {
   if (tab.value === 'note') return [{ title: '最近留下的记录', entries: filtered.value }]
-  const today = new Date().toDateString()
-  const due = (item: Item) => reminders.value.find(reminder => reminder.itemId === item.itemId && reminder.status !== 'cancelled')
-  return [
-    { title: '今天', entries: filtered.value.filter(item => !item.completedAt && due(item) && new Date(due(item)!.dueAtUtc).toDateString() === today) },
-    { title: '之后', entries: filtered.value.filter(item => !item.completedAt && due(item) && new Date(due(item)!.dueAtUtc).toDateString() !== today) },
-    { title: '未定时间', entries: filtered.value.filter(item => !item.completedAt && !due(item)) },
-    { title: '已完成', entries: filtered.value.filter(item => item.completedAt) }
-  ].filter(group => group.entries.length)
+  return ['已过期', '今天', '之后', '未定时间', '已完成'].map(title => ({ title,
+    entries: filtered.value.filter(item => itemScheduleGroup(item, reminders.value, new Date(now.value)) === title)
+  })).filter(group => group.entries.length)
 })
-const independentReminders = computed(() => reminders.value.filter(reminder => !reminder.itemId && reminder.status !== 'cancelled'))
-
+const now = ref(Date.now())
+let clockTimer: ReturnType<typeof setInterval> | undefined
+const independentReminders = computed(() => reminders.value.filter(reminder => !reminder.itemId && reminder.status !== 'cancelled' &&
+  reminder.body.toLocaleLowerCase().includes(query.value.trim().toLocaleLowerCase())))
 function firstReminder(item: Item): Reminder | undefined {
-  return reminders.value.find(reminder => reminder.itemId === item.itemId && reminder.status !== 'cancelled')
+  return itemReminder(item.itemId, reminders.value)
 }
+
 function dateLabel(value: string): string {
   return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit' }).format(new Date(value))
@@ -58,25 +58,39 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message === 'VERSION_CONFLICT'
     ? '这件事已有新版本，请关闭编辑窗口并重新打开。' : fallback
 }
+let refreshVersion = 0
 async function refresh(): Promise<void> {
+  const version = ++refreshVersion
   loading.value = true
   try {
     const [itemResult, reminderResult] = await Promise.all([
       window.seamoR1.items.list(), window.seamoR1.reminders.list()
     ])
+    if (version !== refreshVersion) return
     if (!itemResult.ok || !reminderResult.ok) throw new Error('READ_FAILED')
     items.value = itemResult.data
     reminders.value = reminderResult.data
-  } catch { message.value = '事项暂时无法读取，请重试。' }
-  finally { loading.value = false }
+  } catch { if (version === refreshVersion) message.value = '事项暂时无法读取，请重试。' }
+  finally { if (version === refreshVersion) loading.value = false }
 }
 function openItem(item: Item | null = null): void {
   message.value = ''
   editor.value = { item, kind: item?.kind ?? tab.value, title: item?.title ?? '', body: item?.body ?? '' }
 }
+function escapeItem(): void {
+  const draft = editor.value
+  if (!draft || busy.value) return
+  if (draft.title !== (draft.item?.title ?? '') || draft.body !== (draft.item?.body ?? '') || draft.kind !== (draft.item?.kind ?? tab.value)) {
+    message.value = '修改尚未保存，请保存，或点击取消放弃本次修改。'; return
+  }
+  editor.value = null
+}
 async function saveItem(): Promise<void> {
   const draft = editor.value
   if (!draft || busy.value || !draft.title.trim() || !persistentAllowed()) return
+  if ([...draft.title.trim()].length > 80 || [...draft.body].length > 8000) {
+    message.value = '标题最多 80 字，正文最多 8000 字；当前内容已保留，请缩短后保存。'; return
+  }
   busy.value = true
   message.value = ''
   try {
@@ -127,6 +141,16 @@ function openReminder(item: Item | null = null): void {
   reminderEditor.value = { item, reminder, body: reminder?.body ?? item?.title ?? '',
     at: reminder ? localDateTime(reminder.dueAtUtc) : '' }
 }
+function escapeReminder(): void {
+  const draft = reminderEditor.value
+  if (!draft || busy.value) return
+  const originalAt = draft.reminder ? localDateTime(draft.reminder.dueAtUtc) : ''
+  const originalBody = draft.reminder?.body ?? draft.item?.title ?? ''
+  if (draft.at !== originalAt || draft.body !== originalBody) {
+    message.value = '提醒修改尚未保存，请保存，或点击返回放弃本次修改。'; return
+  }
+  reminderEditor.value = null
+}
 function openExistingReminder(reminder: Reminder): void {
   reminderEditor.value = { item: null, reminder, body: reminder.body,
     at: localDateTime(reminder.dueAtUtc) }
@@ -135,7 +159,7 @@ async function saveReminder(): Promise<void> {
   const draft = reminderEditor.value
   if (!draft || busy.value || !draft.body.trim() || !persistentAllowed()) return
   const date = new Date(draft.at)
-  if (!draft.at || !Number.isFinite(date.getTime()) || date.getTime() <= Date.now()) {
+  if (!draft.at || !Number.isFinite(date.getTime()) || date.getTime() <= Date.now() || localDateTime(date.toISOString()) !== draft.at) {
     message.value = '请选择未来的具体日期和时间。'; return
   }
   busy.value = true
@@ -170,9 +194,14 @@ async function cancelReminder(reminder: Reminder): Promise<void> {
   finally { busy.value = false }
 }
 async function previewDeletion(item: Item): Promise<void> {
-  const result = await window.seamoR1.items.deletionPreview(item.itemId)
-  if (result.ok) { deletion.value = result.data; deleteError.value = '' }
-  else message.value = '关联提醒已变化，请刷新后重试。'
+  if (busy.value) return
+  busy.value = true
+  try {
+    const result = await window.seamoR1.items.deletionPreview(item.itemId)
+    if (result.ok) { deletion.value = result.data; deleteError.value = '' }
+    else message.value = '关联提醒已变化，请刷新后重试。'
+  } catch { message.value = '删除确认暂时无法读取，请重试。' }
+  finally { busy.value = false }
 }
 async function deleteItem(disposition: 'keep' | 'cancel'): Promise<void> {
   if (!deletion.value || busy.value) return
@@ -206,16 +235,17 @@ async function acknowledgePersistence(confirmed: boolean): Promise<void> {
   } catch { persistAcknowledged.value = false; message.value = '保存范围确认未生效，请重试。' }
 }
 onMounted(() => {
+  clockTimer = setInterval(() => { now.value = Date.now() }, 30_000)
   void refresh()
   void loadTemporaryPersistence()
   stopEvents = window.seamoR1.reminders.onDue(() => { void refresh() })
   stopItemChanges = window.seamoR1.items.onChanged(() => { void refresh() })
 })
-onUnmounted(() => { stopEvents?.(); stopItemChanges?.() })
+onUnmounted(() => { refreshVersion++; clearInterval(clockTimer); stopEvents?.(); stopItemChanges?.() })
 </script>
 
 <template>
-  <aside class="r1-basic-side r1-items-panel" aria-label="事项" @keydown.stop @keyup.stop>
+  <aside class="r1-basic-side r1-items-panel" aria-label="事项">
     <header><div><small>SEAMO / YOUR THINGS</small><h2>手边的事</h2></div>
       <button type="button" aria-label="关闭侧栏" @click="emit('close')"><X :size="19" /></button></header>
     <div class="r1-basic-content">
@@ -260,29 +290,28 @@ onUnmounted(() => { stopEvents?.(); stopItemChanges?.() })
     </div>
   </aside>
 
-  <div v-if="editor" class="r1-memory-modal-backdrop" role="presentation" @click.self="editor = null">
-    <form class="r1-memory-modal r1-items-modal" role="dialog" aria-modal="true" aria-label="编辑事项" @submit.prevent="saveItem">
+  <div v-if="editor" class="r1-memory-modal-backdrop" role="presentation">
+    <form v-modal-focus class="r1-memory-modal r1-items-modal" role="dialog" aria-modal="true" aria-label="编辑事项" @keydown.esc.prevent="escapeItem" @submit.prevent="saveItem">
       <small>YOUR THINGS</small><h3>{{ editor.item ? '把这件事理清楚' : '记下一件事' }}</h3>
-      <label>事情<input v-model="editor.title" maxlength="80" required /></label>
-      <label>补充内容<textarea v-model="editor.body" maxlength="8000" rows="4" /></label>
-      <label>类型<select v-model="editor.kind"><option value="todo">待办</option><option value="note">记录</option></select></label>
+      <label>事情<input v-model="editor.title" :disabled="busy" required /></label>
+      <label>补充内容<textarea v-model="editor.body" :disabled="busy" rows="4" /></label>
+      <label>类型<select v-model="editor.kind" :disabled="busy"><option value="todo">待办</option><option value="note">记录</option></select></label>
       <p v-if="temporaryMode">保存后会独立留在设备上；请先在事项侧栏确认保存范围。</p>
-      <div class="r1-memory-dialog-actions"><button type="button" @click="editor = null">取消</button>
+      <div class="r1-memory-dialog-actions"><button type="button" :disabled="busy" @click="editor = null">取消</button>
         <button v-if="editor.item" type="button" :disabled="busy" @click="exportItem('txt')">导出 TXT</button>
         <button v-if="editor.item" type="button" :disabled="busy" @click="exportItem('md')">导出 Markdown</button>
-        <button v-if="editor.item?.kind === 'todo'" type="button" @click="editor = null; emit('startFocus')">开始专注</button>
         <button type="submit" :disabled="busy || !editor.title.trim()">保存</button></div>
       <p v-if="message" role="status">{{ message }}</p>
     </form>
   </div>
-  <div v-if="reminderEditor" class="r1-memory-modal-backdrop" role="presentation" @click.self="reminderEditor = null">
-    <form class="r1-memory-modal r1-items-modal" role="dialog" aria-modal="true" aria-label="设置提醒" @submit.prevent="saveReminder">
-      <small>YOUR THINGS</small><h3>{{ reminderEditor.reminder ? '修改提醒' : '设置一次性提醒' }}</h3>
-      <label>提醒内容<input v-model="reminderEditor.body" maxlength="8000" required :disabled="!!reminderEditor.reminder" /></label>
-      <label>具体日期和时间<input v-model="reminderEditor.at" type="datetime-local" required /></label>
+  <div v-if="reminderEditor" class="r1-memory-modal-backdrop" role="presentation">
+    <form v-modal-focus class="r1-memory-modal r1-items-modal" role="dialog" aria-modal="true" aria-label="设置提醒" @keydown.esc.prevent="escapeReminder" @submit.prevent="saveReminder">
+      <small>YOUR THINGS</small><h3>{{ reminderEditor.reminder ? '提醒改期' : '设置一次性提醒' }}</h3>
+      <label>提醒内容<input v-model="reminderEditor.body" maxlength="8000" required :disabled="busy || !!reminderEditor.reminder" /></label>
+      <label>具体日期和时间<input v-model="reminderEditor.at" :disabled="busy" type="datetime-local" required /></label>
       <p>只在应用运行且 Mac 清醒时调度；完全退出、关机或休眠期间不保证准点。</p>
       <div class="r1-memory-dialog-actions"><button v-if="reminderEditor.reminder" type="button" :disabled="busy" @click="cancelReminder(reminderEditor.reminder)">取消提醒</button>
-        <button type="button" @click="reminderEditor = null">返回</button><button type="submit" :disabled="busy">保存时间</button></div>
+        <button type="button" :disabled="busy" @click="reminderEditor = null">返回</button><button type="submit" :disabled="busy">{{ reminderEditor.reminder ? '保存时间' : '创建提醒' }}</button></div>
       <p v-if="message" role="status">{{ message }}</p>
     </form>
   </div>

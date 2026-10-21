@@ -91,6 +91,7 @@ async function exportCleanupBackup(): Promise<void> {
     if (!result.data.cancelled) message.value = `清理前副本已导出至 ${result.data.fileName}`
   })
 }
+defineExpose({ canLeave: () => !busy.value && !preview.value && !cleanup.value })
 onBeforeUnmount(() => { disposed = true; cancelRestore() })
 </script>
 

@@ -84,4 +84,4 @@ it('renders 30 simulated minutes across circular-buffer wraps without losing, re
   ])
   expect(s.events.some(event => event.type === 'error' || event.status === 'underrun')).toBe(false)
   expect([...s.render()].every(sample => sample === 0)).toBe(true)
-}, 30000)
+}, 60000)

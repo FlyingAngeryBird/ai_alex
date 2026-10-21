@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp, MessageCircle, ArrowRight, Pencil, Plus, Search
 import type { R1Topic } from '../../electron/main/r1/topics'
 import type { R1Api } from '../../electron/shared/r1Api'
 import type { R1Memory, R1MemorySource } from '../../electron/main/r1/memory'
+import { vModalFocus } from '@/utils/modalFocus'
 import { relativeDateTime, relativeDay } from '@/utils/dateLabels'
 
 const props = defineProps<{ temporary: boolean; revision?: number; interactionBusy?: boolean }>()
@@ -44,7 +45,7 @@ onMounted(() => {
   stopPolicy = window.seamoR1.memory.onPolicyChanged(value => { autoMemory.value = value.enabled })
   void window.seamoR1.memory.policy().then(result => { if (result.ok) autoMemory.value = result.data.enabled }).catch(() => {})
 })
-onBeforeUnmount(() => stopPolicy?.())
+onBeforeUnmount(() => { stopPolicy?.(); loadRevision++ })
 const records = ref<R1Memory[]>([])
 const sources = ref<Record<string, R1MemorySource[]>>({})
 const tab = ref<'about' | 'topics'>('about')
@@ -54,6 +55,10 @@ const hasMore = ref(false)
 const draft = ref('')
 const category = ref<R1Memory['category']>('preference')
 const editingId = ref<string | null>(null)
+const editingVersion = ref(0)
+const editingContent = ref('')
+const editingCategory = ref<R1Memory['category']>('preference')
+const confirmingRecord = ref<R1Memory | null>(null)
 const editorOpen = ref(false)
 const confirmingId = ref<string | null>(null)
 const busy = ref(false)
@@ -70,7 +75,7 @@ function label(categoryValue: R1Memory['category']): string {
 
 async function load(): Promise<void> {
   const revision = ++loadRevision
-  records.value = []; topics.value = []; topicDetails.value = {}
+  records.value = []; topics.value = []; topicDetails.value = {}; sources.value = {}
   if (props.temporary) { loading.value = false; return }
   loading.value = true
   try {
@@ -118,7 +123,7 @@ async function save(): Promise<void> {
   try {
     const result = editingId.value
       ? await window.seamoR1.memory.update({ memoryId: editingId.value,
-          expectedVersion: records.value.find((record) => record.memoryId === editingId.value)?.version ?? 0,
+          expectedVersion: editingVersion.value,
           content: draft.value, category: category.value })
       : await window.seamoR1.memory.addManual({ content: draft.value, category: category.value })
     if (!result.ok) {
@@ -142,6 +147,8 @@ async function save(): Promise<void> {
 function edit(record: R1Memory): void {
   message.value = ''
   editingId.value = record.memoryId
+  editingVersion.value = record.version
+  editingContent.value = record.content; editingCategory.value = record.category
   draft.value = record.content
   category.value = record.category
   confirmingId.value = null
@@ -151,7 +158,7 @@ function edit(record: R1Memory): void {
 function newMemory(): void {
   message.value = ''
   editingId.value = null
-  draft.value = ''
+  draft.value = ''; editingContent.value = ''; editingCategory.value = 'preference'
   category.value = 'preference'
   confirmingId.value = null
   editorOpen.value = true
@@ -160,7 +167,9 @@ function newMemory(): void {
 async function showSources(memoryId: string): Promise<void> {
   if (props.temporary || sources.value[memoryId]) return
   try {
+    const revision = loadRevision
     const result = await window.seamoR1.memory.sources(memoryId)
+    if (revision !== loadRevision || props.temporary) return
     if (result.ok) sources.value = { ...sources.value, [memoryId]: result.data }
     else message.value = result.error.code === 'MEMORY_SOURCE_UNAVAILABLE'
       ? '原始来源已不可查看；独立记忆仍保留，清理历史不会自动忘记记忆。' : '来源暂时无法读取。'
@@ -236,8 +245,15 @@ async function continueTopic(topic: R1Topic): Promise<void> {
     else { message.value = '话题已有变化，请刷新后再继续。'; await load() }
   } catch { message.value = '话题暂时无法接续，请重试。' } finally { busy.value = false }
 }
+function escapeEditor(): void {
+  if (busy.value) return
+  if (draft.value !== editingContent.value || category.value !== editingCategory.value) {
+    message.value = '修改尚未保存，请保存，或点击取消放弃本次修改。'; return
+  }
+  editorOpen.value = false
+}
 function confirmForget(): void {
-  const record = records.value.find((item) => item.memoryId === confirmingId.value)
+  const record = confirmingRecord.value
   if (record) void forget(record)
 }
 </script>
@@ -268,7 +284,7 @@ function confirmForget(): void {
                 {{ source.body }}<small>{{ relativeDateTime(source.createdAt) }}</small></p>
             </details>
             <div class="r1-memory-actions"><button type="button" @click="edit(record)"><Pencil :size="13" />更正</button>
-              <button type="button" @click="confirmingId = record.memoryId"><Trash2 :size="13" />忘记</button></div>
+              <button type="button" @click="message = ''; confirmingRecord = { ...record }; confirmingId = record.memoryId"><Trash2 :size="13" />忘记</button></div>
           </article>
           <div v-if="page > 0 || hasMore" class="r1-memory-pages">
             <button type="button" :disabled="page === 0 || loading" @click="page -= 1; load()">上一页</button>
@@ -301,7 +317,7 @@ function confirmForget(): void {
     </div>
   </aside>
   <div v-if="topicEditing" class="r1-memory-modal-backdrop" role="presentation">
-    <form ref="topicDialog" class="r1-memory-modal" role="dialog" aria-modal="true" aria-label="更正话题结论" tabindex="-1" @keydown.tab="trapTopicFocus" @keydown.esc.prevent="!busy && (topicEditing = null)" @submit.prevent="saveTopic">
+    <form ref="topicDialog" class="r1-memory-modal" role="dialog" aria-modal="true" aria-label="更正话题结论" tabindex="-1" @keydown.tab="trapTopicFocus" @keydown.esc.stop.prevent="!busy && (topicEditing = null)" @submit.prevent="saveTopic">
       <h3>更正这件事的结论</h3><label for="topic-title">话题</label><input id="topic-title" :disabled="busy" v-model="topicTitle" maxlength="80" required />
       <label for="topic-summary">最近结论</label><textarea id="topic-summary" :disabled="busy" v-model="topicSummary" maxlength="1600" rows="4" required />
       <label for="topic-unresolved">未解问题（每行一项）</label><textarea id="topic-unresolved" :disabled="busy" v-model="topicUnresolved" rows="3" />
@@ -310,28 +326,28 @@ function confirmForget(): void {
     </form>
   </div>
   <div v-if="topicConfirming" class="r1-memory-modal-backdrop" role="presentation">
-    <section ref="topicDialog" class="r1-memory-modal" role="alertdialog" aria-modal="true" aria-label="确认忘记话题" tabindex="-1" @keydown.tab="trapTopicFocus" @keydown.esc.prevent="!busy && (topicConfirming = null)"><h3>忘记这个话题？</h3><p>{{ topicConfirming.title }}</p><p>这个话题及其结论不再用于后续回答。原始聊天、独立事项和提醒保留。</p><div class="r1-memory-dialog-actions"><button type="button" :disabled="busy" @click="topicConfirming = null">保留</button><button type="button" :disabled="busy" @click="forgetTopic">确认忘记</button></div><p v-if="message" role="alert">{{ message }}</p></section>
+    <section ref="topicDialog" class="r1-memory-modal" role="alertdialog" aria-modal="true" aria-label="确认忘记话题" tabindex="-1" @keydown.tab="trapTopicFocus" @keydown.esc.stop.prevent="!busy && (topicConfirming = null)"><h3>忘记这个话题？</h3><p>{{ topicConfirming.title }}</p><p>这个话题及其结论不再用于后续回答。原始聊天、独立事项和提醒保留。</p><div class="r1-memory-dialog-actions"><button type="button" :disabled="busy" @click="topicConfirming = null">保留</button><button type="button" :disabled="busy" @click="forgetTopic">确认忘记</button></div><p v-if="message" role="alert">{{ message }}</p></section>
   </div>
-  <div v-if="editorOpen" class="r1-memory-modal-backdrop" role="presentation" @click.self="editorOpen = false">
-    <form class="r1-memory-modal" role="dialog" aria-modal="true" aria-label="保存记忆" @submit.prevent="save">
+  <div v-if="editorOpen" class="r1-memory-modal-backdrop" role="presentation">
+    <form v-modal-focus class="r1-memory-modal" role="dialog" aria-modal="true" aria-label="保存记忆" @keydown.esc.prevent="escapeEditor" @submit.prevent="save">
       <h3>{{ editingId ? '更正这段记忆' : '添加一段记忆' }}</h3>
       <p>这段内容会作为你确认的长期记忆保存，并保留原始来源。</p>
       <label for="r1-memory-content">内容</label>
-      <textarea id="r1-memory-content" v-model="draft" maxlength="1000" rows="4" required />
+      <textarea id="r1-memory-content" :disabled="busy" v-model="draft" maxlength="1000" rows="4" required />
       <label for="r1-memory-category">归类</label>
-      <select id="r1-memory-category" v-model="category"><option value="preference">偏好</option>
+      <select id="r1-memory-category" :disabled="busy" v-model="category"><option value="preference">偏好</option>
         <option value="profile">关于我</option><option value="ongoing">近况</option><option value="conclusion">共同结论</option></select>
-      <div class="r1-memory-dialog-actions"><button type="button" @click="editorOpen = false">取消</button>
+      <div class="r1-memory-dialog-actions"><button type="button" :disabled="busy" @click="editorOpen = false">取消</button>
         <button type="submit" :disabled="busy || !draft.trim()">{{ editingId ? '保存更正' : '保存记忆' }}</button></div>
       <p v-if="message" role="status">{{ message }}</p>
     </form>
   </div>
-  <div v-if="confirmingId" class="r1-memory-modal-backdrop" role="presentation" @click.self="confirmingId = null">
-    <div class="r1-memory-modal" role="alertdialog" aria-modal="true" aria-label="确认忘记记忆">
+  <div v-if="confirmingId" class="r1-memory-modal-backdrop" role="presentation">
+    <div v-modal-focus class="r1-memory-modal" role="alertdialog" @keydown.esc.prevent="!busy && (confirmingId = null)" aria-modal="true" aria-label="确认忘记记忆">
       <h3>忘记这段记忆？</h3>
-      <p>{{ records.find((record) => record.memoryId === confirmingId)?.content }}</p>
+      <p>{{ confirmingRecord?.content }}</p>
       <p>这会移除长期记忆；独立保存的事项和提醒不会随之删除。</p>
-      <div class="r1-memory-dialog-actions"><button type="button" @click="confirmingId = null">保留</button>
+      <div class="r1-memory-dialog-actions"><button type="button" :disabled="busy" @click="confirmingId = null">保留</button>
         <button type="button" :disabled="busy" @click="confirmForget">确认忘记</button></div>
       <p v-if="message" role="status">{{ message }}</p>
     </div>

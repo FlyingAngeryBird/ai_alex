@@ -2,7 +2,7 @@
 import R1WebResult from './R1WebResult.vue'
 import R1ArtifactEditor from './R1ArtifactEditor.vue'
 import { Pause, Play, X } from 'lucide-vue-next'
-import { watch } from 'vue'
+import { ref, watch } from 'vue'
 import type { R1Task, TaskStatus } from '../../electron/main/r1/taskSupervisor'
 const props = defineProps<{ tasks: R1Task[]; selected: R1Task | null; busy: boolean; error: string; loading: boolean; active?: boolean }>()
 const editors = new Map<string, { flush(): Promise<boolean> }>()
@@ -25,6 +25,19 @@ async function flushEditing(): Promise<boolean> {
   await new Promise(resolve => setTimeout(resolve, 250))
   return await flushOnce()
 }
+const selecting = ref(false)
+const selectionError = ref('')
+async function selectTask(event: Event): Promise<void> {
+  const select = event.target as HTMLSelectElement, next = select.value
+  select.value = props.selected?.taskId ?? ''
+  if (selecting.value) return
+  selecting.value = true; selectionError.value = ''
+  try {
+    if (await flushEditing()) emit('select', next)
+    else selectionError.value = '工作稿尚未保存，请先保存或撤销，再切换委托。'
+  } catch { selectionError.value = '工作稿暂时无法保存，当前内容已保留。' }
+  finally { selecting.value = false }
+}
 defineExpose({ flushEditing })
 // Best-effort persistence when the panel hides because of sidebar/view navigation.
 watch(() => props.active, active => { if (active === false) void flushEditing() })
@@ -40,10 +53,11 @@ const labels: Record<TaskStatus, string> = { accepted: '等待处理', running: 
       <p v-if="error" role="alert">{{ error }} <button type="button" @click="emit('retry')">重试</button></p>
       <p v-if="loading && !tasks.length" role="status">正在读取…</p>
       <label v-if="tasks.length > 1" class="r1-task-picker">查看委托
-        <select :value="selected?.taskId || ''" @change="emit('select', ($event.target as HTMLSelectElement).value)">
+        <select :value="selected?.taskId || ''" :disabled="selecting" @change="selectTask">
           <option disabled value="">选择一项委托</option><option v-for="task in tasks" :key="task.taskId" :value="task.taskId">{{ task.goal }}</option>
         </select>
       </label>
+      <p v-if="selectionError" role="alert">{{ selectionError }}</p>
       <template v-if="selected">
         <section><small>当前条件</small><p class="task-goal">{{ selected.goal }}</p>
           <ul v-if="selected.constraints.length"><li v-for="condition in selected.constraints" :key="condition">{{ condition }}</li></ul></section>

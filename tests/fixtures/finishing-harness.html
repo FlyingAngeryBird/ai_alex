@@ -1,0 +1,44 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><link rel="icon" href="data:,"><title>R1 收尾交互隔离检查</title></head><body style="margin:0"><div id="app"></div>
+<script type="module">
+import { createApp, h, ref } from 'vue'
+import R1Composer from '../../src/components/R1Composer.vue'
+import R1MemoryPanel from '../../src/components/R1MemoryPanel.vue'
+import R1ItemsPanel from '../../src/components/R1ItemsPanel.vue'
+import R1SettingsPanel from '../../src/components/R1SettingsPanel.vue'
+import '../../src/r1-shell.css'
+const ok = data => ({ ok:true, data }), fail = code => ({ok:false,error:{code}})
+const snapshot = value => JSON.parse(JSON.stringify(value))
+const memory = { memoryId:'m', version:1, content:'原始记忆', category:'preference', authorization:'manual', createdAt:new Date().toISOString() }
+const item = {itemId:'i',kind:'todo',title:'昨天的事项',body:'事项正文',version:1,completedAt:null,deletedAt:null}
+const reminder = {reminderId:'r',itemId:'i',status:'scheduled',dueAtUtc:new Date(Date.now()-86400000).toISOString(),body:'提醒正文',scheduleVersion:1}
+const calls = ref([]), revision = ref(0)
+const policy = { enabled:false,version:1 }
+const persona = ref({assistantName:'Seamo AI',userAddress:'',voiceId:'',style:'balanced',version:1})
+window.seamoR1 = {
+ memory: {onPolicyChanged:()=>()=>{},policy:async()=>ok(policy),list:async()=>ok({entries:[snapshot(memory)],hasMore:false}),sources:async()=>ok([]),update:async input=>{calls.value.push(input);return fail('VERSION_CONFLICT')},forget:async(id,version)=>{calls.value.push({forget:id,version});return fail('VERSION_CONFLICT')}},
+ items:{list:async()=>ok([item]),onChanged:()=>()=>{}, update:async input=>{calls.value.push(input);return ok({})}},
+ reminders:{list:async()=>ok([reminder]),onDue:()=>()=>{},reschedule:async input=>{calls.value.push(input);return ok({})}},
+ session:{temporaryPersistence:async()=>ok({confirmed:false})},
+ preferences:{get:async()=>ok({version:1}),onChanged:()=>()=>{}},
+ credentials:{status:async()=>ok({})},
+ services:{cancel:async()=>ok(null)},
+ data:{cancelRestore:async()=>ok(null)},
+ persona:{update:async input=>{calls.value.push(input);return ok({...persona.value,...input,version:2})}}
+}
+createApp({setup(){
+ const panel=ref('composer'), settings=ref(null)
+ const navigate = value => {if(panel.value==='settings' && !settings.value.canLeave())return;panel.value=value}
+ const send=(text,complete)=>{calls.value.push({send:text});setTimeout(()=>complete(false),1000)}
+ const refresh=()=>{memory.version++;memory.content='其他窗口更新';revision.value++}
+ return()=>h('main',{class:'r1-shell',style:'min-height:100vh;background:#101517;color:#dce8df'},[
+ h('nav',{style:'padding:20px;position:relative;z-index:60;margin-left:75%;display:flex;flex-direction:column;gap:8px'},[
+ ...['composer','memory','items','settings'].map(value=>h('button',{onClick:()=>navigate(value)},value)),
+ h('button',{onClick:refresh},'模拟背景记忆更新'),h('button',{onClick:()=>{calls.value=[]}},'清空调用记录')]),
+ h('output',{'aria-label':'调用记录',style:'display:block;margin-left:75%;word-break:break-all'},JSON.stringify(calls.value)),
+ panel.value==='composer'?h(R1Composer,{assistantName:'验收助手',autoListenState:'off',busy:false,isListening:false,temporaryMode:false,serviceLabel:'隔离检查',musicActive:false,onSend:send}):null,
+ panel.value==='memory'?h(R1MemoryPanel,{temporary:false,revision:revision.value,onClose:()=>navigate('composer')}):null,
+ panel.value==='items'?h(R1ItemsPanel,{temporaryMode:false,onClose:()=>navigate('composer')}):null,
+ panel.value==='settings'?h(R1SettingsPanel,{ref:settings,persona:persona.value,voicePreviewing:false,onClose:()=>navigate('composer'),onSaved:value=>{persona.value=value}}):null
+ ])
+}}).mount('#app')
+</script></body></html>

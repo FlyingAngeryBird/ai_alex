@@ -12,6 +12,7 @@ import R1DataSettings from './R1DataSettings.vue'
 
 const props = defineProps<{ persona: R1Persona | null; voicePreviewing: boolean; devices?: ReturnType<typeof createAudioDevices>; systemReducedMotion?: boolean; diagnosticTrace?: () => unknown; showServiceConfiguration?: boolean; serviceConfigurationField?: CredentialField;
   nativeDiagnostics?: () => ReturnType<ReturnType<typeof import('../composables/useNativeConversation').useNativeConversation>['getDiagnostics']> }>()
+const dataSettings = ref<InstanceType<typeof R1DataSettings> | null>(null)
 const nativeSnapshot = ref<ReturnType<NonNullable<typeof props.nativeDiagnostics>> | null>(null)
 const serviceConfiguration = ref<HTMLDetailsElement | null>(null)
 async function revealServiceConfiguration(): Promise<void> {
@@ -165,13 +166,37 @@ function checkLabel(report?: ServiceCheckReport): string {
   return '检测失败，请检查服务配置后重试'
 }
 
-watch(() => props.persona, (current) => {
-  if (!current) return
+const personaBase = ref<R1Persona | null>(null)
+const personaDirty = computed(() => Boolean(personaBase.value && (
+  assistantName.value !== personaBase.value.assistantName || userAddress.value !== personaBase.value.userAddress ||
+  style.value !== personaBase.value.style || voiceId.value !== personaBase.value.voiceId)))
+const leaveWarning = ref('')
+function loadPersona(current: R1Persona): void {
+  personaBase.value = { ...current }
   assistantName.value = current.assistantName
   userAddress.value = current.userAddress
   style.value = current.style
   voiceId.value = current.voiceId
-}, { immediate: true })
+}
+watch(() => props.persona, current => { if (current && !personaDirty.value) loadPersona(current) }, { immediate: true })
+function canLeave(): boolean {
+  if (dataSettings.value && !dataSettings.value.canLeave()) { leaveWarning.value = '数据操作尚未结束，请完成或取消后离开。'; return false }
+  if (busy.value || permissionBusy.value) { leaveWarning.value = '正在保存或申请权限，请稍候。'; return false }
+  if (personaDirty.value || Object.values(credentialInputs).some(value => Boolean(value?.trim()))) {
+    leaveWarning.value = '有未保存的设置。请先保存，或放弃本次修改后离开。'
+    return false
+  }
+  leaveWarning.value = ''
+  return true
+}
+function discardChanges(): void {
+  if (busy.value) return
+  if (props.persona) loadPersona(props.persona)
+  for (const field of credentialFields) credentialInputs[field.key] = ''
+  recoveryArmed.value = false
+  leaveWarning.value = ''
+}
+defineExpose({ canLeave })
 
 async function refreshCredentials(reload = false): Promise<void> {
   if (credentialLoading.value) return
@@ -218,7 +243,7 @@ async function savePersona(): Promise<void> {
   message.value = ''
   try {
     const result = await window.seamoR1.persona.update({
-      expectedVersion: props.persona.version,
+      expectedVersion: personaBase.value?.version ?? props.persona.version,
       assistantName: assistantName.value,
       userAddress: userAddress.value,
       style: style.value,
@@ -230,6 +255,8 @@ async function savePersona(): Promise<void> {
         : '保存失败：请检查助手名、称呼和表达偏好的长度。'
       return
     }
+    loadPersona(result.data)
+    leaveWarning.value = ''
     emit('saved', result.data)
     invalidateChecks()
     message.value = '偏好已保存；下一轮回复会使用新版本。'
@@ -326,21 +353,23 @@ async function clearCredential(field: CredentialField): Promise<void> {
     <header><div><small>SEAMO / PERSONAL SPACE</small><h2>偏好设置</h2></div>
       <button type="button" aria-label="关闭侧栏" @click="emit('close')"><X :size="19" /></button></header>
     <div class="r1-basic-content">
+      <div v-if="leaveWarning" class="r1-settings-leave-warning" role="alert"><p>{{ leaveWarning }}</p>
+        <button type="button" :disabled="busy || permissionBusy" @click="discardChanges">放弃未保存修改</button></div>
       <button type="button" class="r1-welcome-link" @click="emit('showWelcome')">查看首次使用说明</button>
       <section class="r1-settings-section">
         <h3>与你交流的方式</h3>
         <label for="r1-assistant-name">助手称呼</label>
-        <input id="r1-assistant-name" v-model="assistantName" maxlength="20" autocomplete="off" />
+        <input id="r1-assistant-name" v-model="assistantName" :disabled="busy" maxlength="20" autocomplete="off" />
         <label for="r1-user-address">对你的称呼</label>
-        <input id="r1-user-address" v-model="userAddress" maxlength="20" placeholder="留空则不使用固定称呼" autocomplete="off" />
+        <input id="r1-user-address" v-model="userAddress" :disabled="busy" maxlength="20" placeholder="留空则不使用固定称呼" autocomplete="off" />
         <label for="r1-voice-id">声音 ID</label>
-        <div class="r1-settings-voice"><input id="r1-voice-id" v-model="voiceId" maxlength="200"
+        <div class="r1-settings-voice"><input id="r1-voice-id" v-model="voiceId" :disabled="busy" maxlength="200"
           placeholder="留空使用服务默认音色" autocomplete="off" />
           <button type="button" :disabled="voicePreviewing || !voiceId.trim()"
             @click="emit('previewVoice', voiceId.trim())">{{ voicePreviewing ? '试听中' : '试听' }}</button></div>
         <details><summary>更细的表达方式</summary>
           <label for="r1-style">表达偏好</label>
-          <textarea id="r1-style" v-model="style" maxlength="2000" rows="4" />
+          <textarea id="r1-style" v-model="style" :disabled="busy" maxlength="2000" rows="4" />
         </details>
         <button type="button" class="r1-settings-save" :disabled="busy || !persona" @click="savePersona">保存偏好</button>
       </section>
@@ -447,7 +476,7 @@ async function clearCredential(field: CredentialField): Promise<void> {
         </details>
       </section>
       <p v-if="message" class="r1-settings-message" role="status">{{ message }}</p>
-      <R1DataSettings :diagnostic-trace="diagnosticTrace" @open-history="emit('openHistory')" />
+      <R1DataSettings ref="dataSettings" :diagnostic-trace="diagnosticTrace" @open-history="emit('openHistory')" />
     </div>
   </aside>
 </template>
@@ -475,4 +504,9 @@ async function clearCredential(field: CredentialField): Promise<void> {
 .switch input:checked + span::before { transform: translateX(14px); background: #183326; }
 .switch input:focus-visible + span { outline: 2px solid var(--r1-gold); outline-offset: 4px; }
 .switch input:disabled + span { opacity: .45; }
+</style>
+
+<style scoped>
+.r1-settings-leave-warning { position:sticky;top:0;z-index:2;padding:12px;background:#29332f;border:1px solid var(--r1-line);border-radius:6px;color:#e1d3af;font-size:12px; }
+.r1-settings-leave-warning button { background:none;border:0;color:var(--r1-aqua);text-decoration:underline;cursor:pointer; }
 </style>
