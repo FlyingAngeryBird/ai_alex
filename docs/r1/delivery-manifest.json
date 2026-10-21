@@ -63,7 +63,8 @@
       "serialized-null and ARK length-reason confirmed fixes with tests; full 107 files/688 tests",
       "F04a fixed 20-case set run5 18/20 (90%) after retrieval/routing fixes; original dataset/scoring preserved; failed runs retained",
       "E8 credential failure classification/recover path targeted tests; non-model focus conflict/new duration, in-app reminder delivery, device status, diagnostic summary",
-      "E10 alpha.24: 109 files/700 tests and typecheck/build; browser editor/navigation checks; packaged app starts with fake HOME and creates isolated SQLite; codesign verification passed"
+      "E10 alpha.24: 109 files/700 tests and typecheck/build; browser editor/navigation checks; packaged app starts with fake HOME and creates isolated SQLite; codesign verification passed",
+      "E10 isolated packaged alpha.22→alpha.24→alpha.22 startup: synthetic item retained, SQLite schema12 and integrity_check ok; actual user data untouched"
     ],
     "pendingUserAcceptance": [
       "alpha.24 actual encrypted configuration read and real service connection after safe real-data handoff",

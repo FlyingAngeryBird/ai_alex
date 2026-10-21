@@ -6,7 +6,7 @@
   - SHA256 `1934ab5805477399b23da371d05c06b975a103cad90ec4531ba1fab7b8ee5479`
   - 源码 `9b23426653a1a5e8752b079ff35288a742e176fb`；资产 3.5.9、工具 schema 3.2.1、SQLite 12、bundle `com.seamo.ai.r1`
   - 本机 ad-hoc 签名，**未 Developer ID、未公证**；包内无 `.env`/凭据/用户库
-- alpha.24 已用独立 fake HOME 启动并生成隔离 SQLite；`codesign --verify --deep --strict` 通过。未切换当前用户 alpha.22 进程，未触碰其数据。真实服务及人声尚未由本包验证。
+- alpha.24 已用独立 fake HOME 启动并生成隔离 SQLite；`codesign --verify --deep --strict` 通过。隔离合成事项在 alpha.22→alpha.24→alpha.22 启动链中保留，SQLite schema 12、`integrity_check=ok`。未切换当前用户 alpha.22 进程，未触碰其数据。真实服务及人声尚未由本包验证。
 - 保留历史包：alpha.23、alpha.22、alpha.21、alpha.20、alpha.19、alpha.18、alpha.17、alpha.16；不覆盖旧包。
 
 ## 安装（内部验收）
@@ -20,7 +20,7 @@
 1. 退出应用并备份 `~/Library/Application Support/Seamo AI R1`（包括 `r1.sqlite`、配置及加密凭据文件；备份限本机且权限仅本人）。
 2. 用新 `.app` 替换旧 `.app`（同路径即原位升级）；启动后确认数据仍可读、版本/资产正确。
 3. 回退：退出并用旧候选 `.app` 替换；若数据库 schema 相同（alpha.18↔alpha.19 均为 12），数据可直接读取；跨 schema 回退使用升级前快照，不要用旧包直接打开新 schema。
-4. 既有实测：alpha.18→alpha.19 升级后原待办/提醒保留、新写入成功；回退 alpha.18 后 alpha.19 新增记录仍可读。alpha.24 目前只完成独立新装启动，尚未做与旧包之间的隔离升级/回退或真实用户目录切换。
+4. 既有实测：alpha.18→alpha.19 升级后原待办/提醒保留、新写入成功；回退 alpha.18 后 alpha.19 新增记录仍可读。本次隔离 alpha.22→alpha.24→alpha.22 启动链中合成事项仍为 1 条、schema 12 且完整性检查通过；真实用户目录尚未切换。
 5. 应用内数据恢复会生成 `*.pre-restore-*.sqlite` 回滚副本，保留至验收完成。
 
 ## 人工/系统与外部条件
