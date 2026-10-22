@@ -19,3 +19,9 @@
 - 浏览器使用生产组件和样式、隔离合成曲目：归组4首/5条音源结果，展开2版本、收藏/入队计数变化、长标题、桌面1422px/窄窗700px无横向溢出。截图：[桌面搜索](evidence/2026-10-22-music-search/search-wide.png)、[窄窗搜索](evidence/2026-10-22-music-search/search-narrow.png)、[球体位置](evidence/2026-10-22-music-search/player-wide.png)。此类证据不冒充真实扬声器播放。
 - 音源本身的版权、资源失效与服务可用性仍受上游影响；状态提示与部分结果可以降低等待影响，不能保证每个指定歌曲都有资源。
 - 包、实际应用切换和界面验收情况补记于版本清单；旧包与用户数据保留。
+
+## 包与真实应用
+
+- alpha.26：源码 `ce3d860f0cf564e476a23c3a9504d8e609f39e23`；ZIP 148,721,301字节，SHA256 `3a5fba0aad531cd10a4cc802fea74fb953f88fc98d1fc4e1ed0464ce35a6229d`，目录 `/Users/sea/Documents/Seamo-R1-Previews/2026-10-22-alpha26-music-search/`。签名完整性通过，包内无.env/credentials.bin/用户库。
+- alpha.25原有播放已暂停、收音关闭、14项委托均终态，退出后保存真实数据快照；快照数据库immutable读取完整性ok/schema12，启动前数据库字节一致。alpha.26加载历史并可打开音乐页。随后用户接管操作，未继续代操作；不冒充实包整链验收。
+- 新包服务状态读取失败仍可见，保留已有凭据；音乐元数据接口不依赖模型Key。本批没有复验真实语音或修改任何钥匙串权限。

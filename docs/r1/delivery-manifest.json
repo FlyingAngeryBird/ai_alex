@@ -2,15 +2,15 @@
   "product": "Seamo AI R1",
   "channel": "internal-acceptance",
   "branch": "codex/seamo-r1",
-  "generatedAt": "2026-10-22T13:43:07+08:00",
+  "generatedAt": "2026-10-22T22:39:48+08:00",
   "candidate": {
-    "appVersion": "1.0.0-alpha.25",
+    "appVersion": "1.0.0-alpha.26",
     "bundleId": "com.seamo.ai.r1",
-    "sourceCommit": "bf4969d5de0edc54e0eb6a906bcced3c4710dcc4",
-    "packageDir": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-22-alpha25-data-layout",
-    "zip": "Seamo-AI-R1-1.0.0-alpha.25-mac-arm64.zip",
-    "zipBytes": 148717740,
-    "zipSha256": "995b3fd8556465f6bc81a9719fe51263198ab1d7e3239fbb530e73caefeef577",
+    "sourceCommit": "ce3d860f0cf564e476a23c3a9504d8e609f39e23",
+    "packageDir": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-22-alpha26-music-search",
+    "zip": "Seamo-AI-R1-1.0.0-alpha.26-mac-arm64.zip",
+    "zipBytes": 148721301,
+    "zipSha256": "3a5fba0aad531cd10a4cc802fea74fb953f88fc98d1fc4e1ed0464ce35a6229d",
     "signing": "local-ad-hoc",
     "notarized": false,
     "forbiddenFilesFound": false,
@@ -26,14 +26,14 @@
   "remote": {
     "origin": "https://github.com/FlyingAngeryBird/ai_alex.git",
     "branch": "codex/seamo-r1",
-    "sourceCommitPushed": "bf4969d5de0edc54e0eb6a906bcced3c4710dcc4",
+    "sourceCommitPushed": "ce3d860f0cf564e476a23c3a9504d8e609f39e23",
     "pr": "https://github.com/FlyingAngeryBird/ai_alex/pull/1",
     "pushTransport": "SSH",
     "prBodyUpdate": "not required for source delivery"
   },
   "dataPolicy": {
     "userDataDir": "~/Library/Application Support/Seamo AI R1",
-    "preUpgradeSnapshot": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-22-alpha25-data-layout/pre-switch-user-data-20261022",
+    "preUpgradeSnapshot": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-22-alpha26-music-search/pre-switch-user-data-20261022",
     "doesNotShip": [
       ".env",
       "credentials.bin",
@@ -68,14 +68,18 @@
       "E10 actual alpha.24 app: old local history/items/tasks visible; stored credentials recovered after one manual reload; Ark request and native realtime session open/close checks passed without microphone",
       "E10 actual alpha.24 app: one text question returned 2+3=5; two-line composer rendered and draft cleared; memory/history/task/music entry points opened",
       "E10 alpha.24 user confirmed short native realtime voice reply and subtitles both normal; microphone off afterward",
-      "alpha.25 data settings: isolated normal/700px visual check, checkbox toggle and preview gating; typecheck/build/codesign; actual app launched with existing history visible and microphone off"
+      "alpha.25 data settings: isolated normal/700px visual check, checkbox toggle and preview gating; typecheck/build/codesign; actual app launched with existing history visible and microphone off",
+      "alpha.26 music: 7 files/55 related tests and typecheck/build; incremental result/play registration, request sharing/cache/retry and stale-progress guards; browser production component layout at measured 1422px and 700px with version expansion/favorite/queue actions",
+      "alpha.26 real provider metadata sample: first 10 at 3485ms, final 20 at 4072ms, cached repeat 2ms; netease/joox 200, kuwo 400; no per-track cover requests and no playback claim",
+      "alpha.26 actual app started after paused alpha.25 exit and local data snapshot (immutable SQLite integrity ok/schema12, DB bytes equal); existing history visible, mic off, music page opened"
     ],
     "pendingUserAcceptance": [
       "alpha.24 first-launch credential read timed out; one manual reload recovered the original saved configuration; startup reliability remains unverified",
       "extended real voice/audio/music ducking and subjective particle appearance; microphone/notification/DND/sleep/device checks",
       "native diagnostic save dialog and formal install/rollback acceptance",
       "Developer ID signing/notarization for public download",
-      "alpha.25 actual app data settings visual review; native UI scroll unavailable during final inspection"
+      "alpha.26 actual app service status reads failed; model/realtime configuration recovery and voice remain pending; no credentials changed",
+      "alpha.26 full music search/play listening and visual acceptance; browser layout evidence and metadata timings are not audio verification"
     ],
     "externalBlocked": [
       "Developer ID signing/notarization",
@@ -84,7 +88,7 @@
     "notClaimedComplete": true
   },
   "userActions": [
-    "Review the redesigned Data and Diagnostics section in running alpha.25; do not confirm cleanup unless intending to delete selected local data",
+    "Try the updated music search and layout in running alpha.26; service configuration read failure remains a separate issue, do not send passwords or keys",
     "Provide Developer ID signing/notarization conditions before public release"
   ]
 }
