@@ -66,11 +66,12 @@
       "E10 alpha.24: 109 files/700 tests and typecheck/build; browser editor/navigation checks; packaged app starts with fake HOME and creates isolated SQLite; codesign verification passed",
       "E10 isolated packaged alpha.22→alpha.24→alpha.22 startup: synthetic item retained, SQLite schema12 and integrity_check ok; actual user data untouched",
       "E10 actual alpha.24 app: old local history/items/tasks visible; stored credentials recovered after one manual reload; Ark request and native realtime session open/close checks passed without microphone",
-      "E10 actual alpha.24 app: one text question returned 2+3=5; two-line composer rendered and draft cleared; memory/history/task/music entry points opened"
+      "E10 actual alpha.24 app: one text question returned 2+3=5; two-line composer rendered and draft cleared; memory/history/task/music entry points opened",
+      "E10 alpha.24 user confirmed short native realtime voice reply and subtitles both normal; microphone off afterward"
     ],
     "pendingUserAcceptance": [
       "alpha.24 first-launch credential read timed out; one manual reload recovered the original saved configuration; startup reliability remains unverified",
-      "real user voice/audio/music ducking and subjective particle appearance; microphone/notification/DND/sleep/device checks",
+      "extended real voice/audio/music ducking and subjective particle appearance; microphone/notification/DND/sleep/device checks",
       "native diagnostic save dialog and formal install/rollback acceptance",
       "Developer ID signing/notarization for public download"
     ],
@@ -81,7 +82,7 @@
     "notClaimedComplete": true
   },
   "userActions": [
-    "Confirm actual voice and music listening experience in running alpha.24; do not send passwords or API keys",
+    "Confirm extended voice with music and subjective music listening experience in running alpha.24; do not send passwords or API keys",
     "Provide Developer ID signing/notarization conditions before public release"
   ]
 }
