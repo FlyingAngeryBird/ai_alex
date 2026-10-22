@@ -4,6 +4,7 @@ import type { AppResult } from '@/types/electron-api'
 import type { MusicAudioBands, MusicSourcePreference, MusicTrack, PlaybackState, ViewMode } from '@/types/app'
 import { invokeWithTimeout } from '../utils/invokeWithTimeout'
 import type { MusicCommand, MusicReport, MusicSnapshot } from '../../electron/main/r1/music'
+import type { MusicSearchProgress } from '../../electron/main/music/gdstudioMusicProvider'
 
 type UseMusicOptions = {
   createAudioContext?: () => AudioContext | null
@@ -122,6 +123,8 @@ export function useMusic(options: UseMusicOptions = {}) {
   const audioBands = ref<MusicAudioBands>(createInitialAudioBands())
   const searchResults = ref<MusicTrack[]>([])
   const searchResultsVisible = ref(false)
+  const searchBusy = ref(false)
+  const searchSources = ref<MusicSearchProgress['sources']>([])
   const sourcePreference = ref<MusicSourcePreference>('all')
   const searchQuery = ref(r1 ? '' : '适合此刻的音乐')
   const playbackHistory = ref<MusicTrack[]>([])
@@ -152,7 +155,9 @@ export function useMusic(options: UseMusicOptions = {}) {
   let bridgeReady: Promise<boolean> | null = null, stopped = false, deviceVersion = 0, deviceRequest = ''
   let stopCommands: (() => void) | undefined, stopSnapshots: (() => void) | undefined
   let desiredVolume: { value: number; expectedVersion: number } | null = null, volumeBusy = false
-  let searchGeneration = 0
+  let searchGeneration = 0, searchRequestId = ''
+  let stopSearchProgress: (() => void) | undefined
+  let pendingSearch: { query: string; source: MusicSourcePreference; promise: Promise<MusicTrack[]> } | null = null
   const queueEntries = ref<MusicSnapshot['queue']>([])
   const queueVersion = ref(0)
 
@@ -168,6 +173,11 @@ export function useMusic(options: UseMusicOptions = {}) {
     if (!r1 || stopped) return false
     if (bridgeReady) return bridgeReady
     stopSnapshots = r1.onChanged(adopt)
+    stopSearchProgress = r1.onSearchProgress?.(value => {
+      if (stopped || value.requestId !== searchRequestId) return
+      searchResults.value = value.tracks
+      searchSources.value = value.sources
+    })
     stopCommands = r1.onCommand(command => { void ensureBridge().then(ready => { if (ready) void applyCommand(command) }) })
     bridgeReady = r1.attach().then(result => {
       if (!result.ok || stopped) return false
@@ -710,45 +720,57 @@ export function useMusic(options: UseMusicOptions = {}) {
     return playRequest(query, sourcePreferenceOverride)
   }
 
-  async function searchMusic(
+  function searchMusic(
     query: string,
-    sourcePreferenceOverride: MusicSourcePreference = sourcePreference.value
+    sourcePreferenceOverride: MusicSourcePreference = sourcePreference.value,
+    refresh = false
   ): Promise<MusicTrack[]> {
     const normalizedQuery = query.trim()
+    if (!normalizedQuery || stopped) return Promise.resolve([])
+    if (searchBusy.value && pendingSearch?.query === normalizedQuery && pendingSearch.source === sourcePreferenceOverride) return pendingSearch.promise
+    const promise = runSearch(normalizedQuery, sourcePreferenceOverride, refresh)
+    pendingSearch = { query: normalizedQuery, source: sourcePreferenceOverride, promise }
+    return promise
+  }
+
+  async function runSearch(normalizedQuery: string, source: MusicSourcePreference, refresh: boolean): Promise<MusicTrack[]> {
     const generation = ++searchGeneration
-
-    if (!normalizedQuery) {
-      return []
-    }
-
+    searchRequestId = `music-${Date.now()}-${generation}`
+    const requestId = searchRequestId
     searchQuery.value = normalizedQuery
-    sourcePreference.value = sourcePreferenceOverride
-    if (r1) {
-      await ensureBridge()
-      const result = await r1.search({ keyword: normalizedQuery, sourcePreference: sourcePreferenceOverride })
-      if (generation !== searchGeneration || stopped) return searchResults.value
-      musicNotice.value = result.ok ? '' : `音乐搜索暂不可用（${result.error.code}），请重试或切换音源。`
-      searchResults.value = result.ok ? result.data : []; searchResultsVisible.value = true
-      return searchResults.value
-    }
-    const searchResult = await invokeMusic<{ tracks: MusicTrack[] }>('music.search', {
-      query: normalizedQuery,
-      sourcePreference: sourcePreference.value
-    })
-    if (generation !== searchGeneration || stopped) return searchResults.value
-
-    if (!searchResult.ok) {
-      musicNotice.value = `音乐搜索暂不可用（${searchResult.error.code}），请重试或切换音源。`
-      searchResults.value = []
-      searchResultsVisible.value = true
-      return []
-    }
-
-    musicNotice.value = ''
-    searchResults.value = searchResult.data.tracks
+    sourcePreference.value = source
+    searchResults.value = []
     searchResultsVisible.value = true
-    void addSearchHistory(normalizedQuery)
-    return searchResults.value
+    searchBusy.value = true
+    musicNotice.value = ''
+    searchSources.value = (source === 'all' ? ['netease', 'kuwo', 'joox'] as const : [source]).map(value => ({ source: value, status: 'searching' }))
+    try {
+      if (r1) {
+        await ensureBridge()
+        const result = await r1.search({ keyword: normalizedQuery, sourcePreference: source, requestId, refresh })
+        if (generation !== searchGeneration || stopped) return searchResults.value
+        musicNotice.value = result.ok ? '' : `音乐搜索暂不可用（${result.error.code}），请重试或切换音源。`
+        searchResults.value = result.ok ? result.data : []
+      } else {
+        const result = await invokeMusic<{ tracks: MusicTrack[] }>('music.search', { query: normalizedQuery, sourcePreference: source })
+        if (generation !== searchGeneration || stopped) return searchResults.value
+        musicNotice.value = result.ok ? '' : `音乐搜索暂不可用（${result.error.code}），请重试或切换音源。`
+        searchResults.value = result.ok ? result.data.tracks : []
+        if (result.ok) void addSearchHistory(normalizedQuery)
+      }
+      return searchResults.value
+    } catch {
+      if (generation === searchGeneration && !stopped) musicNotice.value = '音乐搜索未能完成，请重试。'
+      return []
+    } finally {
+      if (generation === searchGeneration) {
+        searchBusy.value = false
+        searchRequestId = ''
+        // Older providers may only supply the final response.
+        searchSources.value = searchSources.value.map(value => value.status !== 'searching' ? value : ({ ...value,
+          status: searchResults.value.some(track => track.source === value.source) ? 'ready' : musicNotice.value ? 'unavailable' : 'empty' }))
+      }
+    }
   }
 
   async function playSearchResult(track: MusicTrack): Promise<PlaybackState> {
@@ -941,6 +963,7 @@ export function useMusic(options: UseMusicOptions = {}) {
   }
 
   async function exitPlayback(): Promise<void> {
+    searchGeneration++; searchRequestId = ''; searchBusy.value = false; searchSources.value = []
     if (r1) {
       if (!await ensureBridge() || !r1Snapshot) return
       const result = await r1.exit({ expectedVersion: r1Snapshot.state.playerVersion })
@@ -1059,7 +1082,7 @@ export function useMusic(options: UseMusicOptions = {}) {
     if (r1Snapshot?.state.playerVersion === version && r1Snapshot?.state.track?.trackKey === trackKey) await nextTrack()
   }
 
-  function dispose(): void { stopped = true; searchGeneration++; stopCommands?.(); stopSnapshots?.(); ducking.dispose(); releaseAudioResources(); if (r1) void r1.detach().catch(() => undefined) }
+  function dispose(): void { stopped = true; searchGeneration++; stopCommands?.(); stopSnapshots?.(); stopSearchProgress?.(); searchRequestId = ''; ducking.dispose(); releaseAudioResources(); if (r1) void r1.detach().catch(() => undefined) }
   if (getCurrentInstance()) onBeforeUnmount(dispose)
 
   return {
@@ -1097,6 +1120,8 @@ export function useMusic(options: UseMusicOptions = {}) {
     searchQuery,
     searchResults,
     searchResultsVisible,
+    searchBusy,
+    searchSources,
     setActiveTab,
     sourcePreference,
     toggleFavorite,

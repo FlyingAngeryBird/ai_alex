@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { afterTransactionCommit, afterTransactionRollback, inTransaction, type R1Database } from './database.js'
-import type { MusicProvider, MusicTrack, MusicSourcePreference, PlaybackState } from '../music/gdstudioMusicProvider.js'
+import type { MusicProvider, MusicTrack, MusicSourcePreference, PlaybackState, MusicSearchProgress } from '../music/gdstudioMusicProvider.js'
 
 export const musicAliases = ['music_search', 'music_get_state', 'music_play', 'music_pause', 'music_resume', 'music_next',
   'music_seek', 'music_set_volume', 'music_queue', 'music_favorite', 'music_feedback'] as const
@@ -171,12 +171,17 @@ export class R1Music {
   /** Include receipt persistence in shutdown draining, beyond the device command itself. */
   trackExecution<T>(promise: Promise<T>): Promise<T> { return this.trackOperation(promise) }
   async whenIdle(): Promise<void> { while (this.operations.size) await Promise.allSettled([...this.operations]) }
-  search(keyword: string, sourcePreference: MusicSourcePreference = 'all', remember = false, useFeedback = true): Promise<MusicTrack[]> {
-    return this.trackOperation(this.searchImpl(keyword, sourcePreference, remember, useFeedback))
+  search(keyword: string, sourcePreference: MusicSourcePreference = 'all', remember = false, useFeedback = true, onProgress?: (value: MusicSearchProgress) => void, refresh = false): Promise<MusicTrack[]> {
+    return this.trackOperation(this.searchImpl(keyword, sourcePreference, remember, useFeedback, onProgress, refresh))
   }
-  private async searchImpl(keyword: string, sourcePreference: MusicSourcePreference, remember: boolean, useFeedback: boolean): Promise<MusicTrack[]> {
+  private async searchImpl(keyword: string, sourcePreference: MusicSourcePreference, remember: boolean, useFeedback: boolean, onProgress?: (value: MusicSearchProgress) => void, refresh = false): Promise<MusicTrack[]> {
     if (this.closed || typeof keyword !== 'string' || !keyword.trim() || [...keyword].length > 800) throw new Error('MUSIC_SEARCH_INVALID')
-    const result = await this.provider.search({ query: keyword.trim(), sourcePreference })
+    const result = await this.provider.search({ query: keyword.trim(), sourcePreference, ...(refresh ? { refresh: true } : {}) }, onProgress ? value => {
+      if (this.closed) return
+      // Partial rows must already be registered before the UI can play or queue them.
+      const tracks = value.tracks.slice(0, 50).flatMap(track => { try { return [this.register(track)] } catch { return [] } })
+      onProgress({ ...value, tracks })
+    } : undefined)
     if (this.closed) throw new Error('MUSIC_SERVICE_CLOSED')
     const tracks = result.tracks.slice(0, 50).flatMap(track => { try { return [this.register(track)] } catch { return [] } })
     const latest = useFeedback ? this.db.prepare(`SELECT track_key,kind FROM (SELECT track_key,kind,ROW_NUMBER() OVER(PARTITION BY track_key ORDER BY created_at DESC,rowid DESC) AS rank

@@ -14,6 +14,7 @@ function fixture(options: Parameters<typeof useMusic>[0] = {}) {
     search: async () => ({ tracks: [first, second] }), play: async payload => ({ status: 'playing', track: { ...(payload.trackId === 'two' ? second : first), audioUrl: 'https://example.org/fixture.mp3' }, durationMs: 180000, positionMs: 0 }) }
   const domain = new R1Music(db, provider, { timeoutMs: 500 })
   const commandListeners = new Set<(command: MusicCommand) => void>(), stateListeners = new Set<(snapshot: MusicSnapshot) => void>()
+  const searchListeners = new Set<Parameters<R1Api['music']['onSearchProgress']>[0]>()
   domain.onChanged(snapshot => { for (const listener of stateListeners) listener(snapshot) })
   const api: R1Api['music'] = {
     attach: async () => ({ ok: true, data: { nonce: domain.attach(1, command => { for (const listener of commandListeners) listener(command) }), snapshot: domain.snapshot() } }),
@@ -27,6 +28,7 @@ function fixture(options: Parameters<typeof useMusic>[0] = {}) {
         return { ok: true, data }
       } catch (error) { return { ok: false, error: { code: (error as Error).message, message: '' } } }
     },
+    onSearchProgress: listener => { searchListeners.add(listener); return () => { searchListeners.delete(listener) } },
     onCommand: listener => { commandListeners.add(listener); return () => commandListeners.delete(listener) },
     onChanged: listener => { stateListeners.add(listener); return () => stateListeners.delete(listener) }
   }
@@ -43,7 +45,7 @@ function fixture(options: Parameters<typeof useMusic>[0] = {}) {
     fire(name: string) { for (const listener of this.listeners.get(name) ?? []) listener() }
   }
   const music = useMusic({ createAudioContext: () => null, ...options, createAudioElement: () => { const audio = new Audio(); audios.push(audio); return audio as unknown as HTMLAudioElement } })
-  return { db, domain, music, api, first, second, audios, close() { music.dispose(); domain.close(); db.close() } }
+  return { db, domain, music, api, first, second, audios, publishSearch(value: Parameters<Parameters<R1Api['music']['onSearchProgress']>[0]>[0]) { for (const listener of searchListeners) listener(value) }, close() { music.dispose(); domain.close(); db.close() } }
 }
 it('uses the production audio bridge for play, seek, favorites and persistent queue without implicit search queuing', async () => {
   const s = fixture()
@@ -141,6 +143,23 @@ it('drops an older search response after a new query has completed', async () =>
     await vi.waitFor(() => expect(release).toBeTypeOf('function'))
     await s.music.searchMusic('较新查询'); release({ ok: true, data: [s.first] }); await previous
     expect(s.music.searchResults.value).toEqual([s.second])
+  } finally { s.close() }
+})
+it('shows partial search results immediately, joins duplicate submits and ignores late progress from older queries', async () => {
+  const s = fixture(); let release!: (value: Awaited<ReturnType<R1Api['music']['search']>>) => void
+  try {
+    await s.music.loadLibrary()
+    const search = vi.spyOn(s.api, 'search').mockImplementationOnce(() => new Promise(resolve => { release = resolve }))
+      .mockResolvedValueOnce({ ok: true, data: [s.second] })
+    const first = s.music.searchMusic('旧查询'), duplicate = s.music.searchMusic('旧查询')
+    await vi.waitFor(() => expect(search).toHaveBeenCalledTimes(1))
+    const requestId = search.mock.calls[0][0].requestId!
+    s.publishSearch({ requestId, tracks: [s.first], sources: [{ source: 'netease', status: 'ready' }, { source: 'joox', status: 'searching' }] })
+    expect(s.music.searchBusy.value).toBe(true); expect(s.music.searchResults.value).toEqual([s.first])
+    await s.music.searchMusic('新查询')
+    s.publishSearch({ requestId, tracks: [s.first], sources: [{ source: 'netease', status: 'ready' }] })
+    release({ ok: true, data: [s.first] }); await Promise.all([first, duplicate])
+    expect(s.music.searchResults.value).toEqual([s.second]); expect(s.music.searchBusy.value).toBe(false)
   } finally { s.close() }
 })
 it('does not start a misleading play-all operation after its queue update failed', async () => {

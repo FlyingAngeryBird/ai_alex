@@ -114,7 +114,7 @@ export type ExposedChannel = (typeof exposedChannels)[number]
 
 export const eventChannels = [
   'r1.preferencesChanged',
-  'r1.musicCommand', 'r1.musicChanged',
+  'r1.musicCommand', 'r1.musicChanged', 'r1.musicSearchProgress',
   'chat.streamChunk',
   'tts.streamAudio',
   'voice.nativeEvent',
@@ -203,6 +203,7 @@ function exposeLingliApi(
       report: input => invokeR1('r1.music.report', input), search: input => invokeR1('r1.music.search', input),
       control: input => invokeR1('r1.music.control', input), clearHistory: () => invokeR1('r1.music.clearHistory'),
       exit: input => invokeR1('r1.music.exit', input),
+      onSearchProgress: handler => { const listener = (...args: unknown[]) => handler(args[1] as Parameters<typeof handler>[0]); renderer.on('r1.musicSearchProgress', listener); return () => renderer.removeListener('r1.musicSearchProgress', listener) },
       onCommand: handler => { const listener = (...args: unknown[]) => handler(args[1] as Parameters<typeof handler>[0]); renderer.on('r1.musicCommand', listener); return () => renderer.removeListener('r1.musicCommand', listener) },
       onChanged: handler => { const listener = (...args: unknown[]) => handler(args[1] as Parameters<typeof handler>[0]); renderer.on('r1.musicChanged', listener); return () => renderer.removeListener('r1.musicChanged', listener) }
     },

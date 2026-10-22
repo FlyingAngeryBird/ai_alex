@@ -1,0 +1,105 @@
+{
+  "at": "2026-10-22T14:12:50.744Z",
+  "query": "告白气球 周杰伦",
+  "kind": "real-provider-metadata-only",
+  "firstResultsMs": 3485,
+  "completeMs": 4072,
+  "tracks": 20,
+  "repeatCacheMs": 2,
+  "repeatTracks": 20,
+  "requests": [
+    {
+      "type": "search",
+      "source": "kuwo",
+      "status": 400,
+      "ms": 3098
+    },
+    {
+      "type": "search",
+      "source": "netease",
+      "status": 200,
+      "ms": 3477
+    },
+    {
+      "type": "search",
+      "source": "joox",
+      "status": 200,
+      "ms": 4048
+    }
+  ],
+  "events": [
+    {
+      "ms": 0,
+      "count": 0,
+      "sources": [
+        {
+          "source": "netease",
+          "status": "searching"
+        },
+        {
+          "source": "kuwo",
+          "status": "searching"
+        },
+        {
+          "source": "joox",
+          "status": "searching"
+        }
+      ]
+    },
+    {
+      "ms": 3120,
+      "count": 0,
+      "sources": [
+        {
+          "source": "netease",
+          "status": "searching"
+        },
+        {
+          "source": "kuwo",
+          "status": "unavailable"
+        },
+        {
+          "source": "joox",
+          "status": "searching"
+        }
+      ]
+    },
+    {
+      "ms": 3485,
+      "count": 10,
+      "sources": [
+        {
+          "source": "netease",
+          "status": "ready"
+        },
+        {
+          "source": "kuwo",
+          "status": "unavailable"
+        },
+        {
+          "source": "joox",
+          "status": "searching"
+        }
+      ]
+    },
+    {
+      "ms": 4072,
+      "count": 20,
+      "sources": [
+        {
+          "source": "netease",
+          "status": "ready"
+        },
+        {
+          "source": "kuwo",
+          "status": "unavailable"
+        },
+        {
+          "source": "joox",
+          "status": "ready"
+        }
+      ]
+    }
+  ],
+  "playbackVerified": false
+}

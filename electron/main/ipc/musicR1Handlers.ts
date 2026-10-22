@@ -56,14 +56,18 @@ export function registerR1MusicHandlers(db: R1Database, music: R1Music, assets: 
   ipc.handle('r1.music.clearHistory', () => {
     try { if (mode.temporary) throw new Error('TEMPORARY_DATA_OPERATION_UNAVAILABLE'); music.clearHistory(); return { ok: true, data: null } } catch (error) { return fail(error) }
   })
-  ipc.handle('r1.music.search', async (_event, payload) => {
-    const input = payload as { keyword: string; sourcePreference?: 'all' | 'netease' | 'kuwo' | 'joox' }
+  ipc.handle('r1.music.search', async ({ sender }, payload) => {
+    const input = payload as { keyword: string; sourcePreference?: 'all' | 'netease' | 'kuwo' | 'joox'; requestId?: string; refresh?: boolean }
     try {
+      if (input.requestId !== undefined && (typeof input.requestId !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(input.requestId))) throw new Error('MUSIC_SEARCH_INVALID')
+      if (input.refresh !== undefined && typeof input.refresh !== 'boolean') throw new Error('MUSIC_SEARCH_INVALID')
       if (input.sourcePreference !== undefined && !['all', 'netease', 'kuwo', 'joox'].includes(input.sourcePreference)) throw new Error('MUSIC_SEARCH_INVALID')
       assets.validateToolInput('music_search', { keyword: input.keyword })
     } catch (error) { return fail(error) }
     const started = performance.now()
-    try { return { ok: true, data: await music.search(input.keyword, input.sourcePreference, !mode.temporary, !mode.temporary) } }
+    try { return { ok: true, data: await music.search(input.keyword, input.sourcePreference, !mode.temporary, !mode.temporary, input.requestId ? value => {
+      if (!sender.isDestroyed()) sender.send('r1.musicSearchProgress', { requestId: input.requestId, ...value })
+    } : undefined, input.refresh === true) } }
     catch (error) {
       try { recordMusicDiagnosticFailure(db, { provider: input.sourcePreference ?? 'all', phase: 'search', error, durationMs: performance.now() - started }) } catch { /* diagnostics must never change the operation result */ }
       return fail(error)

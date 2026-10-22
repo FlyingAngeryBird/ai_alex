@@ -15,7 +15,7 @@ import type { AutomaticMemoryState } from '../main/r1/automaticMemory.js'
 import type { MemoryPolicy } from '../main/r1/memoryPolicy.js'
 import type { ConfirmedMemory, MemoryConfirmation } from '../main/r1/memoryConfirmations.js'
 import type { MusicCommand, MusicReport, MusicSnapshot } from '../main/r1/music.js'
-import type { MusicTrack, MusicSourcePreference } from '../main/music/gdstudioMusicProvider.js'
+import type { MusicTrack, MusicSourcePreference, MusicSearchProgress } from '../main/music/gdstudioMusicProvider.js'
 import type { AppPreferences, PreferencesPatch } from '../main/r1/preferences.js'
 import type { R1DataManagement, FileAction, RestorePreview, CleanupPreview } from '../main/r1/dataManagement.js'
 import type { CleanupSelection } from '../main/r1/dataCleanup.js'
@@ -53,7 +53,8 @@ export type R1Api = {
     detach(): Promise<R1Result<null>>
     snapshot(): Promise<R1Result<MusicSnapshot>>
     report(input: { nonce: string; report: MusicReport }): Promise<R1Result<null>>
-    search(input: { keyword: string; sourcePreference?: MusicSourcePreference }): Promise<R1Result<MusicTrack[]>>
+    search(input: { keyword: string; sourcePreference?: MusicSourcePreference; requestId?: string; refresh?: boolean }): Promise<R1Result<MusicTrack[]>>
+    onSearchProgress(handler: (value: MusicSearchProgress & { requestId: string }) => void): () => void
     clearHistory(): Promise<R1Result<null>>
     exit(input: { expectedVersion: number }): Promise<R1Result<Record<string, unknown>>>
     control(input: { alias: string; args: Record<string, unknown>; temporarySaveConfirmed?: boolean }): Promise<R1Result<Record<string, unknown>>>

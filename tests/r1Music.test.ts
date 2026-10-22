@@ -23,6 +23,21 @@ function fixture(auto = false) {
   return { db, music, provider, candidates, commands, nonce, acknowledge, close() { music.close(); db.close() } }
 }
 describe('actual-device-gated R1 music domain', () => {
+  it('registers incremental candidates before the final search so early rows can be played', async () => {
+    const s = fixture(true); let finish!: () => void
+    try {
+      s.provider.search = async (_payload, progress) => {
+        progress?.({ tracks: [s.candidates[0]], sources: [{ source: 'netease', status: 'ready' }, { source: 'joox', status: 'searching' }] })
+        await new Promise<void>(resolve => { finish = resolve })
+        return { tracks: s.candidates }
+      }
+      const progress = vi.fn(), pending = s.music.search('测试曲', 'all', false, true, progress)
+      expect(progress).toHaveBeenCalledTimes(1)
+      expect(s.music.track('netease:netease-1').title).toBe('测试曲')
+      expect(await s.music.media('music_play', { trackKey: 'netease:netease-1', expectedVersion: 1 }, scope)).toMatchObject({ state: { playState: 'playing' } })
+      finish(); expect(await pending).toHaveLength(3)
+    } finally { s.close() }
+  })
   it('does not equate a resolved URL with playback, and rejects stale/wrong-window receipts', async () => {
     const s = fixture()
     try {

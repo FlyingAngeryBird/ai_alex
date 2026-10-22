@@ -1316,6 +1316,7 @@ onBeforeUnmount(() => {
         :search-query="music.searchQuery.value"
         :search-results="music.searchResults.value"
         :search-results-visible="music.searchResultsVisible.value"
+        :search-busy="music.searchBusy.value" :search-sources="music.searchSources.value"
         :source-preference="music.sourcePreference.value"
         @back="music.closeImmersive"
         @change-tab="music.setActiveTab"

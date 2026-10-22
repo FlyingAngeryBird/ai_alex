@@ -34,6 +34,12 @@ export type PlaybackState = {
 export type MusicSearchPayload = {
   query: string
   sourcePreference?: MusicSourcePreference
+  refresh?: boolean
+}
+
+export type MusicSearchProgress = {
+  tracks: MusicTrack[]
+  sources: Array<{ source: MusicSource; status: 'searching' | 'ready' | 'empty' | 'unavailable' }>
 }
 
 export type MusicPlayPayload = {
@@ -61,7 +67,7 @@ export type MusicProvider = {
   pause(): Promise<PlaybackState>
   play(payload: MusicPlayPayload): Promise<PlaybackState>
   resume(): Promise<PlaybackState>
-  search(payload: MusicSearchPayload): Promise<{ tracks: MusicTrack[] }>
+  search(payload: MusicSearchPayload, onProgress?: (progress: MusicSearchProgress) => void): Promise<{ tracks: MusicTrack[] }>
 }
 
 export type GdStudioProviderOptions = {
@@ -85,7 +91,7 @@ type SearchCacheEntry = {
 
 const DEFAULT_API_BASE = 'https://music-api.gdstudio.xyz/api.php'
 const DEFAULT_BITRATE = '320'
-const DEFAULT_SEARCH_COUNT = '5'
+const DEFAULT_SEARCH_COUNT = '10'
 const DEFAULT_SEARCH_PAGE = '1'
 const DEFAULT_CACHE_TTL_MS = 300_000
 const DEFAULT_SOURCE_ORDER: MusicSource[] = ['netease', 'kuwo', 'joox']
@@ -230,6 +236,7 @@ function normalizeCandidate(
 
   return {
     album: readString(record.album) || undefined,
+    artworkUrl: /^https?:\/\//i.test(readString(record.pic ?? record.artworkUrl)) ? readString(record.pic ?? record.artworkUrl) : undefined,
     artist: artists.join(' / '),
     durationMs: readDurationMs(record),
     id,
@@ -296,6 +303,7 @@ export function createGdStudioMusicProvider(
     DEFAULT_CACHE_TTL_MS
   )
   const searchCache = new Map<string, SearchCacheEntry>()
+  const searchInFlight = new Map<string, Promise<GdStudioCandidate[]>>()
   // The upstream aggregator can stop supporting a source (e.g. HTTP 400
   // "source is not supported"). Avoid probing a dead source on every search;
   // an explicit single-source request still retries once the user asks.
@@ -313,10 +321,10 @@ export function createGdStudioMusicProvider(
   class ProviderHttpError extends Error {
     constructor(readonly status: number) { super('MUSIC_PROVIDER_HTTP_FAILED'); this.name = 'ProviderHttpError' }
   }
-  async function requestJson(url: URL): Promise<unknown> {
+  async function requestJson(url: URL, timeoutMs = options.timeoutMs ?? 8000): Promise<unknown> {
     if (closed) throw new Error('MUSIC_PROVIDER_CLOSED')
     const controller = new AbortController(); requests.add(controller)
-    const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 8000)
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
     try {
       const response = await fetcher(url.toString(), { signal: controller.signal })
       if (!response.ok) throw new ProviderHttpError(response.status)
@@ -337,16 +345,25 @@ export function createGdStudioMusicProvider(
   async function searchSource(
     query: string,
     source: MusicSource,
-    respectBackoff = true
+    respectBackoff = true,
+    refresh = false
   ): Promise<GdStudioCandidate[]> {
-    if (respectBackoff && (sourceUnavailableUntil.get(source) ?? 0) > now()) throw new Error('MUSIC_PROVIDER_SOURCE_UNAVAILABLE')
     const cacheKey = `${source}:${query.toLowerCase()}`
     const cached = searchCache.get(cacheKey)
 
-    if (cached && cached.expiresAt > now()) {
+    if (!refresh && cached && cached.expiresAt > now()) {
       return cached.tracks
     }
+    if (respectBackoff && (sourceUnavailableUntil.get(source) ?? 0) > now()) throw new Error('MUSIC_PROVIDER_SOURCE_UNAVAILABLE')
 
+    const inFlight = searchInFlight.get(cacheKey)
+    if (inFlight) return inFlight
+    const pending = loadSearchSource(query, source, cacheKey).finally(() => searchInFlight.delete(cacheKey))
+    searchInFlight.set(cacheKey, pending)
+    return pending
+  }
+
+  async function loadSearchSource(query: string, source: MusicSource, cacheKey: string): Promise<GdStudioCandidate[]> {
     let body: unknown
     try {
       body = await requestJson(buildUrl({
@@ -355,10 +372,12 @@ export function createGdStudioMusicProvider(
         pages: DEFAULT_SEARCH_PAGE,
         source,
         types: 'search'
-      }))
+      }), Math.min(options.timeoutMs ?? 6000, 6000))
     } catch (error) {
       if (error instanceof ProviderHttpError && [400, 404, 410].includes(error.status)) {
         sourceUnavailableUntil.set(source, now() + SOURCE_RETRY_MS)
+      } else if (!closed) {
+        sourceUnavailableUntil.set(source, now() + 30_000)
       }
       throw error
     }
@@ -366,29 +385,16 @@ export function createGdStudioMusicProvider(
       .map((item) => normalizeCandidate(item, source))
       .filter((track): track is GdStudioCandidate => track !== null)
       .slice(0, Number(searchCount))
-    const hydratedTracks = await Promise.all(
-      tracks.map(async (track) => {
-        if (!track.picId) {
-          return track
-        }
-
-        try {
-          return {
-            ...track,
-            artworkUrl: await resolveArtworkUrl(track)
-          }
-        } catch {
-          return track
-        }
-      })
-    )
-
+    // Search only needs metadata. Cover/URL/lyrics resolve once a song is played;
+    // one slow cover must never hold every result behind it.
+    sourceUnavailableUntil.delete(source)
+    if (searchCache.size >= 100) searchCache.delete(searchCache.keys().next().value!)
     searchCache.set(cacheKey, {
-      expiresAt: now() + cacheTtlMs,
-      tracks: hydratedTracks
+      expiresAt: now() + (tracks.length ? cacheTtlMs : Math.min(cacheTtlMs, 30_000)),
+      tracks
     })
 
-    return hydratedTracks
+    return tracks
   }
 
   async function trySearchSource(
@@ -402,15 +408,29 @@ export function createGdStudioMusicProvider(
     }
   }
 
-  async function searchCandidates(payload: MusicSearchPayload): Promise<GdStudioCandidate[]> {
+  async function searchCandidates(payload: MusicSearchPayload, onProgress?: (progress: MusicSearchProgress) => void): Promise<GdStudioCandidate[]> {
     const query = payload.query.trim()
     const tracks: GdStudioCandidate[] = []
     let successes = 0
 
     const preference = normalizeSourcePreference(payload.sourcePreference)
-    const respectBackoff = payload.sourcePreference === 'all'
-    const results = await Promise.allSettled(preference.map(source => searchSource(query, source, respectBackoff)))
-    for (const result of results) if (result.status === 'fulfilled') { tracks.push(...result.value); successes++ }
+    const respectBackoff = !payload.refresh && !isMusicSource(payload.sourcePreference)
+    const bySource = new Map<MusicSource, GdStudioCandidate[]>()
+    const sources: MusicSearchProgress['sources'] = preference.map(source => ({ source, status: 'searching' }))
+    const publish = () => {
+      try { onProgress?.({ tracks: preference.flatMap(source => bySource.get(source) ?? []).map(toPublicTrack), sources: sources.map(value => ({ ...value })) }) }
+      catch { /* Progress observation cannot fail a search. */ }
+    }
+    publish()
+    await Promise.all(preference.map(async (source, index) => {
+      try {
+        const found = await searchSource(query, source, respectBackoff, payload.refresh === true)
+        bySource.set(source, found); successes++
+        sources[index].status = found.length ? 'ready' : 'empty'
+      } catch { sources[index].status = 'unavailable' }
+      publish()
+    }))
+    tracks.push(...preference.flatMap(source => bySource.get(source) ?? []))
 
     if (!successes) throw new Error('MUSIC_PROVIDER_UNAVAILABLE')
     return tracks
@@ -662,9 +682,9 @@ export function createGdStudioMusicProvider(
       return playback
     },
 
-    async search(payload) {
+    async search(payload, onProgress) {
       return {
-        tracks: (await searchCandidates(payload)).map(toPublicTrack)
+        tracks: (await searchCandidates(payload, onProgress)).map(toPublicTrack)
       }
     }
   }

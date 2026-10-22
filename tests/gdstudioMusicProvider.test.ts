@@ -67,7 +67,38 @@ function requestedIds(fetcher: ReturnType<typeof createFakeGdFetch>, type: strin
 }
 
 describe('GD Studio music provider', () => {
-  it('starts supported-source searches concurrently and bounds cover requests when a source ignores count', async () => {
+  it('shares in-flight queries and reuses source caches when switching from all sources to one', async () => {
+    let release!: () => void
+    const barrier = new Promise<void>(resolve => { release = resolve })
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(input.toString()); await barrier
+      return Response.json([{ id: url.searchParams.get('source'), name: '同曲', artist: ['同歌手'] }])
+    })
+    const provider = createGdStudioMusicProvider({ fetch: fetcher })
+    try {
+      const first = provider.search({ query: '同曲', sourcePreference: 'all' })
+      const second = provider.search({ query: '同曲', sourcePreference: 'all' })
+      release()
+      expect((await first).tracks).toHaveLength(3); expect((await second).tracks).toHaveLength(3)
+      expect((await provider.search({ query: '同曲', sourcePreference: 'joox' })).tracks).toHaveLength(1)
+      expect(fetcher).toHaveBeenCalledTimes(3)
+    } finally { provider.close?.() }
+  })
+  it('performs a real fresh request on explicit retry even while failed sources are in backoff', async () => {
+    let available = false
+    const fetcher = vi.fn(async () => available ? Response.json([{ id: 'one', name: '恢复后的歌曲', artist: ['歌手'] }]) : new Response('', { status: 503 }))
+    const provider = createGdStudioMusicProvider({ fetch: fetcher })
+    try {
+      await expect(provider.search({ query: '歌曲', sourcePreference: 'all' })).rejects.toThrow('MUSIC_PROVIDER_UNAVAILABLE')
+      expect(fetcher).toHaveBeenCalledTimes(3)
+      available = true
+      await expect(provider.search({ query: '歌曲', sourcePreference: 'all' })).rejects.toThrow('MUSIC_PROVIDER_UNAVAILABLE')
+      expect(fetcher).toHaveBeenCalledTimes(3)
+      expect((await provider.search({ query: '歌曲', sourcePreference: 'all', refresh: true })).tracks).toHaveLength(3)
+      expect(fetcher).toHaveBeenCalledTimes(6)
+    } finally { provider.close?.() }
+  })
+  it('publishes available sources before the slowest source and does not fetch individual covers during search', async () => {
     let release!: () => void
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(input.toString()), type = url.searchParams.get('types'), source = url.searchParams.get('source')
@@ -78,10 +109,12 @@ describe('GD Studio music provider', () => {
     })
     const provider = createGdStudioMusicProvider({ fetch: fetcher })
     try {
-      const pending = provider.search({ query: '合成查询', sourcePreference: 'all' })
+      const progress = vi.fn()
+      const pending = provider.search({ query: '合成查询', sourcePreference: 'all' }, progress)
       await vi.waitFor(() => expect(requestedSources(fetcher, 'search')).toEqual(['netease', 'kuwo', 'joox']))
-      release(); expect((await pending).tracks).toHaveLength(5)
-      expect(requestedSources(fetcher, 'pic')).toHaveLength(5)
+      await vi.waitFor(() => expect(progress).toHaveBeenCalledWith(expect.objectContaining({ tracks: expect.arrayContaining([expect.objectContaining({ id: 'joox-0' })]), sources: expect.arrayContaining([{ source: 'netease', status: 'searching' }]) })))
+      release(); expect((await pending).tracks).toHaveLength(10)
+      expect(requestedSources(fetcher, 'pic')).toHaveLength(0)
     } finally { provider.close?.() }
   })
   it('stops probing a source the aggregator reports as unsupported, but retries it when explicitly requested', async () => {
@@ -453,7 +486,7 @@ describe('GD Studio music provider', () => {
     expect(requestedSources(fetcher, 'search')).toEqual(['kuwo'])
   })
 
-  it('hydrates search results with artwork urls so manual selection keeps cover art', async () => {
+  it('preserves artwork identity for play-time resolution without extra search requests', async () => {
     const fetcher = createFakeGdFetch({
       pics: {
         'joox:2726092be436956b': 'https://image.joox.com/JOOXcover/0/2726092be436956b/500'
@@ -479,12 +512,11 @@ describe('GD Studio music provider', () => {
       tracks: [
         expect.objectContaining({
           artworkId: '2726092be436956b',
-          artworkUrl: 'https://image.joox.com/JOOXcover/0/2726092be436956b/500',
           title: '愛琴海'
         })
       ]
     })
-    expect(requestedIds(fetcher, 'pic')).toEqual(['2726092be436956b'])
+    expect(requestedIds(fetcher, 'pic')).toEqual([])
   })
 
   it('plays an exact selected search result with GD playback, lyric, artwork ids and keeps metadata', async () => {

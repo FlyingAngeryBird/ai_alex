@@ -1,0 +1,36 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>R1 music layout isolated check</title></head><body><div id="app"></div><script type="module">
+import { createApp, h, ref } from 'vue'
+import MusicImmersiveView from '../../src/components/MusicImmersiveView.vue'
+import ParticleSphere from '../../src/components/ParticleSphere.vue'
+import '../../src/style.css'
+import '../../src/r1-shell.css'
+const seed=[
+{id:'original',source:'netease',title:'告白气球',artist:'周杰伦',album:'周杰伦的床边故事',durationMs:215000},
+{id:'joox-original',source:'joox',title:'告白气球',artist:'周杰伦',album:'周杰伦的床边故事',durationMs:215000},
+{id:'cover',source:'netease',title:'告白气球',artist:'Xai小爱',album:'温柔的翻唱精选',durationMs:215000},
+{id:'live',source:'joox',title:'告白气球 (Live)',artist:'周杰伦',album:'现场演出',durationMs:218000},
+{id:'long',source:'netease',title:'这是一首用来检查长标题是否挤压按钮与音源标签的歌曲',artist:'名字很长的独立音乐人与另一位合作音乐人',album:'现场音乐专辑',durationMs:240000}
+]
+createApp({setup(){
+ const busy=ref(false),results=ref([]),visible=ref(false),query=ref('告白气球 周杰伦'),source=ref('all'),sources=ref([]),tab=ref('search'),favorites=ref([]),queue=ref([]),notice=ref(''),playback=ref({status:'playing',track:{...seed[0],lyrics:[{timeMs:0,text:'塞纳河畔 左岸的咖啡'},{timeMs:5000,text:'拥有你就拥有全世界'},{timeMs:10000,text:'亲爱的 爱上你'}]},positionMs:5000,durationMs:215000})
+ let generation=0
+ const calls=ref(0)
+ const search=async(text,preference)=>{
+  const current=++generation;query.value=text;source.value=preference;busy.value=true;visible.value=true;results.value=[];notice.value='';calls.value++
+  sources.value=(preference==='all'?['netease','kuwo','joox']:[preference]).map(source=>({source,status:'searching'}))
+  await new Promise(resolve=>setTimeout(resolve,250));if(current!==generation)return
+  results.value=seed.filter(track=>track.source==='netease'&&(preference==='all'||preference==='netease'));sources.value=sources.value.map(v=>v.source==='netease'?{...v,status:'ready'}:v)
+  await new Promise(resolve=>setTimeout(resolve,450));if(current!==generation)return
+  results.value=seed.filter(track=>preference==='all'||track.source===preference);sources.value=sources.value.map(v=>({...v,status:v.source==='kuwo'?'unavailable':'ready'}));busy.value=false
+ }
+ return()=>h('main',{class:'r1-shell'},[
+ h('header',{class:'r1-app-header'},'Seamo AI · 隔离界面检查'),h('nav',{class:'r1-rail'}),
+ h('section',{class:'r1-main-space'},[
+ h('div',{class:'r1-particle-space','data-mode':'music'},h(ParticleSphere,{state:'idle',audioLevel:0})),
+ h(MusicImmersiveView,{activeTab:tab.value,queue:queue.value,queueVersion:0,temporary:false,notice:notice.value,volume:20,playback:playback.value,favorites:favorites.value,searchHistory:[],searchQuery:query.value,searchResults:results.value,searchResultsVisible:visible.value,searchBusy:busy.value,searchSources:sources.value,sourcePreference:source.value,
+ onChangeTab:v=>tab.value=v,onSearch:search,onSourceChange:v=>source.value=v,onSelectSearchResult:track=>playback.value={...playback.value,track,status:'paused'},onAddQueue:track=>queue.value.push({entryId:String(queue.value.length),track}),onToggleFavorite:track=>{favorites.value=favorites.value.some(v=>v.id===track.id)?favorites.value.filter(v=>v.id!==track.id):[...favorites.value,track]},onTogglePlayback:()=>playback.value={...playback.value,status:playback.value.status==='playing'?'paused':'playing'}}),
+ h('div',{class:'r1-composer-area r1-composer-music'},h('div',{class:'r1-composer'},h('textarea',{'aria-label':'隔离输入框',placeholder:'和 Seamo AI 说点什么…'})))
+ ]),h('output',{'aria-label':'隔离请求数',style:'position:fixed;bottom:0;left:0;z-index:40;font-size:9px'},calls.value)
+ ])
+}}).mount('#app')
+</script></body></html>

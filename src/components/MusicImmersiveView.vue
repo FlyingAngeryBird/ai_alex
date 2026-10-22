@@ -2,7 +2,9 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import type { MusicSourcePreference, MusicTrack, PlaybackState } from '@/types/app'
 import { getCurrentLyricIndex } from '@/utils/musicLyrics'
-import { ArrowLeft, ArrowUp, Ellipsis, Heart, ListMusic, Plus, Search, X, Volume2 } from 'lucide-vue-next'
+import { groupMusicResults, musicSourceLabel } from '@/utils/musicSearchResults'
+import type { MusicSearchProgress } from '../../electron/main/music/gdstudioMusicProvider'
+import { ArrowLeft, ArrowUp, ChevronDown, Ellipsis, Heart, ListMusic, LoaderCircle, Music2, Plus, Search, X, Volume2 } from 'lucide-vue-next'
 
 const props = defineProps<{
   volume?: number
@@ -18,6 +20,8 @@ const props = defineProps<{
   searchQuery: string
   searchResults: MusicTrack[]
   searchResultsVisible: boolean
+  searchBusy?: boolean
+  searchSources?: MusicSearchProgress['sources']
   sourcePreference: MusicSourcePreference
 }>()
 
@@ -36,7 +40,7 @@ const emit = defineEmits<{
   playAllFavorites: [confirmed: boolean]
   previousTrack: []
   removeHistory: [query: string]
-  search: [query: string, sourcePreference: MusicSourcePreference]
+  search: [query: string, sourcePreference: MusicSourcePreference, refresh?: boolean]
   selectFavorite: [track: MusicTrack]
   selectHistory: [query: string]
   selectSearchResult: [track: MusicTrack]
@@ -51,10 +55,27 @@ const TITLE_PREVIEW_LENGTH = 5
 
 const sourceOptions: Array<{ label: string; value: MusicSourcePreference }> = [
   { label: '全部', value: 'all' },
-  { label: 'netease', value: 'netease' },
-  { label: 'kuwo', value: 'kuwo' },
-  { label: 'joox', value: 'joox' }
+  { label: '网易云', value: 'netease' },
+  { label: '酷我', value: 'kuwo' },
+  { label: 'JOOX', value: 'joox' }
 ]
+const resultGroups = computed(() => groupMusicResults(props.searchResults, props.searchQuery))
+const expandedGroups = ref(new Set<string>())
+watch(() => [props.searchQuery, props.sourcePreference], () => { expandedGroups.value = new Set() })
+function toggleVersions(key: string): void {
+  const next = new Set(expandedGroups.value)
+  if (next.has(key)) next.delete(key); else next.add(key)
+  expandedGroups.value = next
+}
+const sourceFailures = computed(() => (props.searchSources ?? []).filter(source => source.status === 'unavailable').map(source => musicSourceLabel(source.source)))
+const searchStatus = computed(() => {
+  if (props.searchBusy) return resultGroups.value.length ? '继续查找其他音源，已有结果可播放' : '正在搜索各音源…'
+  if (sourceFailures.value.length && props.searchResults.length) return `${sourceFailures.value.join('、')}暂不可用，已显示其他音源结果`
+  return '搜索结果不代表音频可用，播放时会检查资源'
+})
+function sourceStatus(source: MusicSourcePreference): string | undefined {
+  return props.searchSources?.find(value => value.source === source)?.status
+}
 
 const searchInput = ref(props.searchQuery)
 const libraryOpen = ref(false)
@@ -193,7 +214,7 @@ const emptySubtitle = computed(() => {
 const showSearchHistory = computed(() => {
   return (
     props.activeTab === 'search' &&
-    props.searchResults.length === 0 &&
+    !props.searchBusy && !props.searchResultsVisible &&
     props.searchHistory.length > 0
   )
 })
@@ -206,7 +227,7 @@ function isTrackFavorite(track: MusicTrack): boolean {
   return props.favorites.some((item) => getTrackKey(item) === getTrackKey(track))
 }
 function trackAvailability(track: MusicTrack): string {
-  return props.playback.track && getTrackKey(track) === getTrackKey(props.playback.track) ? statusLabel.value : '待播放验证'
+  return props.playback.track && getTrackKey(track) === getTrackKey(props.playback.track) ? statusLabel.value : ''
 }
 
 const isCurrentFavorite = computed(() => {
@@ -266,14 +287,14 @@ function formatTime(ms: number | null): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`
 }
 
-function submitSearch(): void {
+function submitSearch(refresh = false): void {
   const query = searchInput.value.trim()
 
   if (!query) {
     return
   }
 
-  emit('search', query, props.sourcePreference)
+  emit('search', query, props.sourcePreference, refresh)
 }
 
 function submitDefaultSearch(): void {
@@ -283,7 +304,9 @@ function submitDefaultSearch(): void {
 }
 
 function selectSource(sourcePreference: MusicSourcePreference): void {
+  if (sourcePreference === props.sourcePreference) return
   emit('sourceChange', sourcePreference)
+  if (searchInput.value.trim()) emit('search', searchInput.value.trim(), sourcePreference)
 }
 
 function selectSearchResult(track: MusicTrack): void {
@@ -316,7 +339,7 @@ function lyricStyle(distance: number): Record<string, string> {
         class="search-glass"
         :data-results="searchResultsVisible"
         aria-label="歌曲搜索"
-        @submit.prevent="submitSearch"
+        @submit.prevent="submitSearch()"
         @keydown.esc.prevent="libraryOpen = false"
       >
         <div class="r1-music-library-head"><span>{{ activeTab === 'search' ? '寻找音乐' : activeTab === 'queue' ? '播放队列' : '我喜欢的' }}</span><button type="button" aria-label="关闭音乐资料库" @click="libraryOpen = false"><X :size="17" /></button></div>
@@ -340,7 +363,7 @@ function lyricStyle(distance: number): Record<string, string> {
           </button>
         </div>
 
-        <div v-if="activeTab === 'search'">
+        <div v-if="activeTab === 'search'" class="music-library-content music-search-content">
           <div class="search-row">
             <input
               v-model="searchInput"
@@ -348,10 +371,10 @@ function lyricStyle(distance: number): Record<string, string> {
               placeholder="搜索歌曲、歌手或专辑"
               aria-label="搜索歌曲、歌手或专辑"
             />
-            <button class="search-button" type="submit" aria-label="搜索歌曲">⌕</button>
+            <button class="search-button" type="submit" :disabled="searchBusy && searchInput.trim() === searchQuery" aria-label="搜索歌曲"><LoaderCircle v-if="searchBusy" :size="17" class="music-search-spinner" /><Search v-else :size="17" /></button>
           </div>
           <p v-if="notice && activeTab === 'search'" class="r1-music-notice r1-music-search-error" role="status">
-            {{ notice }}<button type="button" class="music-retry" @click="submitSearch">重试搜索</button>
+            {{ notice }}<button type="button" class="music-retry" @click="submitSearch(true)">重试搜索</button>
           </p>
           <div v-if="showSearchHistory" class="search-history">
             <span class="history-label">最近搜索</span>
@@ -370,50 +393,49 @@ function lyricStyle(distance: number): Record<string, string> {
               v-for="source in sourceOptions"
               :key="source.value"
               class="source-chip"
-              :data-active="sourcePreference === source.value"
+              :data-active="sourcePreference === source.value" :data-status="sourceStatus(source.value)" :aria-pressed="sourcePreference === source.value"
               type="button"
               @click="selectSource(source.value)"
             >
-              {{ source.label }}
+              {{ source.label }}<span v-if="sourceStatus(source.value) === 'searching'" class="music-source-pending" aria-label="搜索中" />
             </button>
           </div>
-          <div v-if="searchResultsVisible" class="search-result-list" aria-label="搜索结果">
-            <article
-              v-for="track in searchResults"
-              :key="`${track.source ?? 'unknown'}-${track.id}`"
-              class="search-result-item"
-            >
-              <button type="button" class="r1-track-select" @click="selectSearchResult(track)">
-              <img
-                v-if="track.artworkUrl && !failedArtworks.has(track.artworkUrl)"
-                @error="markArtworkFailed(track.artworkUrl)"
-                class="search-result-thumb search-result-thumb--image"
-                :src="track.artworkUrl"
-                alt=""
-                aria-hidden="true"
-              />
-              <span v-else class="search-result-thumb" aria-hidden="true" />
-              <span class="search-result-copy">
-                <span class="search-result-title">{{ track.title }}</span>
-                <span class="search-result-meta">
-                  {{ [track.artist, track.album].filter(Boolean).join(' · ') || '未知歌手' }}
-                </span>
-              </span>
-              <span class="search-result-source">{{ track.source ?? 'GD' }} · {{ trackAvailability(track) }}</span>
-              </button>
-              <button type="button" class="favorite-toggle" :aria-label="`加入队列${track.title}`" @click="addQueue(track)"><Plus :size="15" /></button>
-              <button type="button"
-                class="favorite-toggle"
-                :data-favorited="isTrackFavorite(track)"
-                :aria-label="isTrackFavorite(track) ? '取消收藏' : '收藏'"
-                @click.stop="onToggleFavorite(track)"
-              >{{ isTrackFavorite(track) ? '♥' : '♡' }}</button>
+          <div v-if="searchResultsVisible" class="music-results-summary" role="status" aria-live="polite">
+            <strong v-if="resultGroups.length">{{ resultGroups.length }} 首歌曲 <span>· {{ searchResults.length }} 条音源结果</span></strong>
+            <p :class="{ 'is-searching': searchBusy }">{{ searchStatus }}</p>
+          </div>
+          <div v-if="searchResultsVisible" class="search-result-list music-group-list" aria-label="搜索结果" :aria-busy="searchBusy">
+            <article v-for="group in resultGroups" :key="group.key" class="music-result-group">
+              <div class="music-track-row">
+                <button type="button" class="r1-track-select" :aria-label="`播放${group.primary.title}，${group.primary.artist}，${musicSourceLabel(group.primary.source)}`" @click="selectSearchResult(group.primary)">
+                  <img v-if="group.primary.artworkUrl && !failedArtworks.has(group.primary.artworkUrl)" @error="markArtworkFailed(group.primary.artworkUrl)" class="search-result-thumb search-result-thumb--image" :src="group.primary.artworkUrl" alt="" />
+                  <span v-else class="search-result-thumb music-track-placeholder" aria-hidden="true"><Music2 :size="19" /></span>
+                  <span class="search-result-copy">
+                    <span class="search-result-title" :title="group.primary.title">{{ group.primary.title }}</span>
+                    <span class="search-result-meta" :title="[group.primary.artist, group.primary.album].filter(Boolean).join(' · ')">{{ [group.primary.artist, group.primary.album].filter(Boolean).join(' · ') }}</span>
+                    <span class="music-track-source">{{ musicSourceLabel(group.primary.source) }}<span v-if="trackAvailability(group.primary)" class="music-track-playing"> · {{ trackAvailability(group.primary) }}</span></span>
+                  </span>
+                </button>
+                <div class="music-track-actions">
+                  <button type="button" class="favorite-toggle" :aria-label="`加入队列${group.primary.title}`" title="加入队列" @click="addQueue(group.primary)"><Plus :size="16" /></button>
+                  <button type="button" class="favorite-toggle" :data-favorited="isTrackFavorite(group.primary)" :aria-label="`${isTrackFavorite(group.primary) ? '取消收藏' : '收藏'}${group.primary.title}`" title="收藏" @click="onToggleFavorite(group.primary)"><Heart :size="16" :fill="isTrackFavorite(group.primary) ? 'currentColor' : 'none'" /></button>
+                </div>
+              </div>
+              <button v-if="group.versions.length > 1" type="button" class="music-versions-toggle" :aria-expanded="expandedGroups.has(group.key)" @click="toggleVersions(group.key)">{{ group.versions.length }} 个音源版本 <ChevronDown :size="13" :class="{ rotated: expandedGroups.has(group.key) }" /></button>
+              <div v-if="expandedGroups.has(group.key)" class="music-track-versions">
+                <div v-for="track in group.versions" :key="getTrackKey(track)" class="music-track-version">
+                  <button type="button" class="music-version-play" @click="selectSearchResult(track)"><span>{{ musicSourceLabel(track.source) }}</span><small>{{ track.album || track.title }}</small></button>
+                  <button type="button" class="favorite-toggle" :aria-label="`加入队列${track.title} ${musicSourceLabel(track.source)}`" @click="addQueue(track)"><Plus :size="14" /></button>
+                  <button type="button" class="favorite-toggle" :data-favorited="isTrackFavorite(track)" :aria-label="`${isTrackFavorite(track) ? '取消收藏' : '收藏'}${track.title} ${musicSourceLabel(track.source)}`" @click="onToggleFavorite(track)"><Heart :size="14" :fill="isTrackFavorite(track) ? 'currentColor' : 'none'" /></button>
+                </div>
+              </div>
             </article>
-            <p v-if="searchResults.length === 0 && !notice" class="search-empty">没有找到匹配歌曲</p>
+            <div v-if="searchBusy && !resultGroups.length" class="music-search-skeleton" aria-hidden="true"><span v-for="index in 4" :key="index"><i /><b /></span></div>
+            <p v-if="!searchBusy && searchResults.length === 0 && !notice" class="search-empty">没有找到匹配歌曲，试试歌名或歌手。</p>
           </div>
         </div>
 
-        <div v-else-if="activeTab === 'queue'" class="result-list" aria-label="播放队列">
+        <div v-else-if="activeTab === 'queue'" class="result-list music-library-content" aria-label="播放队列">
           <article v-for="(entry, index) in queue ?? []" :key="entry.entryId" class="search-result-item r1-queue-row">
             <button type="button" class="r1-track-title" @click="selectSearchResult(entry.track)">{{ entry.track.title }}<small>{{ entry.track.artist }} · {{ entry.track.source }}</small></button>
             <button type="button" class="favorite-toggle" :disabled="index === 0" :aria-label="`上移${entry.track.title}`" @click="moveQueue(entry.entryId)"><ArrowUp :size="15" /></button>
@@ -421,7 +443,7 @@ function lyricStyle(distance: number): Record<string, string> {
           </article>
           <p v-if="!queue?.length" class="search-empty">后续队列为空。在发现或收藏中加入歌曲。</p>
         </div>
-        <div v-else>
+        <div v-else class="music-library-content">
           <div class="favorite-header">
             <span class="history-label">我喜欢的 · {{ favorites.length }} 首</span>
             <button
@@ -454,8 +476,8 @@ function lyricStyle(distance: number): Record<string, string> {
                 <span class="search-result-meta">
                   {{ [track.artist, track.album].filter(Boolean).join(' · ') || '未知歌手' }}
                 </span>
+                <span class="music-track-source">{{ musicSourceLabel(track.source) }}</span>
               </span>
-              <span class="search-result-source">{{ track.source ?? 'GD' }}</span>
               </button>
               <button type="button" class="favorite-toggle" :aria-label="`加入队列${track.title}`" @click="addQueue(track)"><Plus :size="15" /></button>
               <button type="button"
@@ -468,7 +490,7 @@ function lyricStyle(distance: number): Record<string, string> {
             <p v-if="favorites.length === 0" class="search-empty">还没有收藏的歌曲，去搜索添加吧</p>
           </div>
         </div>
-        <p v-if="notice" class="r1-music-notice" role="status">{{ notice }}</p>
+        <p v-if="notice && activeTab !== 'search'" class="r1-music-notice" role="status">{{ notice }}</p>
       </form>
 
     <section v-if="playback.track" class="music-layout music-layout-v10" aria-label="音乐播放">
@@ -557,7 +579,7 @@ function lyricStyle(distance: number): Record<string, string> {
             aria-label="音乐音量" :value="volume ?? 100"
             @input="emit('volumeChange', Number(($event.target as HTMLInputElement).value))" /></label>
         </div>
-        <p v-if="notice" class="r1-music-notice" role="status">{{ notice }}</p>
+        <p v-if="notice && activeTab !== 'search'" class="r1-music-notice" role="status">{{ notice }}</p>
       </section>
 
       <aside class="lyrics" :class="{ 'lyrics--speaking': assistantSpeaking }" aria-label="同步歌词">
@@ -603,7 +625,7 @@ function lyricStyle(distance: number): Record<string, string> {
         <p v-if="emptySubtitle" class="artist">{{ emptySubtitle }}</p>
         <form v-if="!playback.track" class="r1-music-default-search" @submit.prevent="submitDefaultSearch">
           <input v-model="searchInput" class="search-field" placeholder="搜索歌曲、歌手或专辑" aria-label="搜索歌曲、歌手或专辑" />
-          <button class="search-button" type="submit" aria-label="搜索歌曲">⌕</button>
+          <button class="search-button" type="submit" :disabled="searchBusy && searchInput.trim() === searchQuery" aria-label="搜索歌曲"><LoaderCircle v-if="searchBusy" :size="17" class="music-search-spinner" /><Search v-else :size="17" /></button>
         </form>
       </div>
       <aside class="r1-music-empty-lyric" aria-label="歌词状态">
@@ -620,7 +642,13 @@ function lyricStyle(distance: number): Record<string, string> {
 </template>
 
 <style scoped>
-.r1-track-select{display:flex;align-items:center;gap:12px;flex:1;min-width:0;border:0;background:none;text-align:left;color:inherit;cursor:pointer}
+.r1-track-select{display:grid;grid-template-columns:42px minmax(0,1fr);align-items:center;gap:11px;width:100%;min-width:0;padding:0;border:0;background:none;text-align:left;color:inherit;font:inherit;cursor:pointer}
+.search-result-item{grid-template-columns:minmax(0,1fr) 30px 30px;gap:8px;border-radius:8px}.r1-track-select .search-result-copy{min-width:0}.r1-track-select .search-result-thumb{width:42px;height:42px;flex:none;border-radius:6px}
+.music-result-group{min-width:0;border:1px solid var(--r1-line);border-radius:8px;background:#ffffff03;overflow:hidden}.music-result-group:hover{border-color:#a1d9cf3b;background:#a1d9cf07}.music-track-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;min-height:82px;padding:12px}.music-track-actions{display:flex;gap:4px}.music-track-actions .favorite-toggle,.music-track-version .favorite-toggle{width:28px;height:28px;border:0;background:transparent}.music-track-actions .favorite-toggle:hover,.music-track-version .favorite-toggle:hover{color:var(--r1-aqua);background:#a1d9cf12}.music-track-placeholder{display:grid;place-items:center;background:#a1d9cf0b;color:#a1d9cf9c}.music-track-source{display:block;margin-top:4px;font-size:10px;line-height:1.4;color:#82978e;white-space:nowrap}.music-track-playing{color:var(--r1-gold)}
+.music-versions-toggle{display:flex;align-items:center;justify-content:space-between;width:100%;padding:7px 12px;border:0;border-top:1px solid var(--r1-line);background:#ffffff02;color:#92a39b;font:inherit;font-size:11px;cursor:pointer}.music-versions-toggle:hover{color:var(--r1-aqua)}.music-versions-toggle svg{transition:transform .15s}.music-versions-toggle .rotated{transform:rotate(180deg)}.music-track-versions{padding:2px 10px 8px;border-top:1px solid var(--r1-line)}.music-track-version{display:grid;grid-template-columns:minmax(0,1fr) 28px 28px;align-items:center;gap:4px;padding:5px 0}.music-version-play{display:flex;align-items:center;gap:9px;min-width:0;padding:6px 2px;border:0;background:none;color:#d5e0d8;font:inherit;text-align:left;cursor:pointer;font-size:11px}.music-version-play span{flex:none}.music-version-play small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#7b8e84;font-size:10px}
+.music-results-summary{margin:15px 0 10px}.music-results-summary strong{font-size:12px;font-weight:500;color:#d4dfd6}.music-results-summary strong span{color:#7f8e87;font-weight:400;font-size:11px}.music-results-summary p{margin:6px 0 0;color:#7f9188;font-size:10px;line-height:1.6}.music-results-summary .is-searching{color:var(--r1-aqua)}.music-group-list{gap:8px}.source-chip{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}.source-chip[data-status=unavailable]{color:#7e8580}.music-source-pending{width:4px;height:4px;border-radius:50%;background:var(--r1-aqua)}.music-search-spinner{animation:music-search-spin 1s linear infinite}.search-button{display:grid;place-items:center}.search-button:disabled{opacity:.55;cursor:default}.music-search-skeleton{display:grid;gap:8px}.music-search-skeleton>span{display:flex;align-items:center;gap:12px;height:82px;padding:12px;border:1px solid var(--r1-line);border-radius:8px}.music-search-skeleton i{width:42px;height:42px;border-radius:6px;background:#a1d9cf09}.music-search-skeleton b{width:55%;height:25px;border-top:6px solid #a1d9cf0b;border-bottom:4px solid #a1d9cf06}
+@keyframes music-search-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.music-search-spinner{animation:none}}
 .r1-track-title{flex:1;min-width:0;border:0;background:none;text-align:left;color:var(--r1-text);font-size:13px;cursor:pointer}.r1-track-title small{display:block;color:var(--r1-muted);font-size:11px;margin-top:5px}
 .r1-music-progress{width:100%;appearance:none;background:linear-gradient(to right,var(--r1-gold,#e8cd8c) var(--progress),#2d3032 var(--progress));height:3px;margin:0;cursor:pointer}.r1-music-progress::-webkit-slider-thumb{appearance:none;width:8px;height:8px;border-radius:50%;background:var(--r1-gold,#e8cd8c)}
 .feedback-control{position:relative}.feedback-menu{position:absolute;bottom:calc(100% + 8px);left:0;min-width:146px;background:#1a2222;border:1px solid #46534b;border-radius:5px;padding:4px;box-shadow:0 12px 28px #0008;z-index:12}.feedback-menu button{display:block;width:100%;text-align:left;padding:9px 8px;color:#c9d5ca;font-size:11px;border:0;background:none;cursor:pointer}.feedback-menu button:hover{background:#2a3933}
