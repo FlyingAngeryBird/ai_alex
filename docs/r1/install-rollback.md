@@ -1,19 +1,19 @@
-# Seamo AI R1 内部候选安装/升级/回退（alpha.24）
+# Seamo AI R1 内部候选安装/升级/回退（alpha.25）
 
 ## 包信息
-- 当前内部候选：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-22-alpha24-e10/`
-  - `Seamo AI R1.app`；ZIP `Seamo-AI-R1-1.0.0-alpha.24-mac-arm64.zip`（148,716,946 字节）
-  - SHA256 `1934ab5805477399b23da371d05c06b975a103cad90ec4531ba1fab7b8ee5479`
-  - 源码 `9b23426653a1a5e8752b079ff35288a742e176fb`；资产 3.5.9、工具 schema 3.2.1、SQLite 12、bundle `com.seamo.ai.r1`
+- 当前内部候选：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-22-alpha25-data-layout/`
+  - `Seamo AI R1.app`；ZIP `Seamo-AI-R1-1.0.0-alpha.25-mac-arm64.zip`（148,717,740 字节）
+  - SHA256 `995b3fd8556465f6bc81a9719fe51263198ab1d7e3239fbb530e73caefeef577`
+  - 源码 `bf4969d5de0edc54e0eb6a906bcced3c4710dcc4`；资产 3.5.9、工具 schema 3.2.1、SQLite 12、bundle `com.seamo.ai.r1`
   - 本机 ad-hoc 签名，**未 Developer ID、未公证**；包内无 `.env`/凭据/用户库
-- alpha.24 已用独立 fake HOME 启动并生成隔离 SQLite；`codesign --verify --deep --strict` 通过。隔离合成事项在 alpha.22→alpha.24→alpha.22 启动链中保留，SQLite schema 12、`integrity_check=ok`。2026-10-22 已在退出 alpha.22 并保存真实数据快照后启动 alpha.24；原有历史/事项/委托可读。已保存配置手动重读后，真实 Ark 请求与原生实时会话连接检测通过；本包人声听感待用户确认。
-- 保留历史包：alpha.23、alpha.22、alpha.21、alpha.20、alpha.19、alpha.18、alpha.17、alpha.16；不覆盖旧包。
+- alpha.25 的 typecheck/build、`codesign --verify --deep --strict` 通过；设置数据区在隔离浏览器按常规/700像素视口做视觉和交互核对。退出 alpha.24 并保存真实数据快照后启动 alpha.25，原历史可读且麦克风关闭；正式包的数据区尚待截图复核。alpha.24 的真实文字和短句语音、字幕已验收，不把此前结果冒充 alpha.25 重测。
+- 保留历史包：alpha.24、alpha.23、alpha.22、alpha.21、alpha.20、alpha.19、alpha.18、alpha.17、alpha.16；不覆盖旧包。
 
 ## 安装（内部验收）
 1. 解压 ZIP 或使用 `Seamo AI R1.app`；可放 `/Applications` 或预览目录。
 2. 首次打开若被 Gatekeeper 拦截：右键 → 打开，或系统设置→隐私与安全性→“仍要打开”（由用户操作；本机包为 ad-hoc 未公证）。
 3. 首次启动可能请求钥匙串授权（“Seamo AI R1 Safe Storage”）；如系统显示提示，仅由用户确认请求者并操作。此前 login 已解锁仍发生 `-25293`，所以解锁不能保证预览包可读；若读取失败，保留旧加密文件，不重置钥匙串、不改 ACL、不覆写凭据。
-4. 数据目录：`~/Library/Application Support/Seamo AI R1`；与更旧产品标识的数据分离。alpha.24 首次切换前的真实数据快照保存在本机 `2026-10-22-alpha24-e10/pre-switch-user-data-20261022/`，目录权限 0700，不随安装包分发。
+4. 数据目录：`~/Library/Application Support/Seamo AI R1`；与更旧产品标识的数据分离。alpha.25 切换前的真实数据快照保存在本机 `2026-10-22-alpha25-data-layout/pre-switch-user-data-20261022/`，目录权限 0700，不随安装包分发。alpha.24 之前的快照也保留。
 
 ## 升级/回退（本机隔离已实测）
 验证记录见 [install-upgrade-rollback](2026-10-18-alpha19-install-upgrade-rollback.md)，步骤：

@@ -2,15 +2,15 @@
   "product": "Seamo AI R1",
   "channel": "internal-acceptance",
   "branch": "codex/seamo-r1",
-  "generatedAt": "2026-10-22T09:27:00+08:00",
+  "generatedAt": "2026-10-22T13:43:07+08:00",
   "candidate": {
-    "appVersion": "1.0.0-alpha.24",
+    "appVersion": "1.0.0-alpha.25",
     "bundleId": "com.seamo.ai.r1",
-    "sourceCommit": "9b23426653a1a5e8752b079ff35288a742e176fb",
-    "packageDir": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-22-alpha24-e10",
-    "zip": "Seamo-AI-R1-1.0.0-alpha.24-mac-arm64.zip",
-    "zipBytes": 148716946,
-    "zipSha256": "1934ab5805477399b23da371d05c06b975a103cad90ec4531ba1fab7b8ee5479",
+    "sourceCommit": "bf4969d5de0edc54e0eb6a906bcced3c4710dcc4",
+    "packageDir": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-22-alpha25-data-layout",
+    "zip": "Seamo-AI-R1-1.0.0-alpha.25-mac-arm64.zip",
+    "zipBytes": 148717740,
+    "zipSha256": "995b3fd8556465f6bc81a9719fe51263198ab1d7e3239fbb530e73caefeef577",
     "signing": "local-ad-hoc",
     "notarized": false,
     "forbiddenFilesFound": false,
@@ -26,14 +26,14 @@
   "remote": {
     "origin": "https://github.com/FlyingAngeryBird/ai_alex.git",
     "branch": "codex/seamo-r1",
-    "sourceCommitPushed": "9b23426653a1a5e8752b079ff35288a742e176fb",
+    "sourceCommitPushed": "bf4969d5de0edc54e0eb6a906bcced3c4710dcc4",
     "pr": "https://github.com/FlyingAngeryBird/ai_alex/pull/1",
     "pushTransport": "SSH",
     "prBodyUpdate": "not required for source delivery"
   },
   "dataPolicy": {
     "userDataDir": "~/Library/Application Support/Seamo AI R1",
-    "preUpgradeSnapshot": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-22-alpha24-e10/pre-switch-user-data-20261022",
+    "preUpgradeSnapshot": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-22-alpha25-data-layout/pre-switch-user-data-20261022",
     "doesNotShip": [
       ".env",
       "credentials.bin",
@@ -67,13 +67,15 @@
       "E10 isolated packaged alpha.22→alpha.24→alpha.22 startup: synthetic item retained, SQLite schema12 and integrity_check ok; actual user data untouched",
       "E10 actual alpha.24 app: old local history/items/tasks visible; stored credentials recovered after one manual reload; Ark request and native realtime session open/close checks passed without microphone",
       "E10 actual alpha.24 app: one text question returned 2+3=5; two-line composer rendered and draft cleared; memory/history/task/music entry points opened",
-      "E10 alpha.24 user confirmed short native realtime voice reply and subtitles both normal; microphone off afterward"
+      "E10 alpha.24 user confirmed short native realtime voice reply and subtitles both normal; microphone off afterward",
+      "alpha.25 data settings: isolated normal/700px visual check, checkbox toggle and preview gating; typecheck/build/codesign; actual app launched with existing history visible and microphone off"
     ],
     "pendingUserAcceptance": [
       "alpha.24 first-launch credential read timed out; one manual reload recovered the original saved configuration; startup reliability remains unverified",
       "extended real voice/audio/music ducking and subjective particle appearance; microphone/notification/DND/sleep/device checks",
       "native diagnostic save dialog and formal install/rollback acceptance",
-      "Developer ID signing/notarization for public download"
+      "Developer ID signing/notarization for public download",
+      "alpha.25 actual app data settings visual review; native UI scroll unavailable during final inspection"
     ],
     "externalBlocked": [
       "Developer ID signing/notarization",
@@ -82,7 +84,7 @@
     "notClaimedComplete": true
   },
   "userActions": [
-    "Confirm extended voice with music and subjective music listening experience in running alpha.24; do not send passwords or API keys",
+    "Review the redesigned Data and Diagnostics section in running alpha.25; do not confirm cleanup unless intending to delete selected local data",
     "Provide Developer ID signing/notarization conditions before public release"
   ]
 }
