@@ -2,15 +2,15 @@
   "product": "Seamo AI R1",
   "channel": "internal-acceptance",
   "branch": "codex/seamo-r1",
-  "generatedAt": "2026-10-22T22:39:48+08:00",
+  "generatedAt": "2026-10-22T22:58:56+08:00",
   "candidate": {
-    "appVersion": "1.0.0-alpha.26",
+    "appVersion": "1.0.0-alpha.27",
     "bundleId": "com.seamo.ai.r1",
-    "sourceCommit": "ce3d860f0cf564e476a23c3a9504d8e609f39e23",
-    "packageDir": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-22-alpha26-music-search",
-    "zip": "Seamo-AI-R1-1.0.0-alpha.26-mac-arm64.zip",
-    "zipBytes": 148721301,
-    "zipSha256": "3a5fba0aad531cd10a4cc802fea74fb953f88fc98d1fc4e1ed0464ce35a6229d",
+    "sourceCommit": "b3b31736829c21505ff41370b11b7403f47c5132",
+    "packageDir": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-22-alpha27-mini-cover",
+    "zip": "Seamo-AI-R1-1.0.0-alpha.27-mac-arm64.zip",
+    "zipBytes": 148721466,
+    "zipSha256": "b3f4043e09feb759e3fb5cf0f175510429252d9ebb5a895511c1d4548fe5d7ca",
     "signing": "local-ad-hoc",
     "notarized": false,
     "forbiddenFilesFound": false,
@@ -26,14 +26,14 @@
   "remote": {
     "origin": "https://github.com/FlyingAngeryBird/ai_alex.git",
     "branch": "codex/seamo-r1",
-    "sourceCommitPushed": "ce3d860f0cf564e476a23c3a9504d8e609f39e23",
+    "sourceCommitPushed": "b3b31736829c21505ff41370b11b7403f47c5132",
     "pr": "https://github.com/FlyingAngeryBird/ai_alex/pull/1",
     "pushTransport": "SSH",
     "prBodyUpdate": "not required for source delivery"
   },
   "dataPolicy": {
     "userDataDir": "~/Library/Application Support/Seamo AI R1",
-    "preUpgradeSnapshot": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-22-alpha26-music-search/pre-switch-user-data-20261022",
+    "preUpgradeSnapshot": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-22-alpha27-mini-cover/pre-switch-user-data-20261022",
     "doesNotShip": [
       ".env",
       "credentials.bin",
@@ -71,7 +71,8 @@
       "alpha.25 data settings: isolated normal/700px visual check, checkbox toggle and preview gating; typecheck/build/codesign; actual app launched with existing history visible and microphone off",
       "alpha.26 music: 7 files/55 related tests and typecheck/build; incremental result/play registration, request sharing/cache/retry and stale-progress guards; browser production component layout at measured 1422px and 700px with version expansion/favorite/queue actions",
       "alpha.26 real provider metadata sample: first 10 at 3485ms, final 20 at 4072ms, cached repeat 2ms; netease/joox 200, kuwo 400; no per-track cover requests and no playback claim",
-      "alpha.26 actual app started after paused alpha.25 exit and local data snapshot (immutable SQLite integrity ok/schema12, DB bytes equal); existing history visible, mic off, music page opened"
+      "alpha.26 actual app started after paused alpha.25 exit and local data snapshot (immutable SQLite integrity ok/schema12, DB bytes equal); existing history visible, mic off, music page opened",
+      "alpha.27 MiniPlayer displays track artworkUrl; production component isolated loaded42px/object-fit cover, failure fallback and next-track recovery, original open/play actions; typecheck/build/codesign passed. Actual app launched with history readable and mic off after validated schema12 snapshot; no close/collapse added"
     ],
     "pendingUserAcceptance": [
       "alpha.24 first-launch credential read timed out; one manual reload recovered the original saved configuration; startup reliability remains unverified",
@@ -79,7 +80,8 @@
       "native diagnostic save dialog and formal install/rollback acceptance",
       "Developer ID signing/notarization for public download",
       "alpha.26 actual app service status reads failed; model/realtime configuration recovery and voice remain pending; no credentials changed",
-      "alpha.26 full music search/play listening and visual acceptance; browser layout evidence and metadata timings are not audio verification"
+      "alpha.26 full music search/play listening and visual acceptance; browser layout evidence and metadata timings are not audio verification",
+      "alpha.27 real track mini-player cover appearance; synthetic image checks do not prove upstream cover availability. Startup service configuration still reports read failure"
     ],
     "externalBlocked": [
       "Developer ID signing/notarization",
@@ -88,7 +90,7 @@
     "notClaimedComplete": true
   },
   "userActions": [
-    "Try the updated music search and layout in running alpha.26; service configuration read failure remains a separate issue, do not send passwords or keys",
+    "Try returning home after playing a song in alpha.27 to inspect its cover; model service configuration read failure remains separate, do not send passwords or keys",
     "Provide Developer ID signing/notarization conditions before public release"
   ]
 }

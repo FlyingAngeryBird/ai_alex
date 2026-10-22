@@ -1,19 +1,19 @@
-# Seamo AI R1 内部候选安装/升级/回退（alpha.26）
+# Seamo AI R1 内部候选安装/升级/回退（alpha.27）
 
 ## 包信息
-- 当前内部候选：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-22-alpha26-music-search/`
-  - `Seamo AI R1.app`；ZIP `Seamo-AI-R1-1.0.0-alpha.26-mac-arm64.zip`（148,721,301 字节）
-  - SHA256 `3a5fba0aad531cd10a4cc802fea74fb953f88fc98d1fc4e1ed0464ce35a6229d`
-  - 源码 `ce3d860f0cf564e476a23c3a9504d8e609f39e23`；资产 3.5.9、工具 schema 3.2.1、SQLite 12、bundle `com.seamo.ai.r1`
+- 当前内部候选：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-22-alpha27-mini-cover/`
+  - `Seamo AI R1.app`；ZIP `Seamo-AI-R1-1.0.0-alpha.27-mac-arm64.zip`（148,721,466 字节）
+  - SHA256 `b3f4043e09feb759e3fb5cf0f175510429252d9ebb5a895511c1d4548fe5d7ca`
+  - 源码 `b3b31736829c21505ff41370b11b7403f47c5132`；资产 3.5.9、工具 schema 3.2.1、SQLite 12、bundle `com.seamo.ai.r1`
   - 本机 ad-hoc 签名，**未 Developer ID、未公证**；包内无 `.env`/凭据/用户库
-- alpha.26 的 typecheck/build、7文件55项音乐相关测试与签名完整性通过。真实音源元数据有单样本，列表/归组与球体位置有生产组件隔离截图。切换前应用已暂停、麦克风关闭且无活动委托；本机快照完整性ok/schema12且数据库字节一致。alpha.26 实际启动、历史可读、音乐入口可打开；服务状态读取失败尚未恢复，不把隔离截图或元数据测试冒充完整音频验收。
-- 保留历史包：alpha.25、alpha.24、alpha.23、alpha.22、alpha.21、alpha.20、alpha.19、alpha.18、alpha.17、alpha.16；不覆盖旧包。
+- alpha.27 仅修复首页小播放器封面，typecheck/build/签名完整性通过，生产组件隔离检查覆盖42px图片加载、错误占位与切歌恢复；未重复全量测试。此前alpha.26音乐55项与真实元数据证据保留。切换前收音关闭、未在播放、无活动委托，快照完整性ok/schema12且数据库字节一致。alpha.27实际启动、历史可读；服务状态读取失败仍可见，不声称本批语音或真实音源图片验收通过。
+- 保留历史包：alpha.26、alpha.25、alpha.24及更早包。
 
 ## 安装（内部验收）
 1. 解压 ZIP 或使用 `Seamo AI R1.app`；可放 `/Applications` 或预览目录。
 2. 首次打开若被 Gatekeeper 拦截：右键 → 打开，或系统设置→隐私与安全性→“仍要打开”（由用户操作；本机包为 ad-hoc 未公证）。
 3. 首次启动可能请求钥匙串授权（“Seamo AI R1 Safe Storage”）；如系统显示提示，仅由用户确认请求者并操作。此前 login 已解锁仍发生 `-25293`，所以解锁不能保证预览包可读；若读取失败，保留旧加密文件，不重置钥匙串、不改 ACL、不覆写凭据。
-4. 数据目录：`~/Library/Application Support/Seamo AI R1`；与更旧产品标识的数据分离。alpha.26 切换前的真实数据快照保存在本机 `2026-10-22-alpha26-music-search/pre-switch-user-data-20261022/`，目录权限 0700，不随安装包分发。更早的快照也保留。
+4. 数据目录：`~/Library/Application Support/Seamo AI R1`；与更旧产品标识的数据分离。alpha.27 切换前的真实数据快照保存在本机 `2026-10-22-alpha27-mini-cover/pre-switch-user-data-20261022/`，目录权限 0700，不随安装包分发。更早的快照也保留。
 
 ## 升级/回退（本机隔离已实测）
 验证记录见 [install-upgrade-rollback](2026-10-18-alpha19-install-upgrade-rollback.md)，步骤：
