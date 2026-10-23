@@ -2,15 +2,15 @@
   "product": "Seamo AI R1",
   "channel": "internal-acceptance",
   "branch": "codex/seamo-r1",
-  "generatedAt": "2026-10-22T22:58:56+08:00",
+  "generatedAt": "2026-10-23T11:41:33+08:00",
   "candidate": {
-    "appVersion": "1.0.0-alpha.27",
+    "appVersion": "1.0.0-alpha.28",
     "bundleId": "com.seamo.ai.r1",
-    "sourceCommit": "b3b31736829c21505ff41370b11b7403f47c5132",
-    "packageDir": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-22-alpha27-mini-cover",
-    "zip": "Seamo-AI-R1-1.0.0-alpha.27-mac-arm64.zip",
-    "zipBytes": 148721466,
-    "zipSha256": "b3f4043e09feb759e3fb5cf0f175510429252d9ebb5a895511c1d4548fe5d7ca",
+    "sourceCommit": "431f108027e861cbe3521312f4b44001b742fc77",
+    "packageDir": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-23-alpha28-music-quality",
+    "zip": "Seamo-AI-R1-1.0.0-alpha.28-mac-arm64.zip",
+    "zipBytes": 151358294,
+    "zipSha256": "ae7ea3e0d83acb76606e43d6d081d633111009732dc564a7333eb49cdf3ed46f",
     "signing": "local-ad-hoc",
     "notarized": false,
     "forbiddenFilesFound": false,
@@ -26,7 +26,7 @@
   "remote": {
     "origin": "https://github.com/FlyingAngeryBird/ai_alex.git",
     "branch": "codex/seamo-r1",
-    "sourceCommitPushed": "b3b31736829c21505ff41370b11b7403f47c5132",
+    "sourceCommitPushed": "431f108027e861cbe3521312f4b44001b742fc77",
     "pr": "https://github.com/FlyingAngeryBird/ai_alex/pull/1",
     "pushTransport": "SSH",
     "prBodyUpdate": "not required for source delivery"
@@ -40,7 +40,7 @@
       "user database"
     ],
     "oldPackagesPreserved": true,
-    "realUserDataSwitchedToCandidate": true
+    "realUserDataSwitchedToCandidate": false
   },
   "status": {
     "verified": [
@@ -72,7 +72,8 @@
       "alpha.26 music: 7 files/55 related tests and typecheck/build; incremental result/play registration, request sharing/cache/retry and stale-progress guards; browser production component layout at measured 1422px and 700px with version expansion/favorite/queue actions",
       "alpha.26 real provider metadata sample: first 10 at 3485ms, final 20 at 4072ms, cached repeat 2ms; netease/joox 200, kuwo 400; no per-track cover requests and no playback claim",
       "alpha.26 actual app started after paused alpha.25 exit and local data snapshot (immutable SQLite integrity ok/schema12, DB bytes equal); existing history visible, mic off, music page opened",
-      "alpha.27 MiniPlayer displays track artworkUrl; production component isolated loaded42px/object-fit cover, failure fallback and next-track recovery, original open/play actions; typecheck/build/codesign passed. Actual app launched with history readable and mic off after validated schema12 snapshot; no close/collapse added"
+      "alpha.27 MiniPlayer displays track artworkUrl; production component isolated loaded42px/object-fit cover, failure fallback and next-track recovery, original open/play actions; typecheck/build/codesign passed. Actual app launched with history readable and mic off after validated schema12 snapshot; no close/collapse added",
+      "alpha.28: build/typecheck and 7 files/60 music tests; lazy artwork 3-concurrency/cache/bounds, simplified-traditional matching, compact query ranking/bounded refinement, parallel resource preparation; isolated production component four covers loaded; real metadata/cover samples documented"
     ],
     "pendingUserAcceptance": [
       "alpha.24 first-launch credential read timed out; one manual reload recovered the original saved configuration; startup reliability remains unverified",
@@ -81,7 +82,8 @@
       "Developer ID signing/notarization for public download",
       "alpha.26 actual app service status reads failed; model/realtime configuration recovery and voice remain pending; no credentials changed",
       "alpha.26 full music search/play listening and visual acceptance; browser layout evidence and metadata timings are not audio verification",
-      "alpha.27 real track mini-player cover appearance; synthetic image checks do not prove upstream cover availability. Startup service configuration still reports read failure"
+      "alpha.27 real track mini-player cover appearance; synthetic image checks do not prove upstream cover availability. Startup service configuration still reports read failure",
+      "alpha.28 actual packaged search/play/cover/subjective listening pending; no forced switch when existing application changed during handoff. Existing model credential startup issue remains separate"
     ],
     "externalBlocked": [
       "Developer ID signing/notarization",
@@ -90,7 +92,7 @@
     "notClaimedComplete": true
   },
   "userActions": [
-    "Try returning home after playing a song in alpha.27 to inspect its cover; model service configuration read failure remains separate, do not send passwords or keys",
+    "Quit the current Seamo app before opening alpha.28 to try music; do not run two versions against the same data directory",
     "Provide Developer ID signing/notarization conditions before public release"
   ]
 }

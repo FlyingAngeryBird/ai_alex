@@ -1,13 +1,13 @@
-# Seamo AI R1 内部候选安装/升级/回退（alpha.27）
+# Seamo AI R1 内部候选安装/升级/回退（alpha.28）
 
 ## 包信息
-- 当前内部候选：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-22-alpha27-mini-cover/`
-  - `Seamo AI R1.app`；ZIP `Seamo-AI-R1-1.0.0-alpha.27-mac-arm64.zip`（148,721,466 字节）
-  - SHA256 `b3f4043e09feb759e3fb5cf0f175510429252d9ebb5a895511c1d4548fe5d7ca`
-  - 源码 `b3b31736829c21505ff41370b11b7403f47c5132`；资产 3.5.9、工具 schema 3.2.1、SQLite 12、bundle `com.seamo.ai.r1`
+- 当前内部候选：`/Users/sea/Documents/Seamo-R1-Previews/2026-10-23-alpha28-music-quality/`
+  - `Seamo AI R1.app`；ZIP `Seamo-AI-R1-1.0.0-alpha.28-mac-arm64.zip`（151,358,294 字节）
+  - SHA256 `ae7ea3e0d83acb76606e43d6d081d633111009732dc564a7333eb49cdf3ed46f`
+  - 源码 `431f108027e861cbe3521312f4b44001b742fc77`；资产 3.5.9、工具 schema 3.2.1、SQLite 12、bundle `com.seamo.ai.r1`
   - 本机 ad-hoc 签名，**未 Developer ID、未公证**；包内无 `.env`/凭据/用户库
-- alpha.27 仅修复首页小播放器封面，typecheck/build/签名完整性通过，生产组件隔离检查覆盖42px图片加载、错误占位与切歌恢复；未重复全量测试。此前alpha.26音乐55项与真实元数据证据保留。切换前收音关闭、未在播放、无活动委托，快照完整性ok/schema12且数据库字节一致。alpha.27实际启动、历史可读；服务状态读取失败仍可见，不声称本批语音或真实音源图片验收通过。
-- 保留历史包：alpha.26、alpha.25、alpha.24及更早包。
+- alpha.28 音乐体验迭代：类型检查/构建、7文件60项音乐相关测试、签名完整性通过；真实元数据/封面探测及生产组件隔离图片显示有记录。本次未强制切换真实用户窗口，实包实际点歌/听感仍待验收。请先退出当前应用，再启动新包，避免多个版本共用同一数据目录。
+- alpha.27及更早包完整保留；本次没有制作新真实数据快照或执行真实数据回退，最近的快照仍为alpha.27切换前快照。
 
 ## 安装（内部验收）
 1. 解压 ZIP 或使用 `Seamo AI R1.app`；可放 `/Applications` 或预览目录。
