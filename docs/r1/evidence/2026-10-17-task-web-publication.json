@@ -1,0 +1,45 @@
+{
+  "scope": "isolated real service; not installed UI or microphone acceptance",
+  "observations": [
+    {
+      "checkedAt": "2026-10-17T12:58:24.249Z",
+      "status": "passed",
+      "scope": "isolated_real_M02_search_read_publication_with_production_default",
+      "candidateCount": 3,
+      "sourceCount": 3,
+      "initialStatus": "accepted",
+      "finalStatus": "succeeded",
+      "decisions": 5,
+      "tools": [
+        "read_file",
+        "web_search",
+        "web_read_page"
+      ],
+      "realItemRows": 0,
+      "realReceiptRows": 3,
+      "unresolvedCodes": [],
+      "drafts": [
+        {
+          "invalidJson": true
+        },
+        {
+          "invalidJson": true
+        },
+        {
+          "status": "completed",
+          "goalVersion": 1,
+          "artifactBases": []
+        }
+      ],
+      "diagnostics": [
+        {
+          "kind": "structured_rejected",
+          "code": "TASK_DRAFT_JSON_INVALID"
+        }
+      ],
+      "store": false,
+      "publishedInProduction": false,
+      "elapsedMs": 75768
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#07080d" />
+    <link rel="icon" href="data:," />
+    <title>Seamo AI · R1 交互原型</title>
+    <script>
+      if (location.protocol === 'file:' && '%MODE%' !== 'production') {
+        location.replace(new URL('./dist/index.html', location.href))
+      }
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

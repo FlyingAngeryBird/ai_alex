@@ -31,6 +31,7 @@ export type StreamingAsrProvider = {
 
 export type StreamingTtsStartPayload = {
   voice?: string
+  onAudio: StreamingTtsAudioHandler
 }
 
 export type StreamingTtsPushPayload = {
@@ -47,6 +48,8 @@ export type StreamingTtsAudioChunk = {
   isFinal: boolean
 }
 
+export type StreamingTtsAudioHandler = (chunk: StreamingTtsAudioChunk) => void
+
 export type TtsSpeakPayload = {
   text: string
   voice?: string
@@ -58,10 +61,10 @@ export type TtsSpeakResult = {
 }
 
 export type StreamingTtsProvider = {
-  pushText(payload: StreamingTtsPushPayload): Promise<StreamingTtsAudioChunk>
   speak(payload: TtsSpeakPayload): Promise<TtsSpeakResult>
   start(payload: StreamingTtsStartPayload): Promise<RealtimeAsrStartResult>
-  stop(payload: StreamingTtsStopPayload): Promise<StreamingTtsAudioChunk>
+  pushText(payload: StreamingTtsPushPayload): Promise<void>
+  stop(payload: StreamingTtsStopPayload): Promise<void>
 }
 
 export class RealtimeVoiceError extends Error {

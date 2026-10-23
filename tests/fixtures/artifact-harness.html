@@ -1,0 +1,24 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><title>工作稿独立交互检查</title></head><body><div id="app"></div><script type="module">
+import { createApp, h, ref } from 'vue'
+import Editor from '../../src/components/R1ArtifactEditor.vue'
+import '../../src/r1-shell.css'
+let artifact = { artifactId: 'test', version: 1, sourceTurnId: 'test', kind: 'text', title: '测试工作稿', content: '原始正文', sourceRefs: [], savedItemId: null, temporary: false }
+const count = ref(0)
+window.seamoR1 = { artifacts: {
+  get: async () => ({ ok: true, data: { ...artifact } }),
+  select: async () => ({ ok: true, data: { ...artifact } }),
+  materials: async () => ({ ok: true, data: [] }),
+  revise: async input => {
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    if (input.expectedVersion !== artifact.version) return { ok: false, error: { code: 'VERSION_CONFLICT' } }
+    artifact = { ...artifact, content: input.content, title: input.title, version: artifact.version + 1 }
+    count.value++
+    return { ok: true, data: { ...artifact } }
+  }
+} }
+createApp({ setup() { return () => h('main', { class: 'r1-shell', style: 'padding:32px;position:relative;min-height:100vh' }, [
+ h('p', '隔离组件检查：模拟延迟回执，不连接真实数据库。'),
+ h('output', { 'aria-label': '保存次数' }, String(count.value)),
+ h(Editor, { artifactId: 'test' })
+]) } }).mount('#app')
+</script></body></html>

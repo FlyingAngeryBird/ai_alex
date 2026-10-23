@@ -1,0 +1,111 @@
+{
+  "sourceCommit": "fc162d159918aa72c23240b1b1ebbad943a656ca",
+  "actualDesktop": {
+    "version": "alpha.10",
+    "configuredServicesPreserved": true,
+    "microphoneOpened": false,
+    "taskId": "432046c9-679e-4490-96a4-d704c38201fb",
+    "status": "partially_succeeded",
+    "errorCode": "ARK_REQUEST_TIMEOUT",
+    "successfulTools": [
+      "harness.readSkill",
+      "harness.readSkill",
+      "harness.readSkill",
+      "harness.readSkill"
+    ],
+    "successfulWebCalls": 0,
+    "candidateSelectionSaveReminderUiAcceptance": "not_passed",
+    "systemDisplayedPartialResultAndResume": true
+  },
+  "isolatedDiagnosticExperiments": [
+    {
+      "log": "seamo-m02-search-nonthinking.log",
+      "checkedAt": "2026-10-17T12:40:03.272Z",
+      "status": "failed",
+      "scope": "isolated_real_M02_search_with_explicit_thinking_disabled",
+      "candidateCount": 3,
+      "sourceCount": 3,
+      "initialStatus": "accepted",
+      "finalStatus": "failed",
+      "decisions": 4,
+      "tools": [
+        "read_file",
+        "web_search"
+      ],
+      "realItemRows": 0,
+      "realReceiptRows": 2,
+      "unresolvedCodes": [
+        "STRUCTURED_OUTPUT_INVALID"
+      ],
+      "drafts": [
+        {
+          "invalidJson": true
+        },
+        {
+          "status": "completed",
+          "goalVersion": 1,
+          "artifactBases": []
+        }
+      ],
+      "diagnostics": [
+        {
+          "kind": "structured_rejected",
+          "code": "TASK_DRAFT_JSON_INVALID"
+        },
+        {
+          "kind": "repair_rejected",
+          "code": "TASK_COMPLETION_WEB_EVIDENCE_MISSING"
+        }
+      ],
+      "store": false,
+      "publishedInProduction": false,
+      "elapsedMs": 30530
+    },
+    {
+      "log": "seamo-m02-search-nonthinking-read.log",
+      "checkedAt": "2026-10-17T12:41:36.685Z",
+      "status": "failed",
+      "scope": "isolated_real_M02_search_with_explicit_thinking_disabled",
+      "candidateCount": 3,
+      "sourceCount": 4,
+      "initialStatus": "accepted",
+      "finalStatus": "failed",
+      "decisions": 5,
+      "tools": [
+        "read_file",
+        "web_search",
+        "web_read_page"
+      ],
+      "realItemRows": 0,
+      "realReceiptRows": 3,
+      "unresolvedCodes": [
+        "STRUCTURED_OUTPUT_INVALID"
+      ],
+      "drafts": [
+        {
+          "invalidJson": true
+        },
+        {
+          "status": "completed",
+          "goalVersion": 1,
+          "artifactBases": []
+        }
+      ],
+      "diagnostics": [
+        {
+          "kind": "structured_rejected",
+          "code": "TASK_DRAFT_JSON_INVALID"
+        },
+        {
+          "kind": "repair_rejected",
+          "code": "TASK_COMPLETION_INCONSISTENT"
+        }
+      ],
+      "store": false,
+      "publishedInProduction": false,
+      "elapsedMs": 40246
+    }
+  ],
+  "productionThinkingSettingChanged": false,
+  "conclusion": "explicit nonthinking returned actual search/page receipts but failed structured publication; retain guards and do not claim a fix"
+}

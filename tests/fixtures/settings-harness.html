@@ -1,0 +1,17 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8" /><link rel="icon" href="data:," /><title>Seamo Settings Runtime Check</title></head>
+<body style="margin:0"><div id="app"></div><script type="module">
+import { createApp, h, ref } from 'vue'
+import R1SettingsPanel from '../../src/components/R1SettingsPanel.vue'
+import '../../src/r1-shell.css'
+createApp({ setup() {
+  const persona = ref(null)
+  const opened = ref(true)
+  window.seamoR1.persona.get().then(result => { if (result.ok) persona.value = result.data })
+  return () => h('div', { class: 'r1-shell' }, [
+    h('p', { style: 'padding:30px' }, '独立设置检查：真实 IPC 和临时数据库，未配置服务，不启用麦克风。'),
+    h('button', { onClick: () => { opened.value = true } }, '打开设置'),
+    opened.value ? h(R1SettingsPanel, { persona: persona.value, voicePreviewing: false,
+      onSaved: value => { persona.value = value }, onClose: () => { opened.value = false } }) : null
+  ])
+} }).mount('#app')
+</script></body></html>

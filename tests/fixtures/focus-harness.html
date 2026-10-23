@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="UTF-8" /><link rel="icon" href="data:," /><title>R1 Focus isolated runtime check</title></head>
+<body style="margin:0"><div id="app"></div><script type="module">
+import { createApp, h, ref } from 'vue'
+import R1FocusChip from '../../src/components/R1FocusChip.vue'
+import R1FocusDialog from '../../src/components/R1FocusDialog.vue'
+import { useFocus } from '../../src/composables/useFocus.ts'
+import '../../src/r1-shell.css'
+createApp({ setup() {
+  const editor = ref(false)
+  const notice = ref('')
+  const focus = useFocus(() => { notice.value = '专注已完成' })
+  const start = async (seconds, track) => { if (await focus.start(seconds, track)) { editor.value = false; notice.value = '' } }
+  return () => h('div', { class: 'r1-shell' }, [
+    h('p', { style: 'padding:30px;font-size:14px' }, '独立专注检查：真实主进程 SQLite 服务，使用临时数据目录。'),
+    h('button', { style: 'margin:30px', onClick: () => { editor.value = true } }, '开始一段专注'),
+    h('output', { 'aria-label': '专注状态', style: 'display:block;padding:30px' }, JSON.stringify(focus.state.value)),
+    h('p', { role: 'status' }, notice.value || focus.error.value),
+    focus.active.value && h(R1FocusChip, { focus: focus.state.value, busy: focus.busy.value,
+      onPause: () => focus.control('pause'), onResume: () => focus.control('resume'), onStop: () => focus.control('stop') }),
+    editor.value && h(R1FocusDialog, { active: focus.active.value, busy: focus.busy.value, error: focus.error.value,
+      track: null, onClose: () => { editor.value = false }, onStart: start })
+  ])
+} }).mount('#app')
+</script></body></html>

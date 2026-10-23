@@ -1,0 +1,116 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TaskDeliveryInput",
+  "type": "object",
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "maxLength": 160
+    },
+    "taskId": {
+      "type": "string",
+      "maxLength": 160
+    },
+    "goalVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "resultId": {
+      "type": "string",
+      "maxLength": 160
+    },
+    "speakAllowed": {
+      "type": "boolean"
+    },
+    "completionStatus": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "partial",
+        "needs_input"
+      ]
+    },
+    "replyBrief": {
+      "type": "string",
+      "maxLength": 1000
+    },
+    "sourceRefs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 160
+      },
+      "maxItems": 50
+    },
+    "artifactIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 160
+      },
+      "maxItems": 50
+    },
+    "entityReceipts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "actionId": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "tool": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "succeeded",
+              "failed",
+              "cancelled",
+              "unknown"
+            ]
+          },
+          "entityId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 160
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "actionId",
+          "tool",
+          "status",
+          "entityId",
+          "summary"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 50
+    }
+  },
+  "required": [
+    "eventId",
+    "taskId",
+    "goalVersion",
+    "resultId",
+    "speakAllowed",
+    "completionStatus",
+    "replyBrief",
+    "sourceRefs",
+    "artifactIds",
+    "entityReceipts"
+  ],
+  "additionalProperties": false
+}

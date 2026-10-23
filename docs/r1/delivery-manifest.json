@@ -1,0 +1,98 @@
+{
+  "product": "Seamo AI R1",
+  "channel": "internal-acceptance",
+  "branch": "codex/seamo-r1",
+  "generatedAt": "2026-10-23T11:41:33+08:00",
+  "candidate": {
+    "appVersion": "1.0.0-alpha.28",
+    "bundleId": "com.seamo.ai.r1",
+    "sourceCommit": "431f108027e861cbe3521312f4b44001b742fc77",
+    "packageDir": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-23-alpha28-music-quality",
+    "zip": "Seamo-AI-R1-1.0.0-alpha.28-mac-arm64.zip",
+    "zipBytes": 151358294,
+    "zipSha256": "ae7ea3e0d83acb76606e43d6d081d633111009732dc564a7333eb49cdf3ed46f",
+    "signing": "local-ad-hoc",
+    "notarized": false,
+    "forbiddenFilesFound": false,
+    "assetReleaseId": "seamo-ai-r1-agent-assets-3.5.9"
+  },
+  "versions": {
+    "assetRelease": "seamo-ai-r1-agent-assets-3.5.9",
+    "toolSchema": "3.2.1",
+    "sqliteSchema": 12,
+    "electron": "42.x",
+    "nodeRuntime": "bundled"
+  },
+  "remote": {
+    "origin": "https://github.com/FlyingAngeryBird/ai_alex.git",
+    "branch": "codex/seamo-r1",
+    "sourceCommitPushed": "431f108027e861cbe3521312f4b44001b742fc77",
+    "pr": "https://github.com/FlyingAngeryBird/ai_alex/pull/1",
+    "pushTransport": "SSH",
+    "prBodyUpdate": "not required for source delivery"
+  },
+  "dataPolicy": {
+    "userDataDir": "~/Library/Application Support/Seamo AI R1",
+    "preUpgradeSnapshot": "/Users/sea/Documents/Seamo-R1-Previews/2026-10-22-alpha27-mini-cover/pre-switch-user-data-20261022",
+    "doesNotShip": [
+      ".env",
+      "credentials.bin",
+      "user database"
+    ],
+    "oldPackagesPreserved": true,
+    "realUserDataSwitchedToCandidate": false
+  },
+  "status": {
+    "verified": [
+      "E1 query/save/reminder/duplicate-save",
+      "E2 memory forget/no-revive",
+      "E2 temporary authorized save/exit cleanup",
+      "E3 settings/data/backup/restore isolation",
+      "isolated real-UI task recovery",
+      "onboarding skip without mic",
+      "narrow-window overlays",
+      "E4 real playback/analyser/queue-next/pause-mute-volume; export H1 dedupe in alpha.17 (new files only)",
+      "E5 isolated: F06b/F06c/F07b/F08d/F09b/F01c + Esc + mock search retry + diagnostics payload redaction",
+      "E5 packaged isolated: alpha.18 Esc/search retry/edit retention failed-save+nav; alpha.19 valid-save single-Esc close after flush re-check",
+      "alpha.19 prototype comparison (five pages/settings, wide/narrow/empty/failure/long) with documented diffs",
+      "isolated install->upgrade->rollback alpha.18<->alpha.19 with synthetic data and schema 12 preservation",
+      "E5 focus completion/end-music rule; reminder DND/followup/missed-24h policy",
+      "alpha.20 prototype alignment batch (home/music/items/memory/history/settings) with populated-history comparison",
+      "alpha.19<->alpha.20 isolated install/upgrade/rollback with synthetic data preserved",
+      "E6 real Ark set: F02b persona 3/3, F04b automatic-memory 7/7 + sensitive confirmation 2/2, F04c recall/ambiguity 5/5, F09a discussion/edit 2/2",
+      "serialized-null and ARK length-reason confirmed fixes with tests; full 107 files/688 tests",
+      "F04a fixed 20-case set run5 18/20 (90%) after retrieval/routing fixes; original dataset/scoring preserved; failed runs retained",
+      "E8 credential failure classification/recover path targeted tests; non-model focus conflict/new duration, in-app reminder delivery, device status, diagnostic summary",
+      "E10 alpha.24: 109 files/700 tests and typecheck/build; browser editor/navigation checks; packaged app starts with fake HOME and creates isolated SQLite; codesign verification passed",
+      "E10 isolated packaged alpha.22→alpha.24→alpha.22 startup: synthetic item retained, SQLite schema12 and integrity_check ok; actual user data untouched",
+      "E10 actual alpha.24 app: old local history/items/tasks visible; stored credentials recovered after one manual reload; Ark request and native realtime session open/close checks passed without microphone",
+      "E10 actual alpha.24 app: one text question returned 2+3=5; two-line composer rendered and draft cleared; memory/history/task/music entry points opened",
+      "E10 alpha.24 user confirmed short native realtime voice reply and subtitles both normal; microphone off afterward",
+      "alpha.25 data settings: isolated normal/700px visual check, checkbox toggle and preview gating; typecheck/build/codesign; actual app launched with existing history visible and microphone off",
+      "alpha.26 music: 7 files/55 related tests and typecheck/build; incremental result/play registration, request sharing/cache/retry and stale-progress guards; browser production component layout at measured 1422px and 700px with version expansion/favorite/queue actions",
+      "alpha.26 real provider metadata sample: first 10 at 3485ms, final 20 at 4072ms, cached repeat 2ms; netease/joox 200, kuwo 400; no per-track cover requests and no playback claim",
+      "alpha.26 actual app started after paused alpha.25 exit and local data snapshot (immutable SQLite integrity ok/schema12, DB bytes equal); existing history visible, mic off, music page opened",
+      "alpha.27 MiniPlayer displays track artworkUrl; production component isolated loaded42px/object-fit cover, failure fallback and next-track recovery, original open/play actions; typecheck/build/codesign passed. Actual app launched with history readable and mic off after validated schema12 snapshot; no close/collapse added",
+      "alpha.28: build/typecheck and 7 files/60 music tests; lazy artwork 3-concurrency/cache/bounds, simplified-traditional matching, compact query ranking/bounded refinement, parallel resource preparation; isolated production component four covers loaded; real metadata/cover samples documented"
+    ],
+    "pendingUserAcceptance": [
+      "alpha.24 first-launch credential read timed out; one manual reload recovered the original saved configuration; startup reliability remains unverified",
+      "extended real voice/audio/music ducking and subjective particle appearance; microphone/notification/DND/sleep/device checks",
+      "native diagnostic save dialog and formal install/rollback acceptance",
+      "Developer ID signing/notarization for public download",
+      "alpha.26 actual app service status reads failed; model/realtime configuration recovery and voice remain pending; no credentials changed",
+      "alpha.26 full music search/play listening and visual acceptance; browser layout evidence and metadata timings are not audio verification",
+      "alpha.27 real track mini-player cover appearance; synthetic image checks do not prove upstream cover availability. Startup service configuration still reports read failure",
+      "alpha.28 actual packaged search/play/cover/subjective listening pending; no forced switch when existing application changed during handoff. Existing model credential startup issue remains separate"
+    ],
+    "externalBlocked": [
+      "Developer ID signing/notarization",
+      "real music sources beyond verified netease tracks and remaining target tracks"
+    ],
+    "notClaimedComplete": true
+  },
+  "userActions": [
+    "Quit the current Seamo app before opening alpha.28 to try music; do not run two versions against the same data directory",
+    "Provide Developer ID signing/notarization conditions before public release"
+  ]
+}

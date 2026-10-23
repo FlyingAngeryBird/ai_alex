@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080b10">
+  <meta name="description" content="Seamo AI 是面向 macOS 的中文桌面 AI 语音助手。了解语音交互、AI 对话、语音回复与沉浸式音乐体验。">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23080b10'/%3E%3Ccircle cx='32' cy='32' r='21' fill='none' stroke='%239bd9ca' stroke-width='2'/%3E%3Ccircle cx='32' cy='32' r='10' fill='none' stroke='%23e4ce91' stroke-width='2'/%3E%3Ccircle cx='32' cy='32' r='3' fill='%239bd9ca'/%3E%3C/svg%3E">
+  <title>Seamo AI — 开口，桌面便有回应</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --night: #080b10;
+      --night-2: #0d131a;
+      --night-3: #111a20;
+      --paper: #e9eee9;
+      --paper-ink: #1c2a2a;
+      --text: #f4f6f2;
+      --soft: #b5c1bd;
+      --quiet: #84938f;
+      --mint: #9bd9ca;
+      --gold: #e4ce91;
+      --line: rgba(226, 241, 235, .15);
+      --page: min(1400px, calc(100% - 104px));
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--night); color: var(--text); -webkit-font-smoothing: antialiased; }
+    body:has(dialog[open]) { overflow: hidden; }
+    a { color: inherit; text-decoration: none; }
+    button { color: inherit; font: inherit; cursor: pointer; }
+    button:focus-visible, a:focus-visible { outline: 2px solid var(--mint); outline-offset: 5px; }
+    img { max-width: 100%; }
+    ::selection { background: var(--mint); color: var(--night); }
+    .wrap { width: var(--page); margin-inline: auto; }
+    .eyebrow { display: inline-flex; align-items: center; gap: 11px; font-size: 11px; font-weight: 700; letter-spacing: .18em; color: var(--mint); text-transform: uppercase; }
+    .eyebrow::before { content: ""; width: 20px; height: 1px; background: currentColor; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; letter-spacing: .1em; }
+    .accent { color: var(--mint); }
+    .site-header { position: relative; z-index: 5; height: 86px; border-bottom: 1px solid rgba(255,255,255,.1); }
+    .site-header .wrap { height: 100%; display: flex; align-items: center; justify-content: space-between; gap: 26px; }
+    .brand { display: inline-flex; align-items: center; gap: 12px; font-size: 18px; font-weight: 720; letter-spacing: -.045em; white-space: nowrap; }
+    .brand-mark { display: inline-grid; place-items: center; width: 29px; height: 29px; border: 1px solid var(--mint); border-radius: 50%; box-shadow: 0 0 20px rgba(155,217,202,.18); }
+    .brand-mark::before { content: ""; width: 11px; height: 11px; border: 1px solid var(--gold); border-radius: 50%; box-shadow: 0 0 12px rgba(228,206,145,.25); }
+    .nav { display: flex; align-items: center; gap: 35px; font-size: 13px; color: #c8d0cb; }
+    .nav a:hover, .footer-top a:hover { color: var(--mint); }
+    .nav .nav-action { border: 1px solid rgba(205,230,221,.34); border-radius: 30px; padding: 11px 18px; color: var(--text); }
+    .nav .nav-action:hover { border-color: var(--mint); }
+    .hero { position: relative; overflow: hidden; padding: 105px 0 68px; background: radial-gradient(ellipse 38% 42% at 77% 35%,rgba(67,123,113,.12),transparent 78%), radial-gradient(ellipse 37% 25% at 5% 94%,rgba(127,105,72,.08),transparent 85%); }
+    .hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 25px; min-height: 630px; }
+    .hero-copy { position: relative; z-index: 2; padding-bottom: 60px; }
+    .hero h1 { margin: 27px 0 27px; max-width: 780px; font-size: clamp(64px, 6.9vw, 112px); line-height: 1.11; font-weight: 650; letter-spacing: -.083em; }
+    .hero h1 span { display: block; }
+    .mobile-break { display: none; }
+    .hero-lead { max-width: 585px; margin: 0; color: #cbd3ce; font-size: clamp(17px, 1.55vw, 21px); line-height: 1.9; }
+    .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 25px; margin-top: 42px; }
+    .primary-link { display: inline-flex; align-items: center; gap: 22px; padding: 15px 23px; min-height: 53px; border-radius: 99px; background: var(--mint); color: #132420; font-size: 14px; font-weight: 750; transition: background .2s, transform .2s; }
+    .primary-link:hover { background: #b9e9dd; transform: translateY(-2px); }
+    .primary-link span { font-size: 20px; font-weight: 400; line-height: 1; }
+    .secondary-link { border-bottom: 1px solid rgba(234,243,237,.43); padding-bottom: 6px; color: #d8e1db; font-size: 14px; }
+    .secondary-link:hover { color: var(--mint); border-color: var(--mint); }
+    .hero-visual { position: relative; height: min(49vw, 685px); min-height: 560px; }
+    .orbit-grid { position: absolute; width: min(43vw, 610px); aspect-ratio: 1; left: 50%; top: 44%; transform: translate(-50%,-50%); border: 1px solid rgba(176,216,205,.14); border-radius: 50%; }
+    .orbit-grid::before, .orbit-grid::after { content: ""; position: absolute; inset: 12%; border: 1px solid rgba(176,216,205,.09); border-radius: 50%; }
+    .orbit-grid::after { inset: 26%; }
+    .orb-crop { position: absolute; left: 50%; top: 42%; transform: translate(-50%,-50%); width: min(43vw, 610px); aspect-ratio: 1; overflow: hidden; -webkit-mask-image: radial-gradient(circle at 50% 44%, #000 43%, transparent 74%); mask-image: radial-gradient(circle at 50% 44%, #000 43%, transparent 74%); }
+    .orb-crop img { position: absolute; max-width: none; width: 185%; height: auto; top: 11%; left: 50%; transform: translateX(-50%); filter: brightness(1.7) contrast(1.22); }
+    .orb-caption { position: absolute; top: 13%; right: 1%; display: grid; gap: 9px; padding-left: 18px; border-left: 1px solid var(--mint); color: #c2d4cb; font-size: 11px; line-height: 1.5; }
+    .orb-caption b { color: var(--mint); font-size: 11px; }
+    .voice-strip { position: absolute; left: 1%; right: 1%; bottom: 4%; height: 110px; overflow: hidden; border: 1px solid rgba(225,236,231,.24); border-radius: 18px; background: #0b0d13; box-shadow: 0 32px 70px rgba(0,0,0,.35); }
+    .voice-strip img { position: absolute; max-width: none; width: 166.67%; height: auto; left: -33.33%; bottom: 0; }
+    .visual-note { position: absolute; right: 2%; bottom: 0; color: #83928c; font-size: 11px; }
+    .hero-foot { display: grid; grid-template-columns: 1fr auto; gap: 20px; align-items: end; padding-top: 32px; border-top: 1px solid var(--line); }
+    .hero-foot p { max-width: 700px; margin: 0; color: #9eaca6; font-size: 13px; line-height: 1.8; }
+    .hero-foot span { color: var(--mint); font-size: 11px; }
+    .flow { color: var(--paper-ink); background: var(--paper); padding: 118px 0 128px; }
+    .flow .eyebrow, .detail .eyebrow { color: #54796e; }
+    .section-intro { display: grid; grid-template-columns: .85fr 1.15fr; gap: 90px; align-items: end; }
+    .section-intro h2 { margin: 19px 0 0; font-size: clamp(42px, 4.8vw, 72px); letter-spacing: -.075em; font-weight: 630; line-height: 1.23; }
+    .section-intro p { max-width: 540px; margin: 0; color: #51645c; font-size: 17px; line-height: 1.9; }
+    .flow-steps { display: grid; grid-template-columns: repeat(4,1fr); margin-top: 75px; border-top: 1px solid rgba(35,67,60,.3); border-bottom: 1px solid rgba(35,67,60,.3); }
+    .flow-step { min-height: 222px; padding: 24px 23px 28px 0; border-right: 1px solid rgba(35,67,60,.18); }
+    .flow-step + .flow-step { padding-left: 26px; }
+    .flow-step:last-child { border-right: 0; }
+    .flow-index { color: #5b8175; font-size: 11px; font-weight: 700; }
+    .flow-step h3 { margin: 44px 0 13px; font-size: 24px; font-weight: 680; letter-spacing: -.045em; }
+    .flow-step p { margin: 0; color: #51655c; font-size: 14px; line-height: 1.8; }
+    .chapter { padding: 138px 0 148px; }
+    .chapter-head { display: grid; grid-template-columns: 1fr 1fr; align-items: end; gap: 70px; margin-bottom: 56px; }
+    .chapter-head h2 { margin: 20px 0 0; font-size: clamp(43px, 5.2vw, 78px); font-weight: 610; letter-spacing: -.075em; line-height: 1.21; }
+    .chapter-head p { max-width: 510px; margin: 0; color: var(--soft); font-size: 17px; line-height: 1.9; }
+    .voice-chapter { background: #0b1117; }
+    .voice-grid { display: grid; grid-template-columns: minmax(280px,.62fr) minmax(0,1fr); gap: 8%; align-items: center; }
+    .capability-list { border-top: 1px solid var(--line); }
+    .capability { display: grid; grid-template-columns: 38px 1fr; gap: 16px; padding: 20px 0 23px; border-bottom: 1px solid var(--line); }
+    .capability .num { padding-top: 4px; color: var(--mint); font-size: 11px; }
+    .capability h3 { margin: 0 0 7px; font-size: 19px; font-weight: 640; letter-spacing: -.045em; }
+    .capability p { margin: 0; color: #9eada7; font-size: 14px; line-height: 1.8; }
+    .screen-frame { position: relative; overflow: hidden; border: 1px solid rgba(226,240,234,.18); border-radius: 15px; background: #06090d; box-shadow: 0 34px 95px rgba(0,0,0,.35); }
+    .screen-frame img { display: block; width: 100%; height: auto; }
+    .chat-composition { position: relative; min-width: 0; }
+    .chat-crop { position: relative; height: clamp(360px, 37vw, 540px); overflow: hidden; }
+    .chat-crop img { position: absolute; max-width: none; width: 170%; height: auto; left: -35%; bottom: 0; filter: brightness(1.18); }
+    .screen-tag { position: absolute; top: 18px; left: 18px; z-index: 1; padding: 9px 11px; border: 1px solid rgba(224,238,232,.21); border-radius: 6px; background: rgba(8,12,17,.8); color: #b5c7bd; font-size: 10px; }
+    .screenshot-caption { display: flex; justify-content: space-between; gap: 18px; margin-top: 14px; color: #879890; font-size: 11px; line-height: 1.6; }
+    .screenshot-caption button { padding: 0; border: 0; background: none; color: var(--mint); font-size: 11px; text-decoration: underline; text-underline-offset: 4px; white-space: nowrap; }
+    .screenshot-caption button:hover { color: #d0f4e9; }
+    .music-chapter { position: relative; overflow: hidden; background: #111c20; }
+    .music-chapter::before { content: ""; position: absolute; width: 700px; height: 700px; right: -300px; top: -240px; border-radius: 50%; background: rgba(117, 170, 147, .055); filter: blur(30px); pointer-events: none; }
+    .music-intro { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: end; margin-bottom: 56px; }
+    .music-intro h2 { margin: 20px 0 0; font-size: clamp(45px, 5.4vw, 83px); line-height: 1.2; letter-spacing: -.077em; font-weight: 610; }
+    .music-intro p { max-width: 520px; margin: 0; color: #bac9c0; font-size: 17px; line-height: 1.9; }
+    .music-screen { position: relative; }
+    .music-screen .screen-frame { border-radius: 17px; }
+    .music-screen .screen-frame img { filter: brightness(1.18); }
+    .music-points { display: grid; grid-template-columns: repeat(3,1fr); gap: 34px; margin-top: 48px; }
+    .music-point { border-top: 1px solid rgba(218,236,225,.24); padding-top: 19px; }
+    .music-point strong { display: block; margin-bottom: 10px; font-size: 17px; font-weight: 650; }
+    .music-point p { max-width: 340px; margin: 0; color: #9fb0a6; font-size: 14px; line-height: 1.8; }
+    .detail { background: var(--paper); color: var(--paper-ink); padding: 124px 0 126px; }
+    .detail-grid { display: grid; grid-template-columns: .9fr 1.1fr; gap: 11%; }
+    .detail h2 { margin: 23px 0 22px; font-size: clamp(44px, 5vw, 75px); letter-spacing: -.078em; font-weight: 630; line-height: 1.23; }
+    .detail-lead { max-width: 490px; margin: 0; color: #54665e; font-size: 16px; line-height: 1.9; }
+    .detail-rows { border-top: 1px solid rgba(35,67,60,.26); }
+    .detail-row { display: grid; grid-template-columns: 170px 1fr; gap: 22px; border-bottom: 1px solid rgba(35,67,60,.22); padding: 24px 0 28px; }
+    .detail-row strong { color: #22564b; font-size: 17px; }
+    .detail-row p { margin: 0; color: #53675e; font-size: 15px; line-height: 1.85; }
+    .technology { background: #080c11; padding: 135px 0 150px; }
+    .technology-head { display: grid; grid-template-columns: 1fr 1fr; gap: 65px; align-items: end; }
+    .technology h2 { margin: 22px 0 0; font-size: clamp(44px, 5vw, 74px); font-weight: 610; letter-spacing: -.075em; line-height: 1.23; }
+    .technology-head p { max-width: 510px; margin: 0; color: var(--soft); font-size: 16px; line-height: 1.9; }
+    .tech-track { margin-top: 68px; border-top: 1px solid var(--line); }
+    .tech-row { display: grid; grid-template-columns: 145px 1fr minmax(180px,.56fr); gap: 30px; align-items: start; padding: 27px 0 31px; border-bottom: 1px solid var(--line); }
+    .tech-row .mono { color: var(--mint); font-size: 11px; padding-top: 7px; }
+    .tech-row h3 { margin: 0 0 8px; font-size: 23px; font-weight: 640; letter-spacing: -.045em; }
+    .tech-row p { margin: 0; color: #9eaea6; font-size: 14px; line-height: 1.8; }
+    .tech-row small { color: #8ca196; font-size: 12px; line-height: 1.8; }
+    .roadmap { padding: 92px 0; background: #0e1419; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .roadmap-grid { display: grid; grid-template-columns: minmax(250px,.63fr) 1fr; gap: 9%; }
+    .roadmap h2 { margin: 18px 0 0; font-size: clamp(36px, 3.8vw, 56px); letter-spacing: -.07em; font-weight: 620; line-height: 1.27; }
+    .roadmap p { max-width: 690px; margin: 0; color: #aab8af; font-size: 16px; line-height: 1.95; }
+    .roadmap small { display: block; margin-top: 20px; color: #789087; font-size: 12px; }
+    .closing { padding: 142px 0 151px; text-align: center; }
+    .closing .eyebrow::before { display: none; }
+    .closing h2 { margin: 24px 0 36px; font-size: clamp(48px, 6.1vw, 89px); line-height: 1.2; font-weight: 610; letter-spacing: -.082em; }
+    footer { border-top: 1px solid var(--line); }
+    .footer-top { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 100px; color: #82928a; font-size: 12px; }
+    .footer-top .brand { color: var(--text); font-size: 16px; }
+    .footer-top a:last-child { color: #c7d3ca; }
+    dialog { position: fixed; max-width: min(94vw,1400px); width: 100%; max-height: 94vh; padding: 0; border: 1px solid rgba(218,237,229,.3); border-radius: 12px; background: #070a0e; color: var(--text); box-shadow: 0 35px 120px #000b; }
+    dialog::backdrop { background: rgba(0,0,0,.8); backdrop-filter: blur(7px); }
+    .dialog-head { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 13px 18px; color: #b8c8bd; font-size: 13px; }
+    .dialog-head button { border: 0; background: transparent; padding: 4px 8px; font-size: 24px; line-height: 1; }
+    .dialog-head button:hover { color: var(--mint); }
+    dialog img { display: block; width: 100%; max-height: calc(94vh - 55px); object-fit: contain; }
+    @media (max-width: 1050px) {
+      :root { --page: min(100% - 56px, 900px); }
+      .hero { padding-top: 74px; }
+      .hero-grid { grid-template-columns: 1fr; min-height: 0; }
+      .hero-copy { padding-bottom: 0; }
+      .hero h1 { max-width: 780px; font-size: clamp(66px, 9vw, 94px); }
+      .hero-visual { width: min(100%, 700px); height: 640px; margin: 5px auto 25px; }
+      .orbit-grid, .orb-crop { width: 570px; max-width: 82vw; }
+      .voice-strip { left: 2%; right: 2%; }
+      .section-intro, .chapter-head, .music-intro, .detail-grid, .technology-head, .roadmap-grid { gap: 42px; }
+      .voice-grid { grid-template-columns: 1fr; gap: 44px; }
+      .capability-list { display: grid; grid-template-columns: repeat(3,1fr); gap: 18px; border-top: 0; }
+      .capability { grid-template-columns: 1fr; gap: 13px; border-top: 1px solid var(--line); }
+      .chat-crop { height: 470px; }
+    }
+    @media (max-width: 700px) {
+      :root { --page: calc(100% - 38px); }
+      .site-header { height: 68px; }
+      .brand { font-size: 16px; }
+      .nav { gap: 0; }
+      .nav a:not(.nav-action) { display: none; }
+      .nav .nav-action { padding: 8px 12px; font-size: 12px; }
+      .hero { padding: 71px 0 54px; }
+      .hero h1 { margin: 24px 0 24px; font-size: clamp(58px, 11.9vw, 78px); }
+      .mobile-break { display: block; }
+      .hero-lead { font-size: 16px; line-height: 1.85; }
+      .hero-actions { margin-top: 30px; }
+      .hero-visual { height: 405px; margin-top: 14px; margin-bottom: 20px; }
+      .orbit-grid, .orb-crop { width: min(92vw, 370px); top: 42%; }
+      .orb-caption { top: 4%; right: 0; font-size: 9px; }
+      .voice-strip { height: 81px; bottom: 0; left: 0; right: 0; border-radius: 10px; }
+      .visual-note { display: none; }
+      .hero-foot { grid-template-columns: 1fr; gap: 12px; padding-top: 22px; }
+      .hero-foot p { font-size: 12px; }
+      .flow, .detail { padding: 94px 0 100px; }
+      .section-intro, .chapter-head, .music-intro, .detail-grid, .technology-head, .roadmap-grid { grid-template-columns: 1fr; gap: 21px; }
+      .section-intro h2, .chapter-head h2, .music-intro h2, .detail h2, .technology h2 { font-size: clamp(42px, 10vw, 61px); }
+      .section-intro p, .chapter-head p, .music-intro p { font-size: 15px; }
+      .flow-steps { grid-template-columns: 1fr 1fr; margin-top: 42px; }
+      .flow-step { min-height: 198px; padding: 18px 17px 21px 0; border-bottom: 1px solid rgba(35,67,60,.18); }
+      .flow-step + .flow-step { padding-left: 0; }
+      .flow-step:nth-child(even) { padding-left: 17px; border-right: 0; }
+      .flow-step:nth-child(n+3) { border-bottom: 0; }
+      .flow-step h3 { margin-top: 30px; font-size: 21px; }
+      .flow-step p { font-size: 13px; }
+      .chapter { padding: 102px 0 108px; }
+      .chapter-head, .music-intro { margin-bottom: 38px; }
+      .capability-list { grid-template-columns: 1fr; gap: 0; }
+      .capability { grid-template-columns: 29px 1fr; border-top: 0; }
+      .capability:first-child { border-top: 1px solid var(--line); }
+      .chat-crop { height: 300px; }
+      .screen-tag { top: 11px; left: 11px; font-size: 9px; }
+      .music-points { grid-template-columns: 1fr; gap: 22px; margin-top: 35px; }
+      .music-point { padding-top: 15px; }
+      .detail-row { grid-template-columns: 1fr; gap: 7px; padding: 20px 0; }
+      .detail-row strong { font-size: 16px; }
+      .detail-row p { font-size: 14px; }
+      .technology { padding: 100px 0 108px; }
+      .tech-track { margin-top: 46px; }
+      .tech-row { grid-template-columns: 78px 1fr; gap: 16px; }
+      .tech-row h3 { font-size: 20px; }
+      .tech-row p { font-size: 13px; }
+      .tech-row small { grid-column: 2; }
+      .roadmap { padding: 86px 0; }
+      .roadmap h2 { font-size: 39px; }
+      .roadmap p { font-size: 15px; }
+      .closing { padding: 108px 0 116px; }
+      .closing h2 { font-size: 53px; }
+      .footer-top { flex-wrap: wrap; gap: 12px; padding: 25px 0; min-height: 0; }
+      .footer-top span { width: 100%; }
+    }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; } }
+  </style>
+</head>
+<body>
+  <header class="site-header" id="top">
+    <div class="wrap">
+      <a class="brand" href="#top" aria-label="Seamo AI，返回顶部"><span class="brand-mark" aria-hidden="true"></span>Seamo AI</a>
+      <nav class="nav" aria-label="页面导航">
+        <a href="#experience">体验路径</a>
+        <a href="#capabilities">产品能力</a>
+        <a href="#technology">技术实现</a>
+        <a class="nav-action" href="#capabilities">了解产品 ↗</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="wrap">
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <span class="eyebrow">macOS 中文 AI 语音助手</span>
+            <h1 id="hero-title"><span>开口，</span><span class="accent">桌面便有<br class="mobile-break">回应。</span></h1>
+            <p class="hero-lead">Seamo AI 将语音对话、AI 回答与音乐连成一种自然的桌面体验。你说话，文字同步出现；问题得到回答，想听的音乐也能应声而起。</p>
+            <div class="hero-actions"><a class="primary-link" href="#capabilities">探索产品能力 <span aria-hidden="true">↗</span></a><a class="secondary-link" href="#experience">了解它如何工作</a></div>
+          </div>
+          <div class="hero-visual" aria-label="Seamo AI 当前桌面界面的粒子球与语音控制栏">
+            <div class="orbit-grid" aria-hidden="true"></div>
+            <div class="orb-crop"><img src="voice-console.png" width="1280" height="800" alt="当前客户端中的粒子球" fetchpriority="high"></div>
+            <div class="orb-caption mono"><b>SEAMO / ACTIVE</b><span>VOICE · AI · MUSIC</span></div>
+            <div class="voice-strip"><img src="voice-console.png" width="1280" height="800" alt="当前客户端的 Space 说话、自动倾听和播放快捷栏"></div>
+            <span class="visual-note mono">ACTUAL PRODUCT INTERFACE</span>
+          </div>
+        </div>
+        <div class="hero-foot"><p>语音输入、AI 对话与音乐播放，在同一处顺畅衔接。</p><span class="mono">BUILT FOR MACOS</span></div>
+      </div>
+    </section>
+
+    <section class="flow" id="experience" aria-labelledby="flow-title">
+      <div class="wrap">
+        <div class="section-intro"><div><span class="eyebrow">一次完整的交流</span><h2 id="flow-title">不只是听见。<br>还要接得住。</h2></div><p>Seamo AI 把一次语音交互拆成清晰、可见的过程：从你开口，到文字出现、AI 回应，再到音乐接续。每一步都让人知道发生了什么。</p></div>
+        <div class="flow-steps" aria-label="产品交互路径">
+          <div class="flow-step"><span class="flow-index mono">01 / SPEAK</span><h3>开口说</h3><p>自动倾听，或按住 Space 主动说话。</p></div>
+          <div class="flow-step"><span class="flow-index mono">02 / SEE</span><h3>看见理解</h3><p>语音实时转成文字，识别过程清晰可见。</p></div>
+          <div class="flow-step"><span class="flow-index mono">03 / HEAR</span><h3>获得回应</h3><p>AI 回答逐步呈现，随后以语音播放。</p></div>
+          <div class="flow-step"><span class="flow-index mono">04 / PLAY</span><h3>继续体验</h3><p>当你想听音乐，一句话即可进入播放。</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="chapter voice-chapter" id="capabilities" aria-labelledby="voice-title">
+      <div class="wrap">
+        <div class="chapter-head"><div><span class="eyebrow">语音 × AI 对话</span><h2 id="voice-title">让想法，<br><span class="accent">不必停在输入框前。</span></h2></div><p>想问一个问题，直接说出来。Seamo AI 显示识别中的文字，也让 AI 的回答逐步出现；完成后的回答可以直接听见。</p></div>
+        <div class="voice-grid">
+          <div class="capability-list">
+            <div class="capability"><span class="num mono">01</span><div><h3>两种开口方式</h3><p>自动倾听适合自然对话；按住 Space 说话，让你随时掌控输入时机。</p></div></div>
+            <div class="capability"><span class="num mono">02</span><div><h3>过程始终可见</h3><p>实时转写、对话消息与状态反馈，让语音交流不再像黑盒。</p></div></div>
+            <div class="capability"><span class="num mono">03</span><div><h3>文字与声音接力</h3><p>AI 回答逐步生成；完整回答随后转换成语音，阅读或聆听都方便。</p></div></div>
+          </div>
+          <div class="chat-composition">
+            <div class="screen-frame chat-crop"><span class="screen-tag mono">CONVERSATION / CURRENT UI</span><img src="conversation-interface.png" width="1280" height="800" alt="当前对话界面，包含语音控制、对话消息和迷你播放器"></div>
+            <div class="screenshot-caption"><span>对话界面 · 示例对话与曲目</span><button type="button" data-view-image="conversation-interface.png" data-view-title="Seamo AI 对话界面">查看完整界面 ↗</button></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="chapter music-chapter" id="music" aria-labelledby="music-title">
+      <div class="wrap">
+        <div class="music-intro"><div><span class="eyebrow">语音 × 音乐</span><h2 id="music-title">说一句想听的，<br><span style="color:var(--gold)">把此刻交给音乐。</span></h2></div><p>音乐是对话的自然延伸。通过语音点歌，或在音乐界面主动搜索；从找歌、播放到歌词与收藏，都在同一个桌面体验里完成。</p></div>
+        <div class="music-screen"><div class="screen-frame"><img src="music-interface.png" width="1280" height="800" alt="当前音乐界面，包含多音源搜索、曲目信息、粒子球、播放控制和同步歌词"></div><div class="screenshot-caption"><span>音乐界面 · 曲目与歌词为展示示例</span><button type="button" data-view-image="music-interface.png" data-view-title="Seamo AI 音乐界面">查看完整界面 ↗</button></div></div>
+        <div class="music-points"><div class="music-point"><strong>一句话开始播放</strong><p>识别点歌意图，将对话自然带入音乐。</p></div><div class="music-point"><strong>找歌更有选择</strong><p>支持多音源搜索、歌曲收藏和播放控制。</p></div><div class="music-point"><strong>让音乐有画面</strong><p>同步歌词与随音频变化的粒子视觉，带来更沉浸的播放感受。</p></div></div>
+      </div>
+    </section>
+
+    <section class="detail" aria-labelledby="detail-title">
+      <div class="wrap detail-grid"><div><span class="eyebrow">藏在体验里的细节</span><h2 id="detail-title">它有能力，<br>也有自己的表达。</h2><p class="detail-lead">Seamo AI 不把 AI 藏在一个对话框里。声音、界面状态与音乐视觉共同组成这款桌面产品的个性。</p></div><div class="detail-rows"><div class="detail-row"><strong>人设与音色</strong><p>可配置助手的人设提示与多个音色选项，选择更适合自己的回应方式。</p></div><div class="detail-row"><strong>状态可感知</strong><p>粒子球与界面状态随倾听、思考、回应和音乐播放变化。</p></div><div class="detail-row"><strong>轻量留在桌面</strong><p>收起后保留快捷语音操作；对话时，迷你播放器让音乐状态随手可及。</p></div></div></div>
+    </section>
+
+    <section class="technology" id="technology" aria-labelledby="technology-title">
+      <div class="wrap">
+        <div class="technology-head"><div><span class="eyebrow">技术如何变成体验</span><h2 id="technology-title">从声音到回应，<br>每一环都有作用。</h2></div><p>不是把能力堆在一起，而是让语音理解、AI 生成、声音合成和音乐视觉沿着一条交互路径协同工作。</p></div>
+        <div class="tech-track">
+          <div class="tech-row"><span class="mono">INPUT</span><div><h3>捕捉开口的瞬间</h3><p>语音活动检测与录音预缓冲，帮助保留一句话的开头。</p></div><small>VAD · 音频预缓冲</small></div>
+          <div class="tech-row"><span class="mono">RECOGNIZE</span><div><h3>把声音变成可见的文字</h3><p>流式语音识别持续返回转写内容，让用户跟得上识别过程。</p></div><small>火山引擎流式 ASR</small></div>
+          <div class="tech-row"><span class="mono">RESPOND</span><div><h3>让回答逐步到达</h3><p>大模型流式生成文字，完整回答再合成为语音播放。</p></div><small>豆包大模型 · 语音合成</small></div>
+          <div class="tech-row"><span class="mono">PLAY</span><div><h3>把音乐变成画面</h3><p>音频频谱驱动粒子状态，配合多音源检索与歌词呈现。</p></div><small>GD Studio · Web Audio · Three.js</small></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="roadmap" aria-labelledby="roadmap-title"><div class="wrap roadmap-grid"><div><span class="eyebrow">持续进化</span><h2 id="roadmap-title">现在，先把交流做好。</h2></div><div><p>当前版本聚焦语音对话与音乐。未来将继续探索个人记忆、信息获取、提醒和任务协助，让这位桌面助手更懂你的日常。</p><small>以上方向仍在规划中，不属于当前版本能力。</small></div></div></section>
+
+    <section class="closing wrap" aria-labelledby="closing-title"><span class="eyebrow">SEAMO AI · FOR MACOS</span><h2 id="closing-title">给桌面一个声音入口。</h2><a class="primary-link" href="#capabilities">查看核心能力 <span aria-hidden="true">↑</span></a></section>
+  </main>
+
+  <footer><div class="wrap footer-top"><a class="brand" href="#top"><span class="brand-mark" aria-hidden="true"></span>Seamo AI</a><span>中文桌面 AI 语音助手 · 产品项目</span><a href="#top">返回顶部 ↑</a></div></footer>
+
+  <dialog id="image-dialog" aria-label="查看产品界面大图"><div class="dialog-head"><span id="dialog-title"></span><button type="button" id="dialog-close" aria-label="关闭大图">×</button></div><img id="dialog-image" alt=""></dialog>
+  <script>
+    const dialog = document.getElementById('image-dialog');
+    const dialogImage = document.getElementById('dialog-image');
+    const dialogTitle = document.getElementById('dialog-title');
+    document.querySelectorAll('[data-view-image]').forEach(button => button.addEventListener('click', () => {
+      dialogImage.src = button.dataset.viewImage;
+      dialogImage.alt = button.dataset.viewTitle;
+      dialogTitle.textContent = button.dataset.viewTitle;
+      dialog.showModal();
+    }));
+    document.getElementById('dialog-close').addEventListener('click', () => dialog.close());
+    dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+  </script>
+</body>
+</html>

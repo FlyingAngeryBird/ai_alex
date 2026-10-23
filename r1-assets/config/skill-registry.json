@@ -1,0 +1,132 @@
+{
+  "releaseId": "seamo-ai-r1-agent-assets-3.5.9",
+  "entries": [
+    {
+      "skillId": "SK01",
+      "name": "companion-chat",
+      "legacyKey": "companion_chat",
+      "version": "1.0.0",
+      "description": "理解闲聊、倾诉、求建议、指代和混合请求，保持统一人格并按需组合其他能力。适用于自然交流；单纯倾诉不触发记事、提醒或播放。",
+      "path": "skills/companion-chat/SKILL.md",
+      "resourcePaths": [
+        "skills/companion-chat/references/examples.md"
+      ],
+      "allowedTools": [
+        "memory.recall"
+      ],
+      "capabilityIds": [
+        "C01"
+      ]
+    },
+    {
+      "skillId": "SK02",
+      "name": "web-qa",
+      "legacyKey": "web_qa",
+      "version": "2.0.0",
+      "description": "搜索和读取公开信息，核对时效事实、比较候选并在用户改条件后调整查询。适用于需要外部证据的问题；不登录、购买或预约。",
+      "path": "skills/web-qa/SKILL.md",
+      "resourcePaths": [
+        "skills/web-qa/references/examples.md"
+      ],
+      "allowedTools": [
+        "web.search",
+        "web.readPage"
+      ],
+      "capabilityIds": [
+        "C03"
+      ]
+    },
+    {
+      "skillId": "SK03",
+      "name": "capture-item",
+      "legacyKey": "capture_item",
+      "version": "1.2.0",
+      "description": "按明确委托保存原话或整理内容，拆分待办，维护对象并导出TXT/MD。适用于记下来、列待办、修改保存内容；不自动创建提醒。",
+      "path": "skills/capture-item/SKILL.md",
+      "resourcePaths": [
+        "skills/capture-item/references/examples.md"
+      ],
+      "allowedTools": [
+        "notes.create",
+        "notes.list",
+        "notes.update",
+        "notes.complete",
+        "notes.delete",
+        "notes.export"
+      ],
+      "capabilityIds": [
+        "C04"
+      ]
+    },
+    {
+      "skillId": "SK04",
+      "name": "reminder-focus",
+      "legacyKey": "reminder_focus",
+      "version": "1.0.2",
+      "description": "创建、查询、改期或取消一次性提醒及约定回访，并控制一段本地专注计时。适用于明确时间或时长的委托；不提供周期或退出后的云调度。",
+      "path": "skills/reminder-focus/SKILL.md",
+      "resourcePaths": [
+        "skills/reminder-focus/references/examples.md"
+      ],
+      "allowedTools": [
+        "reminders.create",
+        "reminders.list",
+        "reminders.reschedule",
+        "reminders.cancel",
+        "focus.start",
+        "focus.getState",
+        "focus.pause",
+        "focus.resume",
+        "focus.stop"
+      ],
+      "capabilityIds": [
+        "C04"
+      ]
+    },
+    {
+      "skillId": "SK05",
+      "name": "music-companion",
+      "legacyKey": "music_companion",
+      "version": "1.1.1",
+      "description": "按明确播放需求推荐或匹配歌曲，控制播放器、队列、收藏与反馈，配合边听边聊。适用于点歌或媒体控制；提到歌曲和情绪表达不自动播放。",
+      "path": "skills/music-companion/SKILL.md",
+      "resourcePaths": [
+        "skills/music-companion/references/examples.md"
+      ],
+      "allowedTools": [
+        "music.search",
+        "music.getState",
+        "music.play",
+        "music.pause",
+        "music.resume",
+        "music.next",
+        "music.seek",
+        "music.setVolume",
+        "music.queue",
+        "music.favorite",
+        "music.feedback",
+        "memory.recall"
+      ],
+      "capabilityIds": [
+        "C05"
+      ]
+    },
+    {
+      "skillId": "SK06",
+      "name": "work-discussion",
+      "legacyKey": "work_discussion",
+      "version": "1.1.1",
+      "description": "讨论工作目标与取舍，整理或改写粘贴短文本，局部续改产物，并按明确要求查证、保存或导出。适用于轻工作协助；不读取未选择文件或操作办公软件。",
+      "path": "skills/work-discussion/SKILL.md",
+      "resourcePaths": [
+        "skills/work-discussion/references/examples.md"
+      ],
+      "allowedTools": [
+        "memory.recall"
+      ],
+      "capabilityIds": [
+        "C06"
+      ]
+    }
+  ]
+}

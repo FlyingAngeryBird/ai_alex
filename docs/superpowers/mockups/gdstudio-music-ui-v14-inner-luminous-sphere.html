@@ -1,0 +1,802 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lingmo Music Sphere V14 - Inner Luminous Field</title>
+  <style>
+    :root {
+      --bg: #060709;
+      --ink: #f8f0d3;
+      --muted: rgba(248, 240, 211, 0.42);
+      --line: rgba(154, 175, 172, 0.18);
+      --cyan: #8cefe0;
+      --gold: #ffe06b;
+      --panel: rgba(12, 14, 18, 0.48);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+      letter-spacing: 0;
+    }
+
+    body {
+      position: relative;
+    }
+
+    canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .grain,
+    .grid {
+      pointer-events: none;
+      position: fixed;
+      inset: 0;
+    }
+
+    .grain {
+      opacity: 0.12;
+      background-image:
+        radial-gradient(circle at 22% 12%, rgba(255, 224, 107, 0.06), transparent 32%),
+        radial-gradient(circle at 82% 26%, rgba(140, 239, 224, 0.08), transparent 34%),
+        linear-gradient(115deg, rgba(255,255,255,0.025), transparent 38%, rgba(255,255,255,0.018));
+      mix-blend-mode: screen;
+    }
+
+    .grid {
+      opacity: 0.16;
+      background-image:
+        linear-gradient(rgba(140, 239, 224, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(140, 239, 224, 0.08) 1px, transparent 1px);
+      background-size: 92px 92px;
+      mask-image: radial-gradient(circle at 50% 48%, black 0, transparent 78%);
+    }
+
+    .top-left,
+    .top-right,
+    .track,
+    .lyrics,
+    .notes {
+      position: fixed;
+      z-index: 2;
+    }
+
+    .top-left {
+      top: 28px;
+      left: 32px;
+      display: flex;
+      gap: 14px;
+      align-items: center;
+    }
+
+    .round,
+    .pill,
+    .mode,
+    .icon-button {
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: rgba(255, 255, 255, 0.06);
+      color: rgba(248, 240, 211, 0.88);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    .round {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 30px;
+      line-height: 1;
+    }
+
+    .pill {
+      min-height: 44px;
+      padding: 0 18px;
+      border-radius: 24px;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+    }
+
+    .status-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: var(--gold);
+      box-shadow: 0 0 18px rgba(255, 224, 107, 0.6);
+    }
+
+    .top-right {
+      top: 30px;
+      right: 40px;
+      width: min(520px, calc(100vw - 80px));
+      padding: 12px;
+      border: 1px solid rgba(140, 239, 224, 0.16);
+      border-radius: 24px;
+      background: rgba(12, 19, 22, 0.48);
+      backdrop-filter: blur(22px);
+      -webkit-backdrop-filter: blur(22px);
+      box-shadow: 0 18px 80px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+    }
+
+    .search-row {
+      display: grid;
+      grid-template-columns: 1fr 54px;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .search-row input {
+      height: 50px;
+      width: 100%;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 17px;
+      padding: 0 18px;
+      outline: none;
+      color: rgba(248, 240, 211, 0.9);
+      background: rgba(255, 255, 255, 0.045);
+      font: inherit;
+      font-size: 17px;
+    }
+
+    .search-row input::placeholder {
+      color: rgba(248, 240, 211, 0.34);
+    }
+
+    .icon-button {
+      height: 50px;
+      border-radius: 17px;
+      display: grid;
+      place-items: center;
+      color: #07100f;
+      background: rgba(140, 239, 224, 0.74);
+      border-color: rgba(140, 239, 224, 0.36);
+      font-size: 22px;
+    }
+
+    .source-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 11px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .source {
+      min-height: 32px;
+      padding: 0 16px;
+      border-radius: 17px;
+      border: 1px solid rgba(255, 255, 255, 0.13);
+      background: rgba(255, 255, 255, 0.045);
+      color: rgba(248, 240, 211, 0.52);
+      font-size: 15px;
+    }
+
+    .source.active {
+      color: rgba(248, 240, 211, 0.92);
+      border-color: rgba(255, 224, 107, 0.45);
+      background: rgba(255, 224, 107, 0.08);
+      box-shadow: 0 0 22px rgba(255, 224, 107, 0.06);
+    }
+
+    .track {
+      left: clamp(90px, 12vw, 210px);
+      bottom: 68px;
+      width: min(760px, 56vw);
+      display: grid;
+      grid-template-columns: 124px 1fr;
+      column-gap: 30px;
+      align-items: center;
+    }
+
+    .cover {
+      width: 124px;
+      aspect-ratio: 1;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid rgba(140, 239, 224, 0.22);
+      background:
+        linear-gradient(135deg, rgba(255, 224, 107, 0.78), rgba(255, 126, 108, 0.62) 46%, rgba(0, 213, 200, 0.74)),
+        radial-gradient(circle at 44% 38%, rgba(255, 255, 255, 0.28), transparent 30%);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.32);
+      position: relative;
+    }
+
+    .cover::before,
+    .cover::after {
+      content: "";
+      position: absolute;
+      inset: 24px;
+      border: 1px solid rgba(8, 8, 9, 0.18);
+      border-radius: 50%;
+    }
+
+    .cover::after {
+      inset: 50px;
+      background: rgba(8, 8, 9, 0.16);
+    }
+
+    .meta-kicker {
+      color: var(--cyan);
+      font-weight: 800;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .title {
+      font-family: Georgia, "Times New Roman", "Songti SC", serif;
+      font-size: clamp(56px, 8.8vw, 126px);
+      line-height: 0.88;
+      max-width: 760px;
+      color: #fff2c9;
+      text-shadow: 0 0 40px rgba(255, 224, 107, 0.13);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .artist {
+      margin-top: 18px;
+      font-size: clamp(18px, 1.6vw, 28px);
+      color: rgba(248, 240, 211, 0.68);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .progress {
+      margin-top: 28px;
+      width: 100%;
+      height: 4px;
+      border-radius: 99px;
+      background: rgba(255, 255, 255, 0.12);
+      overflow: hidden;
+    }
+
+    .progress span {
+      display: block;
+      width: 28%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--gold), #fff3ad);
+      box-shadow: 0 0 18px rgba(255, 224, 107, 0.45);
+    }
+
+    .controls {
+      margin-top: 24px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .play {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.17);
+      background: rgba(255, 255, 255, 0.07);
+      color: rgba(248, 240, 211, 0.92);
+      display: grid;
+      place-items: center;
+      font-size: 18px;
+      cursor: pointer;
+    }
+
+    .play span {
+      transform: translateX(1px);
+    }
+
+    .mood {
+      color: rgba(248, 240, 211, 0.42);
+      font-size: 15px;
+    }
+
+    .lyrics {
+      right: clamp(80px, 10vw, 190px);
+      top: 38%;
+      transform: translateY(-50%);
+      width: min(430px, 30vw);
+      text-align: center;
+      pointer-events: none;
+    }
+
+    .lyric-line {
+      font-family: Georgia, "Times New Roman", "Songti SC", serif;
+      margin: 23px 0;
+      font-size: clamp(21px, 1.8vw, 32px);
+      line-height: 1.45;
+      color: rgba(248, 240, 211, 0.18);
+      filter: blur(0.2px);
+      transform: translateY(var(--slide, 0));
+      transition: opacity 900ms ease, transform 900ms ease, color 900ms ease, filter 900ms ease;
+    }
+
+    .lyric-line.active {
+      color: #fff2c9;
+      opacity: 1;
+      filter: blur(0);
+      text-shadow: 0 0 28px rgba(255, 224, 107, 0.18);
+    }
+
+    .lyric-line.near {
+      color: rgba(248, 240, 211, 0.36);
+      filter: blur(0.1px);
+    }
+
+    .notes {
+      left: 34px;
+      bottom: 28px;
+      max-width: 330px;
+      color: rgba(248, 240, 211, 0.34);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .mode-row {
+      display: flex;
+      gap: 9px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+
+    .mode {
+      height: 30px;
+      padding: 0 12px;
+      border-radius: 15px;
+      color: rgba(248, 240, 211, 0.54);
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .mode.active {
+      color: rgba(8, 12, 12, 0.9);
+      background: rgba(140, 239, 224, 0.78);
+      border-color: rgba(140, 239, 224, 0.4);
+    }
+
+    @media (max-width: 960px) {
+      .top-right {
+        right: 22px;
+        width: calc(100vw - 44px);
+      }
+
+      .track {
+        left: 24px;
+        right: 24px;
+        width: auto;
+        grid-template-columns: 92px 1fr;
+        column-gap: 18px;
+        bottom: 42px;
+      }
+
+      .cover {
+        width: 92px;
+      }
+
+      .lyrics {
+        right: 24px;
+        width: 42vw;
+      }
+
+      .notes {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="scene" aria-label="音乐粒子球特效样稿"></canvas>
+  <div class="grid"></div>
+  <div class="grain"></div>
+
+  <div class="top-left">
+    <div class="round">‹</div>
+    <div class="pill"><span class="status-dot"></span><span id="statusText">Inner glow</span></div>
+    <div class="pill">退出</div>
+  </div>
+
+  <div class="top-right">
+    <div class="search-row">
+      <input value="沉浸的夜晚" aria-label="搜索歌曲" />
+      <div class="icon-button">⌕</div>
+    </div>
+    <div class="source-row">
+      <button class="source active">netease</button>
+      <button class="source">kuwo</button>
+      <button class="source">joox</button>
+    </div>
+  </div>
+
+  <section class="track" aria-label="当前播放">
+    <div>
+      <div class="cover"></div>
+    </div>
+    <div>
+      <div class="meta-kicker">GD Studio · netease</div>
+      <div class="title">海屿你</div>
+      <div class="artist">马也_Crabbbit</div>
+      <div class="progress"><span id="progressBar"></span></div>
+      <div class="controls">
+        <button class="play" id="playButton" aria-label="播放暂停"><span id="playIcon">Ⅱ</span></button>
+        <span class="mood">低频点亮内核 · 高频只调亮度</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="lyrics" aria-label="歌词">
+    <div class="lyric-line">海风轻推开了窗</div>
+    <div class="lyric-line near">爱琴海的浪带不走你微笑脸庞</div>
+    <div class="lyric-line active">思绪追不上那道快落下的微光</div>
+    <div class="lyric-line near">伊亚的教堂温柔安静的敲响</div>
+    <div class="lyric-line">熟悉的通往徘徊在陌生的远方</div>
+  </section>
+
+  <aside class="notes">
+    <div>音乐态算法样稿：几何锁定，低频只让内核呼吸，中频推动内部光流，高频只改变星点亮度，不驱动位移。</div>
+    <div class="mode-row">
+      <button class="mode active" data-mode="calm">静谧</button>
+      <button class="mode" data-mode="pulse">律动</button>
+      <button class="mode" data-mode="bright">明亮</button>
+    </div>
+  </aside>
+
+  <script>
+    const canvas = document.getElementById("scene");
+    const ctx = canvas.getContext("2d", { alpha: false });
+    const playButton = document.getElementById("playButton");
+    const playIcon = document.getElementById("playIcon");
+    const statusText = document.getElementById("statusText");
+    const progressBar = document.getElementById("progressBar");
+    const modeButtons = Array.from(document.querySelectorAll(".mode"));
+
+    const TAU = Math.PI * 2;
+    const GOLDEN = Math.PI * (3 - Math.sqrt(5));
+    const PARTICLE_COUNT = 2500;
+    const particles = [];
+    const drawItems = [];
+
+    let width = 1;
+    let height = 1;
+    let dpr = 1;
+    let mode = "calm";
+    let playing = true;
+    let lastTime = performance.now();
+
+    const dynamicRange = {
+      bass: { min: 1, max: 0 },
+      lowMid: { min: 1, max: 0 },
+      mid: { min: 1, max: 0 },
+      treble: { min: 1, max: 0 },
+    };
+
+    const bands = {
+      bass: 0,
+      lowMid: 0,
+      mid: 0,
+      treble: 0,
+      flux: 0,
+    };
+
+    const motion = {
+      yaw: 0,
+      pitch: -0.05,
+      innerPhase: 0,
+      beatImpulse: 0,
+      previousComposite: 0,
+      progress: 0.16,
+    };
+
+    function clamp(value, min = 0, max = 1) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function lerp(a, b, t) {
+      return a + (b - a) * t;
+    }
+
+    function smoothstep(edge0, edge1, x) {
+      const t = clamp((x - edge0) / (edge1 - edge0));
+      return t * t * (3 - 2 * t);
+    }
+
+    function resize() {
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      width = Math.floor(window.innerWidth);
+      height = Math.floor(window.innerHeight);
+      canvas.width = Math.floor(width * dpr);
+      canvas.height = Math.floor(height * dpr);
+      canvas.style.width = width + "px";
+      canvas.style.height = height + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    function makeParticle(index, total) {
+      const z = 1 - 2 * ((index + 0.5) / total);
+      const radial = Math.sqrt(Math.max(0, 1 - z * z));
+      const theta = index * GOLDEN;
+      const x = Math.cos(theta) * radial;
+      const y = z;
+      const baseZ = Math.sin(theta) * radial;
+      const groupSeed = index / total;
+
+      let radius;
+      let layer;
+      if (groupSeed < 0.18) {
+        layer = "core";
+        radius = 0.16 + Math.pow(Math.random(), 0.78) * 0.42;
+      } else if (groupSeed < 0.48) {
+        layer = "inner";
+        radius = 0.46 + Math.random() * 0.34;
+      } else {
+        layer = "shell";
+        radius = 0.82 + Math.random() * 0.2;
+      }
+
+      return {
+        x: x * radius,
+        y: y * radius,
+        z: baseZ * radius,
+        radius,
+        layer,
+        phase: Math.random() * TAU,
+        seed: Math.random(),
+        size: 0.55 + Math.random() * 1.2,
+        colorSeed: Math.random(),
+        sparkGate: Math.random() > 0.68 ? 1 : 0,
+      };
+    }
+
+    for (let i = 0; i < PARTICLE_COUNT; i += 1) {
+      particles.push(makeParticle(i, PARTICLE_COUNT));
+    }
+
+    function rawBands(t) {
+      if (!playing) {
+        return { bass: 0.04, lowMid: 0.03, mid: 0.03, treble: 0.02 };
+      }
+
+      const bar = t * (mode === "pulse" ? 1.04 : mode === "bright" ? 0.88 : 0.72);
+      const beat = Math.pow(Math.max(0, Math.sin(bar * TAU)), mode === "pulse" ? 9 : 13);
+      const offBeat = Math.pow(Math.max(0, Math.sin((bar + 0.5) * TAU)), 12);
+      const phrase = 0.5 + 0.5 * Math.sin(t * 0.34);
+      const shimmer = 0.5 + 0.5 * Math.sin(t * 5.2 + Math.sin(t * 0.7) * 0.8);
+
+      const modeBass = mode === "pulse" ? 0.44 : mode === "bright" ? 0.24 : 0.28;
+      const modeTreble = mode === "bright" ? 0.48 : mode === "pulse" ? 0.25 : 0.18;
+
+      return {
+        bass: 0.12 + modeBass * beat + 0.08 * offBeat + 0.05 * phrase,
+        lowMid: 0.14 + 0.22 * smoothstep(0.12, 0.98, Math.sin(t * 1.52) * 0.5 + 0.5) + 0.1 * beat,
+        mid: 0.16 + 0.24 * smoothstep(0.04, 0.98, Math.sin(t * 0.83 + 1.2) * 0.5 + 0.5),
+        treble: 0.1 + modeTreble * Math.pow(shimmer, 5) + 0.08 * Math.pow(Math.max(0, Math.sin(t * 7.7)), 8),
+      };
+    }
+
+    function perceptualBand(name, value) {
+      const range = dynamicRange[name];
+      range.min = Math.min(range.min * 0.997 + value * 0.003, value);
+      range.max = Math.max(range.max * 0.997 + value * 0.003, value);
+      const span = Math.max(0.08, range.max - range.min);
+      const normalized = clamp((value - range.min) / span);
+      return Math.sqrt(normalized);
+    }
+
+    function follow(current, target, attack, release) {
+      return current + (target - current) * (target > current ? attack : release);
+    }
+
+    function updateAudio(dt, t) {
+      const raw = rawBands(t);
+      const target = {
+        bass: perceptualBand("bass", raw.bass),
+        lowMid: perceptualBand("lowMid", raw.lowMid),
+        mid: perceptualBand("mid", raw.mid),
+        treble: perceptualBand("treble", raw.treble),
+      };
+
+      bands.bass = follow(bands.bass, target.bass, 0.055, 0.03);
+      bands.lowMid = follow(bands.lowMid, target.lowMid, 0.045, 0.026);
+      bands.mid = follow(bands.mid, target.mid, 0.038, 0.025);
+      bands.treble = follow(bands.treble, target.treble, 0.09, 0.045);
+
+      const composite = bands.bass * 0.52 + bands.lowMid * 0.28 + bands.mid * 0.2;
+      const onset = Math.max(0, composite - motion.previousComposite);
+      motion.previousComposite = composite;
+
+      const pulse = smoothstep(0.026, 0.13, onset + bands.bass * 0.015);
+      motion.beatImpulse = Math.max(motion.beatImpulse * Math.exp(-dt * 3.8), pulse * 0.48);
+      bands.flux = follow(bands.flux, onset * 5, 0.16, 0.08);
+    }
+
+    function rotatePoint(p, yaw, pitch) {
+      const cy = Math.cos(yaw);
+      const sy = Math.sin(yaw);
+      const cp = Math.cos(pitch);
+      const sp = Math.sin(pitch);
+
+      const x1 = p.x * cy - p.z * sy;
+      const z1 = p.x * sy + p.z * cy;
+      const y1 = p.y * cp - z1 * sp;
+      const z2 = p.y * sp + z1 * cp;
+      return { x: x1, y: y1, z: z2 };
+    }
+
+    function drawBackground(cx, cy, radius) {
+      ctx.fillStyle = "#060709";
+      ctx.fillRect(0, 0, width, height);
+
+      const bloom = clamp(bands.bass * 0.7 + motion.beatImpulse * 0.7, 0, 1);
+      const calm = clamp(0.28 + bands.mid * 0.25, 0, 1);
+
+      const outer = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 2.1);
+      outer.addColorStop(0, `rgba(255, 224, 107, ${0.018 + bloom * 0.035})`);
+      outer.addColorStop(0.36, `rgba(140, 239, 224, ${0.018 + calm * 0.032})`);
+      outer.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.fillStyle = outer;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius * 2.1, 0, TAU);
+      ctx.fill();
+
+      const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 0.72);
+      core.addColorStop(0, `rgba(255, 224, 107, ${0.12 + bloom * 0.18})`);
+      core.addColorStop(0.35, `rgba(246, 150, 117, ${0.045 + bloom * 0.07})`);
+      core.addColorStop(0.72, `rgba(140, 239, 224, ${0.018 + bands.lowMid * 0.04})`);
+      core.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.fillStyle = core;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius * 0.72, 0, TAU);
+      ctx.fill();
+    }
+
+    function colorForParticle(p, intensity, depth, vein, coreWarm) {
+      const shellHue = 176 + p.colorSeed * 18;
+      const warmHue = 50 - p.colorSeed * 16;
+      const roseHue = 342 + p.colorSeed * 20;
+      let hue = shellHue;
+
+      if (p.layer === "core") {
+        hue = lerp(warmHue, roseHue, bands.lowMid * 0.28);
+      } else if (vein > 0.28) {
+        hue = lerp(shellHue, warmHue, clamp(vein * 0.74 + coreWarm * 0.18));
+      } else {
+        hue = lerp(shellHue, 194, bands.mid * 0.18);
+      }
+
+      const saturation = 58 + intensity * 22 + (p.layer === "core" ? 8 : 0);
+      const lightness = 44 + depth * 20 + intensity * 28 + bands.treble * 6;
+      return `hsla(${hue}, ${saturation}%, ${lightness}%, `;
+    }
+
+    function drawSphere(t, dt) {
+      const cx = width * 0.49;
+      const cy = height * 0.44;
+      const baseRadius = Math.min(width, height) * 0.31;
+
+      motion.yaw += dt * (0.11 + bands.mid * 0.055 + bands.lowMid * 0.035);
+      motion.pitch = -0.05 + Math.sin(t * 0.18) * 0.022;
+      motion.innerPhase += dt * (0.42 + bands.mid * 0.56 + bands.lowMid * 0.24);
+
+      const breath = Math.sin(t * 0.72) * 0.004;
+      const bassBloom = bands.bass * 0.018 + motion.beatImpulse * 0.018;
+      const lockedRadius = baseRadius * (1 + breath + bassBloom);
+      const perspective = 2.55;
+
+      drawBackground(cx, cy, baseRadius);
+      drawItems.length = 0;
+
+      for (const p of particles) {
+        const rotated = rotatePoint(p, motion.yaw, motion.pitch);
+        const depth = clamp((rotated.z + 1) * 0.5);
+        const projection = perspective / (perspective - rotated.z * 0.44);
+
+        const screenX = cx + rotated.x * lockedRadius * projection;
+        const screenY = cy + rotated.y * lockedRadius * projection;
+
+        const angle = Math.atan2(p.z, p.x);
+        const axial = p.y * 3.6 + angle * 1.45 + p.phase * 0.18;
+        const veinRaw = 0.5 + 0.5 * Math.sin(motion.innerPhase * 2.0 + axial);
+        const counterVein = 0.5 + 0.5 * Math.sin(-motion.innerPhase * 1.25 + angle * 2.2 - p.y * 2.4 + p.phase * 0.12);
+        const vein = Math.pow(veinRaw, 9) * 0.8 + Math.pow(counterVein, 13) * 0.45;
+
+        const coreProximity = clamp(1 - p.radius);
+        const coreWarm = coreProximity * (0.32 + bands.bass * 0.92 + motion.beatImpulse * 0.56);
+        const internalFlow = vein * (0.18 + bands.mid * 0.62 + bands.lowMid * 0.26);
+        const trebleTwinkle = p.sparkGate
+          * Math.pow(Math.max(0, Math.sin(t * 5.4 + p.phase * 1.9)), 12)
+          * bands.treble
+          * 0.42;
+
+        const shellPresence = p.layer === "shell" ? 0.34 : p.layer === "inner" ? 0.2 : 0.1;
+        const intensity = clamp(shellPresence + coreWarm + internalFlow + trebleTwinkle, 0, 1.45);
+
+        let alpha = 0.08 + depth * 0.2 + intensity * 0.52;
+        if (p.layer === "core") alpha += bands.bass * 0.26 + motion.beatImpulse * 0.22;
+        if (p.layer === "inner") alpha += internalFlow * 0.22;
+        alpha *= 0.46 + depth * 0.76;
+        alpha = clamp(alpha, 0.03, 0.92);
+
+        const size = (p.size + depth * 0.9 + intensity * 0.58 + trebleTwinkle * 0.5) * projection;
+        const colorPrefix = colorForParticle(p, intensity, depth, vein, coreWarm);
+        drawItems.push({ x: screenX, y: screenY, z: rotated.z, size, alpha, colorPrefix });
+      }
+
+      drawItems.sort((a, b) => a.z - b.z);
+      ctx.globalCompositeOperation = "lighter";
+      for (const item of drawItems) {
+        ctx.fillStyle = `${item.colorPrefix}${item.alpha})`;
+        ctx.beginPath();
+        ctx.arc(item.x, item.y, item.size, 0, TAU);
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = "source-over";
+    }
+
+    function updateLyrics(t) {
+      const lines = Array.from(document.querySelectorAll(".lyric-line"));
+      const active = Math.floor(t / 3.6) % lines.length;
+      for (let i = 0; i < lines.length; i += 1) {
+        const distance = Math.abs(i - active);
+        lines[i].classList.toggle("active", i === active);
+        lines[i].classList.toggle("near", distance === 1);
+        lines[i].style.opacity = i === active ? "1" : distance === 1 ? "0.68" : "0.32";
+        lines[i].style.setProperty("--slide", `${(i - active) * -2}px`);
+      }
+    }
+
+    function frame(now) {
+      const time = now / 1000;
+      const dt = Math.min(0.033, (now - lastTime) / 1000 || 0.016);
+      lastTime = now;
+
+      updateAudio(dt, time);
+      drawSphere(time, dt);
+      updateLyrics(time);
+
+      if (playing) {
+        motion.progress = (motion.progress + dt * 0.026) % 1;
+      }
+      progressBar.style.width = `${14 + motion.progress * 72}%`;
+
+      requestAnimationFrame(frame);
+    }
+
+    playButton.addEventListener("click", () => {
+      playing = !playing;
+      playIcon.textContent = playing ? "Ⅱ" : "▶";
+      statusText.textContent = playing ? "Inner glow" : "Paused";
+    });
+
+    modeButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        mode = button.dataset.mode;
+        modeButtons.forEach((item) => item.classList.toggle("active", item === button));
+      });
+    });
+
+    window.addEventListener("resize", resize);
+    resize();
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>

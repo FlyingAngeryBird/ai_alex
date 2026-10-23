@@ -1,26 +1,59 @@
 {
-  "name": "lingli",
-  "version": "0.1.0",
+  "name": "seamo-ai-r1",
+  "version": "1.0.0-alpha.28",
   "private": true,
   "main": "dist-electron/main/index.js",
   "scripts": {
-    "dev": "npm run build && python3 -m http.server 5173 --bind 127.0.0.1 --directory dist-electron/renderer",
+    "dev": "npm run start",
     "dev:vite": "vite --configLoader runner --host 127.0.0.1 --port 5173",
-    "build": "vue-tsc --noEmit && tsc --target ES2022 --module NodeNext --moduleResolution NodeNext --rootDir electron --outDir dist-electron --strict --skipLibCheck electron/main/index.ts electron/preload/index.ts electron/main/ipc/appHandlers.ts && vite build --configLoader runner --outDir dist-electron/renderer",
+    "dist:mac": "npm run build && node scripts/package-mac.mjs",
+    "build": "vue-tsc --noEmit && tsc --target ES2022 --module NodeNext --moduleResolution NodeNext --rootDir electron --outDir dist-electron --strict --skipLibCheck electron/main/index.ts electron/preload/index.ts electron/main/ipc/appHandlers.ts electron/main/r1/taskBoundary.ts electron/main/r1/taskToolExecutor.ts && vite build --configLoader runner --outDir dist-electron/renderer",
+    "start": "npm run build && electron .",
     "test": "vitest run --passWithNoTests --configLoader runner",
     "test:watch": "vitest",
     "typecheck": "vue-tsc --noEmit"
   },
+  "build": {
+    "appId": "com.seamo.ai.r1",
+    "productName": "Seamo AI R1",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Seamo AI R1 需要使用麦克风来完成语音对话。"
+      },
+      "hardenedRuntime": false,
+      "identity": null,
+      "target": [
+        "dir"
+      ]
+    }
+  },
   "type": "module",
   "dependencies": {
+    "ajv": "8.20.0",
+    "cheerio": "^1.1.2",
+    "dotenv": "^17.4.2",
+    "lucide-vue-next": "^0.468.0",
+    "opencc-js": "1.4.2",
     "three": "^0.185.0",
-    "vue": "^3.5.39"
+    "vue": "^3.5.39",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
+    "@electron/packager": "^20.0.1",
     "@types/node": "^26.0.1",
     "@types/three": "^0.185.0",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-vue": "^6.0.7",
     "electron": "^42.5.0",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "typescript": "^5.9.3",
     "vite": "^7.2.7",

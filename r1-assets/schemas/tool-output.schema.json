@@ -1,0 +1,204 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ToolOutput",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "receipt"
+        },
+        "actionId": {
+          "type": "string",
+          "description": "使用输入或工具回执中实际存在的ID",
+          "maxLength": 160
+        },
+        "tool": {
+          "type": "string",
+          "description": "使用输入或工具回执中实际存在的ID",
+          "maxLength": 160
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "succeeded",
+            "failed",
+            "cancelled",
+            "unknown"
+          ]
+        },
+        "entityId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "使用输入或工具回执中实际存在的ID",
+              "maxLength": 160
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "entityVersion": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "data": {
+          "type": "object"
+        },
+        "errorCode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "稳定错误码",
+              "maxLength": 100
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "runId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 160
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "actionId",
+        "tool",
+        "status",
+        "entityId",
+        "entityVersion",
+        "data",
+        "errorCode",
+        "retryable",
+        "runId"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "task_control"
+        },
+        "taskId": {
+          "type": "string",
+          "description": "使用输入或工具回执中实际存在的ID",
+          "maxLength": 160
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "accepted",
+            "queued",
+            "updated",
+            "pause_requested",
+            "paused",
+            "cancelled",
+            "needs_resume",
+            "failed"
+          ]
+        },
+        "goalVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "queuePosition": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "data": {
+          "type": "object"
+        },
+        "errorCode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "稳定错误码",
+              "maxLength": 100
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "taskId",
+        "status",
+        "goalVersion",
+        "queuePosition",
+        "data",
+        "errorCode"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "ui_action"
+        },
+        "uiActionId": {
+          "type": "string",
+          "description": "使用输入或工具回执中实际存在的ID",
+          "maxLength": 160
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "awaiting_user",
+            "cancelled"
+          ]
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "export",
+            "confirm_memory",
+            "confirm_item_delete"
+          ]
+        },
+        "data": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "kind",
+        "uiActionId",
+        "status",
+        "action",
+        "data"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

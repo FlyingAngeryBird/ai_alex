@@ -1,6 +1,5 @@
 import { createRequire } from 'node:module'
 import {
-  createUnavailableStreamingTtsProvider,
   RealtimeVoiceError,
   type StreamingTtsProvider,
   type StreamingTtsPushPayload,
@@ -8,6 +7,7 @@ import {
   type StreamingTtsStopPayload,
   type TtsSpeakPayload
 } from '../providers/realtimeVoiceProvider.js'
+import { createVolcengineTtsProvider, VolcengineTtsError } from '../providers/volcengineTtsProvider.js'
 
 type AppResult<T> =
   | {
@@ -61,10 +61,18 @@ function isSpeakPayload(payload: unknown): payload is TtsSpeakPayload {
   return typeof value?.text === 'string' && value.text.trim().length > 0
 }
 
-function isStreamingStartPayload(payload: unknown): payload is StreamingTtsStartPayload {
-  const value = payload as StreamingTtsStartPayload
+function isStreamingStartPayload(payload: unknown): payload is { voice?: string } {
+  if (payload === undefined) {
+    return true
+  }
 
-  return value === undefined || value.voice === undefined || typeof value.voice === 'string'
+  if (payload == null || typeof payload !== 'object') {
+    return false
+  }
+
+  const value = payload as { voice?: unknown }
+
+  return value.voice === undefined || typeof value.voice === 'string'
 }
 
 function isStreamingPushPayload(payload: unknown): payload is StreamingTtsPushPayload {
@@ -81,14 +89,16 @@ function isStreamingStopPayload(payload: unknown): payload is StreamingTtsStopPa
 
 function normalizeTtsError(error: unknown, fallback: string): AppResult<never> {
   return fail(
-    error instanceof RealtimeVoiceError ? error.code : 'STREAMING_TTS_FAILED',
+    error instanceof RealtimeVoiceError || error instanceof VolcengineTtsError
+      ? error.code
+      : 'STREAMING_TTS_FAILED',
     error instanceof Error ? error.message : fallback
   )
 }
 
 export function registerTtsHandlers(
   ipc: IpcMainLike = getIpcMain(),
-  provider: StreamingTtsProvider = createUnavailableStreamingTtsProvider()
+  provider: StreamingTtsProvider = createVolcengineTtsProvider()
 ): void {
   ipc.handle('tts.speak', async (_event, payload) => {
     if (!isSpeakPayload(payload)) {
@@ -102,13 +112,26 @@ export function registerTtsHandlers(
     }
   })
 
-  ipc.handle('tts.startStreaming', async (_event, payload) => {
+  ipc.handle('tts.startStreaming', async (event, payload) => {
     if (!isStreamingStartPayload(payload)) {
       return fail('TTS_INVALID_STREAM_PAYLOAD', '语音合成启动参数不正确')
     }
 
+    const sender = (event as { sender?: { send(channel: string, data: unknown): void } }).sender
+
     try {
-      return ok(await provider.start(payload ?? {}))
+      return ok(
+        await provider.start({
+          voice: payload?.voice,
+          onAudio: (chunk) => {
+            try {
+              sender?.send('tts.streamAudio', chunk)
+            } catch {
+              // 渲染层可能已关闭，忽略发送失败
+            }
+          }
+        })
+      )
     } catch (error) {
       return normalizeTtsError(error, '语音合成 2.0 启动失败')
     }

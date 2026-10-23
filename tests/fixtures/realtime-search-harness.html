@@ -1,0 +1,18 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><title>Seamo 检索状态组件检查（模拟）</title></head>
+<body style="margin:0"><div id="app"></div><script type="module">
+import { createApp, h, ref } from 'vue'
+import Home from '../../src/components/R1CompanionHome.vue'
+import '../../src/r1-shell.css'
+createApp({ setup() {
+ const state = ref(null)
+ const update = (phase, elapsedMs=0) => { state.value = { type:'search.state',turnId:'fixture',phase,elapsedMs,searches:1,pages:phase==='reading'?1:0,hint:elapsedMs===1500,
+   sources: ['ready','reading','timeout'].includes(phase) ? [{sourceRef:'fixture-only',title:'模拟来源：天气公开页',url:'https://example.org/weather',accessedAt:'2026-10-17T07:00:00Z',publishedAt:null,readStatus:phase==='reading'?'partial':'not_read'}] : [] } }
+ return () => h('main',{class:'r1-shell'},[
+  h('div',{style:'position:relative;z-index:100;padding:20px;display:flex;gap:12px;flex-wrap:wrap'},[
+   h('span','组件模拟检查，不调用服务、不启用收音。'),
+   ...[['开始检索','searching',0],['等待提示','searching',1500],['慢检索','searching',5000],['读取来源','reading',5000],['完成','ready',6000],['超时','timeout',8000],['取消','cancelled',2000]].map(([label,phase,ms])=>h('button',{onClick:()=>update(phase,ms)},label))
+  ]),
+  h(Home,{assistantName:'Seamo AI',messages:[{id:'fixture',role:'user',text:'上海今天天气怎么样？',createdAt:0}],partialText:'',state:state.value&&['searching','reading','waiting'].includes(state.value.phase)?'thinking':'idle',temporaryMode:false,searchState:state.value})
+ ])
+} }).mount('#app')
+</script></body></html>

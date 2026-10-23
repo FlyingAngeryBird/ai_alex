@@ -1,0 +1,2 @@
+# Static asset scripts need only Python 3.10+ standard library.
+# Production TypeScript integration must use an established JSON Schema/Zod validator.

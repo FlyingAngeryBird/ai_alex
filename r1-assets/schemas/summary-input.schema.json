@@ -1,0 +1,228 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SummaryInput",
+  "type": "object",
+  "properties": {
+    "temporary": {
+      "type": "boolean"
+    },
+    "contextVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "deletionEpoch": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "sourceMessages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "turnId": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 8000
+          },
+          "heardText": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "valid",
+              "interrupted"
+            ]
+          }
+        },
+        "required": [
+          "turnId",
+          "role",
+          "text",
+          "heardText",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 50
+    },
+    "memories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "memoryId": {
+            "type": "string",
+            "description": "使用输入或工具回执中实际存在的ID",
+            "maxLength": 160
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "profile",
+              "preference",
+              "ongoing",
+              "conclusion"
+            ]
+          },
+          "content": {
+            "type": "string",
+            "description": "有效记忆",
+            "maxLength": 1000
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sourceRefs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "实际已存在且有效的来源引用ID",
+              "maxLength": 160
+            },
+            "maxItems": 50
+          }
+        },
+        "required": [
+          "memoryId",
+          "category",
+          "content",
+          "version",
+          "sourceRefs"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 50
+    },
+    "taskSnapshots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "description": "使用输入或工具回执中实际存在的ID",
+            "maxLength": 160
+          },
+          "goalVersion": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "description": "使用输入或工具回执中实际存在的ID",
+            "maxLength": 160
+          },
+          "goal": {
+            "type": "string",
+            "description": "任务目标",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "taskId",
+          "goalVersion",
+          "status",
+          "goal"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 50
+    },
+    "receiptActionIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 160
+      },
+      "maxItems": 50
+    },
+    "existingTopics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "topicId": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 1600
+          },
+          "unresolved": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "maxItems": 50
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "resolved"
+            ]
+          },
+          "sourceRefs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 160
+            },
+            "maxItems": 500
+          }
+        },
+        "required": [
+          "topicId",
+          "version",
+          "title",
+          "summary",
+          "unresolved",
+          "status",
+          "sourceRefs"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 5
+    }
+  },
+  "required": [
+    "temporary",
+    "contextVersion",
+    "deletionEpoch",
+    "sourceMessages",
+    "memories",
+    "taskSnapshots",
+    "receiptActionIds"
+  ],
+  "additionalProperties": false
+}

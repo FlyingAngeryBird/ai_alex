@@ -1,0 +1,139 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MemoryInput",
+  "type": "object",
+  "properties": {
+    "temporary": {
+      "type": "boolean"
+    },
+    "autoMemoryEnabled": {
+      "type": "boolean"
+    },
+    "authorizationVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "deletionEpoch": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "currentTime": {
+      "type": "string",
+      "maxLength": 80
+    },
+    "timezone": {
+      "type": "string",
+      "maxLength": 100
+    },
+    "sourceMessages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "turnId": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 8000
+          },
+          "heardText": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "valid",
+              "interrupted"
+            ]
+          }
+        },
+        "required": [
+          "turnId",
+          "role",
+          "text",
+          "heardText",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 50
+    },
+    "existingMemories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "memoryId": {
+            "type": "string",
+            "description": "使用输入或工具回执中实际存在的ID",
+            "maxLength": 160
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "profile",
+              "preference",
+              "ongoing",
+              "conclusion"
+            ]
+          },
+          "content": {
+            "type": "string",
+            "description": "有效记忆",
+            "maxLength": 1000
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sourceRefs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "实际已存在且有效的来源引用ID",
+              "maxLength": 160
+            },
+            "maxItems": 50
+          }
+        },
+        "required": [
+          "memoryId",
+          "category",
+          "content",
+          "version",
+          "sourceRefs"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 50
+    }
+  },
+  "required": [
+    "temporary",
+    "autoMemoryEnabled",
+    "authorizationVersion",
+    "deletionEpoch",
+    "currentTime",
+    "timezone",
+    "sourceMessages",
+    "existingMemories"
+  ],
+  "additionalProperties": false
+}

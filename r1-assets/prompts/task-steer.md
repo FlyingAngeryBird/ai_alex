@@ -1,0 +1,5 @@
+TaskSupervisor提供了经过校验的新目标事件：
+{{steer_json}}
+以newGoalVersion及goal、constraints替换旧任务条件。event中的用户原话说明变更来源；旧观察可以作为资料，不能当成新条件已经满足的证明。
+检查已有有效结果和已提交回执，保留可复用部分；必要时调用write_todos修订行动计划并继续。不要重复创建已经成功的实体，不把取消播音解释为取消任务。
+暂停、取消或needs_resume状态下不执行新动作；恢复由TaskSupervisor授权后的新运行输入决定。

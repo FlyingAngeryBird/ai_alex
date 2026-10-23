@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SkillIndex",
+  "type": "array",
+  "minItems": 6,
+  "maxItems": 6,
+  "items": {
+    "type": "object",
+    "properties": {
+      "skillId": {
+        "type": "string",
+        "enum": [
+          "SK01",
+          "SK02",
+          "SK03",
+          "SK04",
+          "SK05",
+          "SK06"
+        ]
+      },
+      "name": {
+        "type": "string",
+        "maxLength": 64
+      },
+      "description": {
+        "type": "string",
+        "maxLength": 1024
+      },
+      "version": {
+        "type": "string",
+        "maxLength": 30
+      },
+      "path": {
+        "type": "string",
+        "maxLength": 300
+      }
+    },
+    "required": [
+      "skillId",
+      "name",
+      "description",
+      "version",
+      "path"
+    ],
+    "additionalProperties": false
+  }
+}

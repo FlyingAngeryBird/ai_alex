@@ -1,0 +1,45 @@
+{
+  "at": "2026-10-23T03:34:57.290Z",
+  "query": "告白气球周杰伦",
+  "searchMs": 1973,
+  "events": [
+    {
+      "ms": 0,
+      "count": 0
+    },
+    {
+      "ms": 1182,
+      "count": 0
+    },
+    {
+      "ms": 1278,
+      "count": 10
+    },
+    {
+      "ms": 1971,
+      "count": 20
+    }
+  ],
+  "count": 20,
+  "samples": [
+    {
+      "title": "告白氣球",
+      "artist": "周杰倫",
+      "source": "joox",
+      "coverResolved": true
+    },
+    {
+      "title": "告白氣球",
+      "artist": "周杰倫",
+      "source": "joox",
+      "coverResolved": true
+    },
+    {
+      "title": "擱淺",
+      "artist": "周杰倫",
+      "source": "joox",
+      "coverResolved": true
+    }
+  ],
+  "playbackVerified": false
+}

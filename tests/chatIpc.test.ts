@@ -1,0 +1,395 @@
+import { describe, expect, it, vi } from 'vitest'
+import { registerChatHandlers } from '../electron/main/ipc/chatHandlers'
+import { openR1Database } from '../electron/main/r1/database'
+import { R1Conversations } from '../electron/main/r1/conversations'
+import { R1PersonaStore } from '../electron/main/r1/persona'
+import { loadR1PromptAssets } from '../electron/main/r1/promptAssets'
+import { resolve } from 'node:path'
+import { R1MemoryStore } from '../electron/main/r1/memory'
+import { R1TaskSupervisor } from '../electron/main/r1/taskSupervisor'
+import { R1ConversationDriver } from '../electron/main/r1/conversationDriver'
+import { createArkResponsesProvider } from '../electron/main/providers/arkResponsesProvider'
+
+describe('chat IPC handlers', () => {
+  it('keeps the committed correction acknowledgement valid and rebuilds the following request without old facts', async () => {
+    const db = openR1Database(':memory:'), memory = new R1MemoryStore(db), conversations = new R1Conversations(db)
+    const assets = loadR1PromptAssets(resolve('r1-assets')), persona = new R1PersonaStore(db)
+    const tasks = new R1TaskSupervisor(db, assets, () => memory.currentDeletionEpoch())
+    try {
+      const old = memory.addManual({ content: '喜欢红茶', category: 'preference' })
+      const handlers = new Map<string, (_event: unknown, payload?: unknown) => unknown>(), requests: string[] = []
+      const ark = createArkResponsesProvider({ env: { VOLCENGINE_ARK_API_KEY: 'synthetic', VOLCENGINE_ARK_MODEL: 'synthetic' }, fetch: async (_url, init) => {
+        requests.push(String(init?.body))
+        const decision = requests.length
+        const output = decision === 3 ? [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '继续聊聊。' }] }] : [{ type: 'function_call', call_id: `call-${decision}`,
+          name: decision === 1 ? 'memory_recall' : 'memory_update', arguments: JSON.stringify(decision === 1 ? { query: '红茶' } : { memoryId: old.memoryId, expectedVersion: 1, content: '喜欢绿茶' }) }]
+        return new Response(JSON.stringify({ id: `response-${decision}`, status: 'completed', output }))
+      } })
+      const driver = new R1ConversationDriver(db, assets, tasks, ark, () => persona.get(), [])
+      const mode: import('../electron/main/r1/sessionMode').R1SessionMode = { temporary: false,
+        selectedArtifact: { artifactId: 'revoked-selection', version: 1, selection: null }, selectedTopic: { topicId: 'revoked-topic', version: 1 } }
+      const invalidated = vi.fn((epoch: number) => { expect(db.isTransaction).toBe(false); expect(epoch).toBe(1); tasks.invalidateContext(); mode.selectedArtifact = null; mode.selectedTopic = null })
+      registerChatHandlers({ handle: (name, handler) => { handlers.set(name, handler) } }, undefined, undefined, conversations, persona, assets, memory, mode, undefined, driver, invalidated)
+      expect(await handlers.get('chat.sendMessage')!(null, { text: '更正关于茶的记忆，我喜欢绿茶。' })).toMatchObject({ ok: true, data: { reply: expect.stringContaining('已更正') } })
+      expect(invalidated).toHaveBeenCalledOnce()
+      expect(await handlers.get('chat.sendMessage')!(null, { text: '我们继续聊。' })).toMatchObject({ ok: true, data: { reply: '继续聊聊。' } })
+      expect(requests[2]).not.toContain('红茶')
+      expect(conversations.listPersistentSessions()).toHaveLength(1)
+      expect(memory.recall('绿茶')).toHaveLength(1)
+    } finally { tasks.close(); db.close() }
+  })
+  it.each(['correct', 'forget'])('discards in-flight text after memory %s and does not persist the stale answer', async (operation) => {
+    const db = openR1Database(':memory:')
+    try {
+      const memory = new R1MemoryStore(db)
+      const saved = memory.addManual({ content: '喜欢红色', category: 'preference' })
+      const handlers = new Map<string, (_event: unknown, payload?: unknown) => unknown>()
+      const ipc = { handle: (channel: string, handler: (_event: unknown, payload?: unknown) => unknown) => handlers.set(channel, handler) }
+      let emitDelta: (text: string) => void = () => undefined
+      let release: (value: { intent: 'chat'; music: null; reply: string }) => void = () => undefined
+      const provider = { sendMessage: vi.fn(), streamMessage: vi.fn((_messages: unknown,
+        callbacks: { onChunk: (text: string) => void }) => {
+        emitDelta = callbacks.onChunk
+        return new Promise<{ intent: 'chat'; music: null; reply: string }>(resolve => { release = resolve })
+      }) }
+      const sent: unknown[] = []
+      registerChatHandlers(ipc, provider, undefined, new R1Conversations(db), new R1PersonaStore(db),
+        loadR1PromptAssets(resolve('r1-assets')), memory)
+      const pending = handlers.get('chat.streamMessage')!({ sender: { send: (_channel: string, chunk: unknown) => sent.push(chunk) } },
+        { text: '推荐一种颜色' }) as Promise<unknown>
+      emitDelta('当前有效的一段')
+      if (operation === 'correct') memory.update({ memoryId: saved.memoryId, expectedVersion: 1,
+        content: '喜欢绿色', category: 'preference' })
+      else memory.forget(saved.memoryId, 1)
+      emitDelta('旧事实不能继续播出')
+      release({ intent: 'chat', music: null, reply: '已失效的完整回答' })
+      expect(await pending).toMatchObject({ ok: false, error: { code: 'SESSION_CHANGED' } })
+      expect(sent).toEqual([{ delta: '当前有效的一段' },
+        { done: true, error: { code: 'SESSION_CHANGED', message: expect.any(String) } }])
+      expect(db.prepare("SELECT COUNT(*) AS count FROM messages WHERE role = 'assistant'").get()).toMatchObject({ count: 0 })
+    } finally { db.close() }
+  })
+  it('stops an in-flight response without ending its session and permits the next turn', async () => {
+    const db = openR1Database(':memory:')
+    try {
+      const handlers = new Map<string, (_event: unknown, payload?: unknown) => unknown>()
+      let release!: (value: { intent: 'chat'; music: null; reply: string }) => void
+      let emit!: (text: string) => void
+      const provider = {
+        sendMessage: vi.fn(async () => ({ intent: 'chat' as const, music: null, reply: '新的回答' })),
+        streamMessage: vi.fn((_messages: unknown, callbacks: { onChunk: (text: string) => void }) => {
+          emit = callbacks.onChunk
+          return new Promise<{ intent: 'chat'; music: null; reply: string }>(resolve => { release = resolve })
+        })
+      }
+      const ended = vi.fn()
+      registerChatHandlers({ handle: (name, handler) => { handlers.set(name, handler) } }, provider,
+        undefined, new R1Conversations(db), undefined, undefined, undefined, undefined, ended)
+      const sent: unknown[] = []
+      const pending = handlers.get('chat.streamMessage')!({ sender: {
+        send: (_name: string, chunk: unknown) => sent.push(chunk)
+      } }, { text: '第一轮', requestId: 'first' })
+      expect(handlers.get('chat.stopResponse')!(null)).toMatchObject({ ok: true, data: { stopped: true } })
+      emit('过期内容')
+      release({ intent: 'chat', music: null, reply: '旧回答' })
+      expect(await pending).toMatchObject({ ok: false, error: { code: 'RESPONSE_STOPPED' } })
+      expect(sent).toEqual([{ done: true, requestId: 'first', error: {
+        code: 'RESPONSE_STOPPED', message: expect.any(String)
+      } }])
+      expect(ended).not.toHaveBeenCalled()
+      expect(await handlers.get('chat.sendMessage')!(null, { text: '下一轮' }))
+        .toMatchObject({ ok: true, data: { reply: '新的回答' } })
+      expect(db.prepare("SELECT body FROM messages WHERE role = 'assistant'").all())
+        .toEqual([{ body: '新的回答' }])
+    } finally { db.close() }
+  })
+
+  it('uses the current versioned persona on the next conversation turn', async () => {
+    const db = openR1Database(':memory:')
+    try {
+      const handlers = new Map<string, (_event: unknown, payload?: unknown) => Promise<unknown> | unknown>()
+      const ipc = { handle: (channel: string, handler: (_event: unknown, payload?: unknown) => unknown) => {
+        handlers.set(channel, handler)
+      } }
+      const provider = { sendMessage: vi.fn(async (_messages: unknown[]) => ({ intent: 'chat' as const,
+        music: null, reply: '你好' })), streamMessage: vi.fn() }
+      const persona = new R1PersonaStore(db)
+      registerChatHandlers(ipc, provider, undefined, new R1Conversations(db), persona,
+        loadR1PromptAssets(resolve('r1-assets')))
+      await handlers.get('chat.sendMessage')?.(null, { text: '你好' })
+      expect(provider.sendMessage.mock.calls[0]?.[0]?.[0]).toMatchObject({
+        role: 'system', content: expect.stringContaining('"assistantName":"Seamo AI"')
+      })
+      persona.update({ expectedVersion: 1, assistantName: 'Alex' })
+      await handlers.get('chat.sendMessage')?.(null, { text: '你叫什么' })
+      expect(provider.sendMessage.mock.calls[1]?.[0]?.[0]).toMatchObject({
+        role: 'system', content: expect.stringContaining('"assistantName":"Alex"')
+      })
+    } finally { db.close() }
+  })
+  it('generates a greeting without saving its internal instruction as user history', async () => {
+    const db = openR1Database(':memory:')
+    try {
+      const handlers = new Map<string, (_event: unknown, payload?: unknown) => Promise<unknown> | unknown>()
+      const ipc = { handle: (channel: string, handler: (_event: unknown, payload?: unknown) => unknown) => {
+        handlers.set(channel, handler)
+      } }
+      const provider = { sendMessage: vi.fn(async () => ({ intent: 'chat' as const, music: null,
+        reply: '今天想聊些什么？' })), streamMessage: vi.fn() }
+      registerChatHandlers(ipc, provider, undefined, new R1Conversations(db))
+      expect(await handlers.get('chat.greeting')?.(null)).toMatchObject({ ok: true,
+        data: { intent: 'chat', reply: '今天想聊些什么？' } })
+      expect(provider.sendMessage).toHaveBeenCalledWith(expect.arrayContaining([
+        expect.objectContaining({ role: 'system' })
+      ]))
+      expect(db.prepare('SELECT COUNT(*) AS count FROM messages').get()).toMatchObject({ count: 0 })
+    } finally { db.close() }
+  })
+  it('persists normal turns, isolates temporary turns, and discards an old in-flight reply', async () => {
+    const db = openR1Database(':memory:')
+    try {
+      const handlers = new Map<string, (_event: unknown, payload?: unknown) => Promise<unknown> | unknown>()
+      const ipc = { handle: (channel: string, handler: (_event: unknown, payload?: unknown) => unknown) => {
+        handlers.set(channel, handler)
+      } }
+      let release: (value: { intent: 'chat'; music: null; reply: string }) => void = () => undefined
+      const provider = { sendMessage: vi.fn(async () => ({ intent: 'chat' as const, music: null, reply: '回答' })),
+        streamMessage: vi.fn(() => new Promise<{ intent: 'chat'; music: null; reply: string }>((resolve) => {
+          release = resolve
+        })) }
+      registerChatHandlers(ipc, provider, undefined, new R1Conversations(db))
+      await handlers.get('chat.sendMessage')?.(null, { text: '普通内容' })
+      expect(db.prepare('SELECT COUNT(*) AS count FROM messages').get()).toMatchObject({ count: 2 })
+      expect(handlers.get('chat.setTemporary')?.(null, { enabled: true }))
+        .toEqual({ ok: true, data: { temporary: true } })
+      await handlers.get('chat.sendMessage')?.(null, { text: '临时内容' })
+      expect(db.prepare('SELECT COUNT(*) AS count FROM messages').get()).toMatchObject({ count: 2 })
+      const pending = handlers.get('chat.streamMessage')?.(null, { text: '临时请求' }) as Promise<unknown>
+      expect(handlers.get('chat.setTemporary')?.(null, { enabled: false }))
+        .toEqual({ ok: true, data: { temporary: false } })
+      release({ intent: 'chat', music: null, reply: '旧回答' })
+      expect(await pending).toMatchObject({ ok: false, error: { code: 'SESSION_CHANGED' } })
+      expect(db.prepare('SELECT COUNT(*) AS count FROM messages').get()).toMatchObject({ count: 2 })
+      expect(db.prepare("SELECT COUNT(*) AS count FROM messages WHERE body = '临时内容'").get())
+        .toMatchObject({ count: 0 })
+    } finally { db.close() }
+  })
+  it('keeps short conversation memory and routes messages to LLM provider', async () => {
+    const handlers = new Map<string, (_event: unknown, payload?: unknown) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (_event: unknown, payload?: unknown) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+    const provider = {
+      sendMessage: vi.fn(async () => ({
+        intent: 'chat' as const,
+        music: null,
+        reply: '我记得你刚才说想放松一下。'
+      })),
+      streamMessage: vi.fn(async () => ({
+        intent: 'chat' as const,
+        music: null,
+        reply: '我记得你刚才说想放松一下。'
+      }))
+    }
+
+    registerChatHandlers(ipcMain, provider)
+
+    const result = await handlers.get('chat.sendMessage')?.(null, {
+      text: '我今天有点累'
+    })
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        intent: 'chat',
+        music: null,
+        reply: '我记得你刚才说想放松一下。'
+      }
+    })
+    expect(provider.sendMessage).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ role: 'system' }),
+        {
+          content: '我今天有点累',
+          role: 'user'
+        }
+      ])
+    )
+  })
+
+  it('rejects empty message payloads', async () => {
+    const handlers = new Map<string, (_event: unknown, payload?: unknown) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (_event: unknown, payload?: unknown) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+
+    registerChatHandlers(ipcMain, {
+      sendMessage: vi.fn(),
+      streamMessage: vi.fn()
+    })
+
+    await expect(handlers.get('chat.sendMessage')?.(null, { text: ' ' })).resolves.toEqual({
+      ok: false,
+      error: {
+        code: 'CHAT_INVALID_PAYLOAD',
+        message: '对话内容不能为空'
+      }
+    })
+  })
+
+  it('uses systemPrompt from the injected configStore', async () => {
+    const handlers = new Map<string, (_event: unknown, payload?: unknown) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (_event: unknown, payload?: unknown) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+    const provider = {
+      sendMessage: vi.fn(async () => ({
+        intent: 'chat' as const,
+        music: null,
+        reply: '好的'
+      })),
+      streamMessage: vi.fn(async () => ({
+        intent: 'chat' as const,
+        music: null,
+        reply: '好的'
+      }))
+    }
+    const configStore = {
+      getConfig: vi.fn(() => ({
+        persona: { systemPrompt: 'CUSTOM_PROMPT' },
+        voice: { voices: [], activeVoiceId: '' }
+      })),
+      loadConfig: vi.fn(async () => ({
+        persona: { systemPrompt: 'CUSTOM_PROMPT' },
+        voice: { voices: [], activeVoiceId: '' }
+      })),
+      updateConfig: vi.fn(async () => ({
+        persona: { systemPrompt: 'CUSTOM_PROMPT' },
+        voice: { voices: [], activeVoiceId: '' }
+      }))
+    }
+
+    registerChatHandlers(ipcMain, provider, configStore)
+
+    await handlers.get('chat.sendMessage')?.(null, { text: '你好' })
+
+    expect(configStore.getConfig).toHaveBeenCalled()
+    expect(provider.sendMessage).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ role: 'system', content: 'CUSTOM_PROMPT' })
+      ])
+    )
+  })
+
+  it('drops old conversation memory when the system prompt changes', async () => {
+    const handlers = new Map<string, (_event: unknown, payload?: unknown) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (_event: unknown, payload?: unknown) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+    let systemPrompt = '你是 lingmo。'
+    const provider = {
+      sendMessage: vi.fn(async (_messages: unknown) => ({
+        intent: 'chat' as const,
+        music: null,
+        reply: systemPrompt.includes('Alex') ? '我是 Alex。' : '我是 lingmo。'
+      })),
+      streamMessage: vi.fn(async (_messages: unknown) => ({
+        intent: 'chat' as const,
+        music: null,
+        reply: systemPrompt.includes('Alex') ? '我是 Alex。' : '我是 lingmo。'
+      }))
+    }
+    const configStore = {
+      getConfig: vi.fn(() => ({
+        persona: { systemPrompt },
+        voice: { voices: [], activeVoiceId: '' }
+      })),
+      loadConfig: vi.fn(),
+      updateConfig: vi.fn()
+    }
+
+    registerChatHandlers(ipcMain, provider, configStore)
+
+    await handlers.get('chat.sendMessage')?.(null, { text: '你是谁' })
+    systemPrompt = '你是 Alex。'
+    await handlers.get('chat.sendMessage')?.(null, { text: '你是谁' })
+
+    const secondMessages = provider.sendMessage.mock.calls[1][0]
+
+    expect(secondMessages).toEqual([
+      { content: '你是 Alex。', role: 'system' },
+      { content: '你是谁', role: 'user' }
+    ])
+  })
+
+  it('streams chunks via chat.streamMessage and returns final output', async () => {
+    const handlers = new Map<string, (_event: unknown, payload?: unknown) => Promise<unknown> | unknown>()
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (_event: unknown, payload?: unknown) => unknown) => {
+        handlers.set(channel, handler)
+      })
+    }
+    const sent: Array<{ channel: string; data: unknown }> = []
+    const sender = {
+      send: vi.fn((channel: string, data: unknown) => {
+        sent.push({ channel, data })
+      })
+    }
+    const provider = {
+      sendMessage: vi.fn(),
+      streamMessage: vi.fn(async (_messages: unknown, callbacks: { onChunk: (delta: string) => void }) => {
+        callbacks.onChunk('你')
+        callbacks.onChunk('好')
+        return { intent: 'chat' as const, music: null, reply: '你好' }
+      })
+    }
+
+    registerChatHandlers(ipcMain, provider)
+
+    const result = await handlers.get('chat.streamMessage')?.({ sender }, { text: 'hi' })
+
+    expect(result).toEqual({
+      ok: true,
+      data: { intent: 'chat', music: null, reply: '你好' }
+    })
+    expect(sent).toEqual([
+      { channel: 'chat.streamChunk', data: { delta: '你' } },
+      { channel: 'chat.streamChunk', data: { delta: '好' } },
+      { channel: 'chat.streamChunk', data: { done: true, intent: 'chat', music: null, reply: '你好' } }
+    ])
+  })
+})
+
+it('passes shared native conversation history to the text driver and omits interrupted speech', async () => {
+  const db = openR1Database(':memory:')
+  try {
+    const conversations = new R1Conversations(db), mode = { temporary: false, sessionId: null as string | null }
+    const handlers = new Map<string, (_event: unknown, payload?: unknown) => unknown>()
+    const reply = vi.fn(async (_input: unknown) => ({ intent: 'chat' as const, music: null, reply: '接着聊' }))
+    registerChatHandlers({ handle: (name, handler) => { handlers.set(name, handler) } }, undefined, undefined,
+      conversations, new R1PersonaStore(db), loadR1PromptAssets(resolve('r1-assets')), new R1MemoryStore(db), mode,
+      undefined, { reply, topicContext: () => ({ topics: [], selected: null }) } as unknown as import('../electron/main/r1/conversationDriver').R1ConversationDriver)
+    const sessionId = mode.sessionId!
+    conversations.append({ sessionId, turnId: 'voice-1', role: 'user', body: '这是刚才语音说的材料', status: 'final' })
+    conversations.append({ sessionId, turnId: 'voice-1', responseId: 'heard', role: 'assistant', body: '完整播出的回复', status: 'generated' })
+    conversations.recordPlayback({ sessionId, responseId: 'heard', playedUntilMs: 1000, status: 'completed' })
+    conversations.append({ sessionId, turnId: 'voice-2', responseId: 'cut', role: 'assistant', body: '未播全文', status: 'generated' })
+    conversations.recordPlayback({ sessionId, responseId: 'cut', playedUntilMs: 100, status: 'interrupted' })
+    expect(await handlers.get('chat.sendMessage')!(null, { text: '继续刚才的话题' })).toMatchObject({ ok: true })
+    const input = reply.mock.calls[0][0] as unknown as { messages: Array<{ role: string; content: string }> }
+    expect(input.messages).toEqual([
+      { role: 'user', content: '这是刚才语音说的材料' },
+      { role: 'assistant', content: '完整播出的回复' },
+      { role: 'user', content: '继续刚才的话题' }
+    ])
+    expect(conversations.messages(sessionId).some(message => message.body === '未播全文')).toBe(true)
+  } finally { db.close() }
+})

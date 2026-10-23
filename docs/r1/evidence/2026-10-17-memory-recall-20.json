@@ -1,0 +1,396 @@
+[
+  {
+    "scope": "recall_evaluation_config",
+    "datasetSha256": "fd5ea03834d16026a7794953ed6e3f6db47c68bb3c8143e642917de65153935b",
+    "assetReleaseId": "seamo-ai-r1-agent-assets-3.2.3",
+    "modelProfile": "configured_ark",
+    "historyUsed": false
+  },
+  {
+    "id": "M01",
+    "status": "passed",
+    "question": "我的茶通常要不要加糖？",
+    "expectedFact": "用户喜欢无糖绿茶。",
+    "reply": "不用加糖哦，你之前说过喜欢喝无糖绿茶。是在泡茶吗？",
+    "actualSourceRead": true,
+    "answerMatches": true,
+    "calls": [
+      {
+        "name": "memory_recall",
+        "args": {
+          "query": "喝茶 加糖 偏好"
+        }
+      }
+    ],
+    "elapsedMs": 6254
+  },
+  {
+    "id": "M02",
+    "status": "passed",
+    "question": "吉他练习安排在一周中的什么时候？",
+    "expectedFact": "用户每周六上午练习吉他。",
+    "reply": "你一般是每周六上午练习吉他。需要我帮你调整这个时间或者设个练习提醒吗？",
+    "actualSourceRead": true,
+    "answerMatches": true,
+    "calls": [
+      {
+        "name": "memory_recall",
+        "args": {
+          "query": "吉他练习安排 一周 时间"
+        }
+      }
+    ],
+    "elapsedMs": 5118
+  },
+  {
+    "id": "M03",
+    "status": "passed",
+    "question": "我家毛孩子叫什么名字？",
+    "expectedFact": "用户家里养的猫叫团子。",
+    "reply": "查到啦，你家毛孩子是只猫，叫**团子**对吧？",
+    "actualSourceRead": true,
+    "answerMatches": true,
+    "calls": [
+      {
+        "name": "memory_recall",
+        "args": {
+          "query": "毛孩子 宠物名字"
+        }
+      },
+      {
+        "name": "memory_recall",
+        "args": {
+          "query": "宠物 猫 狗 名字"
+        }
+      }
+    ],
+    "elapsedMs": 12601
+  },
+  {
+    "id": "M04",
+    "status": "passed",
+    "question": "看电影时我偏爱哪类题材？",
+    "expectedFact": "用户看电影更喜欢科幻片。",
+    "reply": "查到啦，你看电影更偏爱**科幻片**。需要我帮你推荐几部吗？",
+    "actualSourceRead": true,
+    "answerMatches": true,
+    "calls": [
+      {
+        "name": "memory_recall",
+        "args": {
+          "query": "电影题材偏好"
+        }
+      }
+    ],
+    "elapsedMs": 4068
+  },
+  {
+    "id": "M05",
+    "status": "passed",
+    "question": "提案项目优先支持哪个平台？",
+    "expectedFact": "提案项目先支持macOS桌面版。",
+    "reply": "提案项目优先支持 **macOS 桌面版**。",
+    "actualSourceRead": true,
+    "answerMatches": true,
+    "calls": [
+      {
+        "name": "memory_recall",
+        "args": {
+          "query": "提案项目 平台"
+        }
+      }
+    ],
+    "elapsedMs": 5365
+  },
+  {
+    "id": "M06",
+    "status": "passed",
+    "question": "红豆项目什么时候内部过一遍？",
+    "expectedFact": "红豆项目定于2026年11月2日内部评审。",
+    "reply": "查到了，红豆项目定在 **2026年11月2日** 内部过一遍，也就是大约两周后。需要我到时候提醒你，或者提前帮你准备评审材料吗？",
+    "actualSourceRead": true,
+    "answerMatches": true,
+    "calls": [
+      {
+        "name": "memory_recall",
+        "args": {
+          "query": "红豆项目"
+        }
+      }
+    ],
+    "elapsedMs": 6313
+  },
+  {
+    "id": "M07",
+    "status": "passed",
+    "question": "上班日中午我对主动播报有什么要求？",
+    "expectedFact": "用户工作日午休时不接受主动语音播报。",
+    "reply": "查到了：你之前说过，上班日午休时间不接受主动语音播报，这段时间我会保持安静。如果你现在想调整这个要求，随时告诉我。",
+    "actualSourceRead": true,
+    "answerMatches": true,
+    "calls": [
+      {
+        "name": "memory_recall",
+        "args": {
+          "query": "主动播报 上班日中午 偏好"
+        }
+      }
+    ],
+    "elapsedMs": 6691
+  },
+  {
+    "id": "M08",
+    "status": "passed",
+    "question": "我组织文章时通常按什么顺序？",
+    "expectedFact": "用户写作时喜欢先列提纲再写正文。",
+    "reply": "根据之前的记录，你写作时习惯**先列提纲再写正文**。具体提纲内部的展开顺序，记忆里没有更细的描述。如果你最近有新的习惯想让我记住，告诉我就行。",
+    "actualSourceRead": true,
+    "answerMatches": true,
+    "calls": [
+      {
+        "name": "memory_recall",
+        "args": {
+          "query": "组织文章 写作顺序 偏好"
+        }
+      }
+    ],
+    "elapsedMs": 9417
+  },
+  {
+    "id": "M09",
+    "status": "passed",
+    "question": "平时上班路上我偏好哪种出行方式？",
+    "expectedFact": "用户喜欢步行通勤。",
+    "reply": "你平时上班更喜欢步行通勤哦～有其他出行方式上的新偏好，随时告诉我更新。",
+    "actualSourceRead": true,
+    "answerMatches": true,
+    "calls": [
+      {
+        "name": "memory_recall",
+        "args": {
+          "query": "上班通勤出行方式偏好"
+        }
+      }
+    ],
+    "elapsedMs": 8239
+  },
+  {
+    "id": "M10",
+    "status": "passed",
+    "question": "记录灵感我用什么颜色的本子？",
+    "expectedFact": "用户用蓝色笔记本记录想法。",
+    "reply": "你习惯用蓝色的本子记录想法。",
+    "actualSourceRead": true,
+    "answerMatches": true,
+    "calls": [
+      {
+        "name": "memory_recall",
+        "args": {
+          "query": "记录灵感 本子 颜色"
+        }
+      }
+    ],
+    "elapsedMs": 4829
+  },
+  {
+    "id": "M11",
+    "status": "passed",
+    "question": "喝水时我对温度有什么偏好？",
+    "expectedFact": "用户喜欢温热的水，不加冰。",
+    "reply": "你喜欢喝温热的水，不要加冰。",
+    "actualSourceRead": true,
+    "answerMatches": true,
+    "calls": [
+      {
+        "name": "memory_recall",
+        "args": {
+          "query": "喝水温度偏好"
+        }
+      }
+    ],
+    "elapsedMs": 5351
+  },
+  {
+    "id": "M12",
+    "status": "passed",
+    "question": "新项目先邀请多少人试用？",
+    "expectedFact": "新项目先邀请三位同事内部试用。",
+    "reply": "按之前定的，新项目先邀请三位同事内部试用。",
+    "actualSourceRead": true,
+    "answerMatches": true,
+    "calls": [
+      {
+        "name": "memory_recall",
+        "args": {
+          "query": "新项目 试用 邀请人数"
+        }
+      }
+    ],
+    "elapsedMs": 7063
+  },
+  {
+    "id": "M13",
+    "status": "passed",
+    "question": "预算比较下一步要等什么？",
+    "expectedFact": "预算比较等收到正式报价后再继续。",
+    "reply": "找到了：之前的结论是**等收到正式报价**再继续推进预算比较。\n\n目前就卡在这一步——等对方把正式报价发过来，拿到之后就可以接着比对了。需要我到时候提醒你跟进吗？",
+    "actualSourceRead": true,
+    "answerMatches": true,
+    "calls": [
+      {
+        "name": "memory_recall",
+        "args": {
+          "query": "预算比较"
+        }
+      }
+    ],
+    "elapsedMs": 7881
+  },
+  {
+    "id": "M14",
+    "status": "failed",
+    "question": "蓝鲸项目关于手机端做决定了吗？",
+    "expectedFact": "蓝鲸项目尚未决定是否开启移动端。",
+    "reply": "还没定呢。之前记录的状态是：蓝鲸项目关于是否开启移动端，目前仍在待定。最近有新进展了吗？",
+    "actualSourceRead": true,
+    "answerMatches": false,
+    "calls": [
+      {
+        "name": "memory_recall",
+        "args": {
+          "query": "蓝鲸项目 手机端"
+        }
+      }
+    ],
+    "elapsedMs": 7259
+  },
+  {
+    "id": "M15",
+    "status": "passed",
+    "question": "整理文字时我通常用哪种标记格式？",
+    "expectedFact": "用户整理文字常用Markdown格式。",
+    "reply": "你整理文字一般习惯用 Markdown 格式，比如标题、加粗、列表这类写法。需要我帮你整理成什么样子吗？",
+    "actualSourceRead": true,
+    "answerMatches": true,
+    "calls": [
+      {
+        "name": "memory_recall",
+        "args": {
+          "query": "整理文字 标记格式"
+        }
+      }
+    ],
+    "elapsedMs": 5734
+  },
+  {
+    "id": "M16",
+    "status": "passed",
+    "question": "点菜时有哪些配料我希望避开？",
+    "expectedFact": "用户不喜欢香菜。",
+    "reply": "目前记录的只有一项：香菜。点菜时我会帮你避开香菜，如果还有其他不想吃的配料，你告诉我，我一起记下来。",
+    "actualSourceRead": true,
+    "answerMatches": true,
+    "calls": [
+      {
+        "name": "memory_recall",
+        "args": {
+          "query": "点菜 配料 忌口 避开 不吃"
+        }
+      },
+      {
+        "name": "memory_recall",
+        "args": {
+          "query": "饮食偏好 忌口 香菜 葱 姜 蒜 过敏"
+        }
+      }
+    ],
+    "elapsedMs": 13268
+  },
+  {
+    "id": "M17",
+    "status": "passed",
+    "question": "我的专注段一般持续多长？",
+    "expectedFact": "用户专注时通常每段25分钟。",
+    "reply": "你一般每段专注持续25分钟哦。",
+    "actualSourceRead": true,
+    "answerMatches": true,
+    "calls": [
+      {
+        "name": "memory_recall",
+        "args": {
+          "query": "专注段 持续时长"
+        }
+      }
+    ],
+    "elapsedMs": 9132
+  },
+  {
+    "id": "M18",
+    "status": "passed",
+    "question": "晚上我适合听哪类音乐？",
+    "expectedFact": "用户晚间喜欢轻柔的纯音乐。",
+    "reply": "根据你之前的偏好，晚上比较适合轻柔的纯音乐，比如钢琴曲或氛围轻音乐，听起来放松助眠。需要的话我可以直接给你放一首。",
+    "actualSourceRead": true,
+    "answerMatches": true,
+    "calls": [
+      {
+        "name": "memory_recall",
+        "args": {
+          "query": "音乐偏好 晚上听音乐"
+        }
+      }
+    ],
+    "elapsedMs": 16121
+  },
+  {
+    "id": "M19",
+    "status": "passed",
+    "question": "一周的待办一般什么时候梳理？",
+    "expectedFact": "用户每周日傍晚整理下周待办。",
+    "reply": "你一般是每周日傍晚整理下周待办的。需要的话，现在也可以帮你过一遍这周的清单。",
+    "actualSourceRead": true,
+    "answerMatches": true,
+    "calls": [
+      {
+        "name": "memory_recall",
+        "args": {
+          "query": "待办梳理 习惯 时间"
+        }
+      }
+    ],
+    "elapsedMs": 7978
+  },
+  {
+    "id": "M20",
+    "status": "passed",
+    "question": "平时应该怎么称呼我？",
+    "expectedFact": "用户希望被称呼为小海。",
+    "reply": "查到啦，你之前跟我说过，希望我叫你**小海**。之后我就这么称呼你。",
+    "actualSourceRead": true,
+    "answerMatches": true,
+    "calls": [
+      {
+        "name": "memory_recall",
+        "args": {
+          "query": "用户称呼 怎么叫 用户偏好称呼"
+        }
+      }
+    ],
+    "elapsedMs": 4698
+  },
+  {
+    "scope": "real_M01_cross_session_recall_after_sqlite_reopen",
+    "datasetSha256": "fd5ea03834d16026a7794953ed6e3f6db47c68bb3c8143e642917de65153935b",
+    "assetReleaseId": "seamo-ai-r1-agent-assets-3.2.3",
+    "total": 20,
+    "passed": 19,
+    "threshold": 0.9,
+    "sourceFactsSeeded": 20,
+    "memoryRows": 20,
+    "fullSetExecuted": true,
+    "database": "isolated-temporary-file",
+    "profileBusinessWrites": false,
+    "microphoneOpened": false,
+    "audioPlayed": false
+  }
+]

@@ -1,0 +1,331 @@
+{
+  "scope": "synthetic_model_cases_and_public_music_metadata_no_audio",
+  "productionDataUsed": false,
+  "audioPlayed": false,
+  "installationVerified": false,
+  "parentCommit": "de8b600",
+  "assetReleaseId": "seamo-ai-r1-agent-assets-2.5.1",
+  "firstModelFailure": [
+    {
+      "syntheticCalls": [
+        {
+          "name": "start_task",
+          "arguments": {
+            "goal": "播放示例乐队的《清晨的风》",
+            "constraints": [
+              "找到示例乐队的《清晨的风》并完成播放"
+            ],
+            "sourceRefs": [],
+            "delegation": {
+              "toolAliases": [
+                "music_search",
+                "music_play"
+              ],
+              "requiredActions": [
+                {
+                  "alias": "music_search",
+                  "minimumCount": 1
+                },
+                {
+                  "alias": "music_play",
+                  "minimumCount": 1
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "status": "failed",
+      "code": "ARK_TOOL_SCOPE_OR_SCHEMA_INVALID",
+      "requests": [
+        [
+          "start_task"
+        ]
+      ],
+      "currentState": {
+        "track": null,
+        "positionSec": 0,
+        "playState": "idle",
+        "baseVolume": 100,
+        "muted": false,
+        "playerVersion": 1,
+        "queueVersion": 0,
+        "queue": []
+      }
+    }
+  ],
+  "correctedModelCases": [
+    {
+      "syntheticCalls": [
+        {
+          "name": "load_skill",
+          "arguments": {
+            "skillId": "SK05"
+          }
+        }
+      ]
+    },
+    {
+      "syntheticCalls": [
+        {
+          "name": "music_get_state",
+          "arguments": {}
+        },
+        {
+          "name": "music_search",
+          "arguments": {
+            "keyword": "清晨的风",
+            "artist": "示例乐队"
+          }
+        }
+      ]
+    },
+    {
+      "syntheticCalls": [
+        {
+          "name": "music_play",
+          "arguments": {
+            "trackKey": "netease:synthetic-1",
+            "expectedVersion": 1
+          }
+        }
+      ]
+    },
+    {
+      "syntheticCalls": []
+    },
+    {
+      "phase": "play",
+      "status": "passed",
+      "reply": "我已经为你播放示例乐队的《清晨的风》啦。",
+      "state": {
+        "track": {
+          "trackKey": "netease:synthetic-1",
+          "title": "清晨的风",
+          "artist": "示例乐队",
+          "sourceProvider": "netease",
+          "durationSec": 180
+        },
+        "positionSec": 0,
+        "playState": "playing",
+        "baseVolume": 100,
+        "muted": false,
+        "playerVersion": 2,
+        "queueVersion": 0,
+        "queue": []
+      },
+      "device": "simulated",
+      "model": "real_ark",
+      "productionDataUsed": false,
+      "elapsedMs": 6690
+    },
+    {
+      "syntheticCalls": [
+        {
+          "name": "music_get_state",
+          "arguments": {}
+        }
+      ]
+    },
+    {
+      "syntheticCalls": [
+        {
+          "name": "music_set_volume",
+          "arguments": {
+            "expectedVersion": 2,
+            "volume": 30
+          }
+        }
+      ]
+    },
+    {
+      "syntheticCalls": []
+    },
+    {
+      "phase": "volume",
+      "status": "passed",
+      "reply": "已将音乐音量调整至30%。",
+      "state": {
+        "track": {
+          "trackKey": "netease:synthetic-1",
+          "title": "清晨的风",
+          "artist": "示例乐队",
+          "sourceProvider": "netease",
+          "durationSec": 180
+        },
+        "positionSec": 0,
+        "playState": "playing",
+        "baseVolume": 30,
+        "muted": false,
+        "playerVersion": 3,
+        "queueVersion": 0,
+        "queue": []
+      },
+      "device": "simulated",
+      "model": "real_ark",
+      "productionDataUsed": false,
+      "elapsedMs": 3687
+    },
+    {
+      "syntheticCalls": []
+    },
+    {
+      "phase": "mention",
+      "status": "passed",
+      "reply": "好的，没问题，提到歌曲只是分享想法～那我们来聊聊今天的计划吧，你有没有初步的安排呀？",
+      "state": {
+        "track": {
+          "trackKey": "netease:synthetic-1",
+          "title": "清晨的风",
+          "artist": "示例乐队",
+          "sourceProvider": "netease",
+          "durationSec": 180
+        },
+        "positionSec": 0,
+        "playState": "playing",
+        "baseVolume": 30,
+        "muted": false,
+        "playerVersion": 3,
+        "queueVersion": 0,
+        "queue": []
+      },
+      "device": "simulated",
+      "model": "real_ark",
+      "productionDataUsed": false,
+      "elapsedMs": 3539
+    },
+    {
+      "status": "passed",
+      "requests": [
+        [
+          "load_skill"
+        ],
+        [
+          "music_get_state",
+          "music_search"
+        ],
+        [
+          "music_play"
+        ],
+        [],
+        [
+          "music_get_state"
+        ],
+        [
+          "music_set_volume"
+        ],
+        [],
+        []
+      ],
+      "receiptCount": 5,
+      "assetReleaseId": "seamo-ai-r1-agent-assets-2.5.1"
+    }
+  ],
+  "publicProviderProbe": [
+    {
+      "checkedAt": "2026-10-14T16:38:50.376Z",
+      "scope": "real_provider_metadata_and_url_only",
+      "audioPlayed": false,
+      "installationVerified": false,
+      "outcomes": [
+        {
+          "source": "netease",
+          "status": "no_exact_candidate",
+          "candidates": 5,
+          "samples": [
+            {
+              "title": "晴天(深情版)",
+              "artist": "Lucky小爱",
+              "source": "netease"
+            },
+            {
+              "title": "晴天",
+              "artist": "Jay",
+              "source": "netease"
+            },
+            {
+              "title": "晴天 (原唱 周杰伦)",
+              "artist": "RyaVocal",
+              "source": "netease"
+            },
+            {
+              "title": "晴天 (钢琴版) [原唱: 周杰伦]",
+              "artist": "纪钧瀚 (Bryan Chi)",
+              "source": "netease"
+            },
+            {
+              "title": "晴天",
+              "artist": "梦里啥都有",
+              "source": "netease"
+            }
+          ],
+          "http": [
+            200,
+            200,
+            200,
+            200,
+            200,
+            200
+          ],
+          "elapsedMs": 5722
+        },
+        {
+          "source": "kuwo",
+          "status": "failed",
+          "code": "MUSIC_PROVIDER_UNAVAILABLE",
+          "http": [
+            400
+          ],
+          "elapsedMs": 1023
+        },
+        {
+          "source": "joox",
+          "status": "resource_unavailable",
+          "title": "晴天",
+          "artist": "周杰倫",
+          "coverAvailable": false,
+          "lrcAvailable": false,
+          "http": [
+            200,
+            200,
+            200,
+            200,
+            200,
+            200,
+            200
+          ],
+          "elapsedMs": 7352
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "fullSuite": {
+      "command": "npm test",
+      "files": 77,
+      "tests": 472,
+      "passed": true
+    },
+    "productionBuild": {
+      "command": "npm run build",
+      "passed": true,
+      "warnings": [
+        "Existing Vite bundle size warning"
+      ]
+    },
+    "assets": {
+      "command": "python3 r1-assets/scripts/validate_assets.py",
+      "passed": true,
+      "hashedFiles": 59
+    },
+    "contractExamples": {
+      "command": "python3 r1-assets/scripts/check_contract_examples.py",
+      "passed": true,
+      "toolInputChecks": 16
+    },
+    "cuaUiAcceptance": false,
+    "realNativeVoiceAcceptance": false
+  }
+}

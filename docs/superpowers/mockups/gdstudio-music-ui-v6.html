@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>lingmo 音乐播放 UI 稿 v6 — 声场</title>
+  <style>
+    :root {
+      --bg-deep: #07080d;
+      --bg-panel: #0d1019;
+      --ink: #05060a;
+      --milk: #f8f4ea;
+      --milk-dim: rgba(248, 244, 234, 0.72);
+      --mist: rgba(248, 244, 234, 0.42);
+      --fog: rgba(248, 244, 234, 0.18);
+      --gold: #ffd85c;
+      --gold-glow: rgba(255, 216, 92, 0.35);
+      --teal: #00d6c8;
+      --teal-glow: rgba(0, 214, 200, 0.28);
+      --glass-border: rgba(255, 255, 255, 0.1);
+      --glass-bg: rgba(255, 255, 255, 0.055);
+      --font-serif: "Noto Serif SC", "Songti SC", "Source Han Serif CN", Georgia, serif;
+      --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      color: var(--milk);
+      background: var(--bg-deep);
+      font-family: var(--font-sans);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: geometricPrecision;
+    }
+
+    body {
+      background:
+        radial-gradient(circle at 50% 38%, rgba(0, 214, 200, 0.06), transparent 45%),
+        radial-gradient(circle at 70% 20%, rgba(255, 216, 92, 0.055), transparent 32%),
+        linear-gradient(180deg, #0a0b11 0%, #05060a 55%, #09070b 100%);
+    }
+
+    body::before {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      content: "";
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.028) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+      background-size: 80px 80px;
+      mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.35), transparent 68%);
+    }
+
+    button, input {
+      color: inherit;
+      font: inherit;
+      border: none;
+      background: none;
+    }
+    button { cursor: pointer; }
+    input:focus { outline: none; }
+
+    .app {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      min-width: 360px;
+      min-height: 640px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 26px 40px 34px;
+    }
+
+    /* ---------- 顶部导航 ---------- */
+    .topbar {
+      position: relative;
+      z-index: 5;
+      width: 100%;
+      max-width: 1400px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .top-left, .top-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .icon-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--glass-border);
+      background: var(--glass-bg);
+      backdrop-filter: blur(18px);
+      color: var(--milk);
+      transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+    }
+    .icon-btn:hover { background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.18); }
+    .icon-btn:active { transform: scale(0.94); }
+    .icon-btn svg { width: 18px; height: 18px; }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      height: 32px;
+      padding: 0 13px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 216, 92, 0.2);
+      background: rgba(255, 216, 92, 0.06);
+      color: rgba(255, 248, 230, 0.92);
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      backdrop-filter: blur(18px);
+    }
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--gold);
+      box-shadow: 0 0 12px var(--gold-glow);
+      animation: pulseDot 2.4s ease-in-out infinite;
+    }
+    @keyframes pulseDot { 0%, 100% { opacity: 0.8; } 50% { opacity: 1; box-shadow: 0 0 18px var(--gold-glow); } }
+
+    .search-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+    }
+    .search-field {
+      position: absolute;
+      right: 0;
+      height: 40px;
+      width: 40px;
+      opacity: 0;
+      padding: 0 44px 0 14px;
+      border-radius: 999px;
+      border: 1px solid var(--glass-border);
+      background: rgba(7, 8, 12, 0.65);
+      color: var(--milk);
+      font-size: 0.88rem;
+      backdrop-filter: blur(20px);
+      transition: width 0.32s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease;
+      pointer-events: none;
+    }
+    .search-wrap.expanded .search-field {
+      width: 320px;
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .search-trigger {
+      position: relative;
+      z-index: 2;
+      width: 40px;
+      height: 40px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--glass-border);
+      background: var(--glass-bg);
+      backdrop-filter: blur(18px);
+      color: var(--milk);
+      transition: background 0.18s ease;
+    }
+    .search-trigger:hover { background: rgba(255,255,255,0.09); }
+    .search-trigger svg { width: 18px; height: 18px; }
+
+    .source-chips {
+      position: absolute;
+      right: 0;
+      top: 48px;
+      display: flex;
+      gap: 6px;
+      opacity: 0;
+      transform: translateY(-8px);
+      pointer-events: none;
+      transition: opacity 0.22s ease, transform 0.22s ease;
+    }
+    .search-wrap.expanded .source-chips { opacity: 1; transform: translateY(0); pointer-events: auto; }
+    .source-chip {
+      height: 26px;
+      padding: 0 11px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04);
+      color: var(--mist);
+      font-size: 0.72rem;
+      transition: all 0.15s ease;
+    }
+    .source-chip:hover { color: var(--milk-dim); border-color: rgba(255,255,255,0.14); }
+    .source-chip.active { color: #fff4d4; border-color: rgba(255, 216, 92, 0.35); background: rgba(255, 216, 92, 0.08); }
+
+    /* ---------- 粒子舞台 ---------- */
+    .stage {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .particle-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+    .particle-core {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: min(42vw, 480px);
+      aspect-ratio: 1;
+      border-radius: 999px;
+      transform: translate(-50%, -55%);
+      pointer-events: auto;
+      cursor: pointer;
+    }
+    .particle-core::before,
+    .particle-core::after {
+      position: absolute;
+      content: "";
+      border-radius: 999px;
+      pointer-events: none;
+    }
+    .particle-core::before {
+      inset: -6%;
+      border: 1px solid rgba(0, 214, 200, 0.14);
+      transform: rotate(-18deg) scaleX(1.14);
+    }
+    .particle-core::after {
+      inset: -13%;
+      border: 1px solid rgba(255, 216, 92, 0.09);
+      box-shadow: 0 0 30px rgba(255, 216, 92, 0.05), inset 0 0 50px rgba(0, 214, 200, 0.04);
+      transform: rotate(22deg) scaleX(1.22);
+    }
+    .core-hit {
+      position: absolute;
+      inset: 0;
+      border-radius: 999px;
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .particle-core:active .core-hit { transform: scale(0.96); }
+    .play-state-hint {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 64px;
+      height: 64px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      background: rgba(7, 8, 13, 0.45);
+      border: 1px solid rgba(255,255,255,0.12);
+      backdrop-filter: blur(12px);
+      opacity: 0;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      pointer-events: none;
+    }
+    .particle-core:hover .play-state-hint,
+    .particle-core.paused .play-state-hint { opacity: 1; }
+    .play-state-hint svg { width: 24px; height: 24px; color: var(--milk); }
+
+    .ripple {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 120px;
+      height: 120px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 216, 92, 0.45);
+      transform: translate(-50%, -50%) scale(0.6);
+      opacity: 0;
+      pointer-events: none;
+    }
+    .ripple.active { animation: rippleOut 0.85s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    @keyframes rippleOut {
+      0% { transform: translate(-50%, -50%) scale(0.6); opacity: 0.55; }
+      100% { transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
+    }
+
+    /* ---------- 底部控制面板 ---------- */
+    .control-panel {
+      position: relative;
+      z-index: 4;
+      width: 100%;
+      max-width: 1100px;
+      display: grid;
+      grid-template-columns: 132px 1fr 280px;
+      gap: 32px;
+      align-items: end;
+      padding: 26px 32px 28px;
+      border-radius: 24px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.01)),
+        rgba(7, 8, 12, 0.52);
+      box-shadow: 0 24px 70px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.04);
+      backdrop-filter: blur(28px) saturate(1.2);
+    }
+
+    .cover-frame {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .cover-art {
+      position: relative;
+      width: 132px;
+      aspect-ratio: 1;
+      overflow: hidden;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background:
+        linear-gradient(145deg, rgba(255, 216, 92, 0.78), rgba(255, 111, 145, 0.55) 46%, rgba(0, 213, 200, 0.68)),
+        #151512;
+      box-shadow: 0 18px 46px rgba(0,0,0,0.32);
+      transition: transform 0.4s ease;
+    }
+    .cover-art::before {
+      position: absolute;
+      inset: 18%;
+      content: "";
+      border-radius: 999px;
+      border: 1px solid rgba(5, 6, 10, 0.2);
+      background:
+        radial-gradient(circle, rgba(5, 6, 10, 0.2) 0 9%, transparent 10%),
+        repeating-radial-gradient(circle, rgba(5, 6, 10, 0.14) 0 1px, transparent 2px 10px);
+    }
+    .cover-label {
+      color: var(--mist);
+      font-size: 0.72rem;
+      letter-spacing: 0.03em;
+    }
+
+    .track-info {
+      min-width: 0;
+      padding-bottom: 2px;
+    }
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--teal);
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .track-title {
+      margin: 0;
+      color: #fff5dc;
+      font-family: var(--font-serif);
+      font-size: clamp(1.8rem, 2.8vw, 2.8rem);
+      font-weight: 700;
+      line-height: 1.05;
+      overflow-wrap: anywhere;
+      letter-spacing: -0.01em;
+    }
+    .track-artist {
+      margin-top: 9px;
+      color: var(--milk-dim);
+      font-size: 0.95rem;
+    }
+
+    .progress-area {
+      margin-top: 18px;
+    }
+    .progress-track {
+      position: relative;
+      height: 5px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.1);
+      cursor: pointer;
+      overflow: hidden;
+    }
+    .progress-fill {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      width: 32%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--gold), #ffec9a);
+      box-shadow: 0 0 14px rgba(255, 216, 92, 0.35);
+    }
+    .progress-thumb {
+      position: absolute;
+      top: 50%;
+      left: 32%;
+      width: 13px;
+      height: 13px;
+      border-radius: 999px;
+      background: #fff5dc;
+      border: 2px solid var(--gold);
+      transform: translate(-50%, -50%) scale(0);
+      box-shadow: 0 0 12px rgba(255, 216, 92, 0.5);
+      transition: transform 0.15s ease;
+      pointer-events: none;
+    }
+    .progress-track:hover .progress-thumb { transform: translate(-50%, -50%) scale(1); }
+    .progress-track.dragging .progress-thumb { transform: translate(-50%, -50%) scale(1); }
+    .time-row {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 8px;
+      color: var(--mist);
+      font-size: 0.74rem;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .transport {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-top: 16px;
+    }
+    .transport-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--glass-border);
+      background: var(--glass-bg);
+      color: var(--milk);
+      transition: all 0.15s ease;
+    }
+    .transport-btn:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.18); }
+    .transport-btn:active { transform: scale(0.94); }
+    .transport-btn svg { width: 20px; height: 20px; }
+    .transport-btn.play {
+      width: 54px;
+      height: 54px;
+      border-color: rgba(255, 216, 92, 0.35);
+      background: rgba(255, 216, 92, 0.1);
+      color: #fff4d4;
+    }
+    .transport-btn.play svg { width: 22px; height: 22px; }
+
+    .right-column {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      gap: 18px;
+      min-width: 0;
+    }
+    .volume-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .volume-slider {
+      position: relative;
+      flex: 1;
+      height: 4px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.1);
+      cursor: pointer;
+    }
+    .volume-fill {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      width: 70%;
+      border-radius: inherit;
+      background: var(--teal);
+      box-shadow: 0 0 10px var(--teal-glow);
+    }
+    .volume-thumb {
+      position: absolute;
+      top: 50%;
+      left: 70%;
+      width: 11px;
+      height: 11px;
+      border-radius: 999px;
+      background: #fff5dc;
+      border: 2px solid var(--teal);
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 8px var(--teal-glow);
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+    .volume-slider:hover .volume-thumb,
+    .volume-slider.dragging .volume-thumb { opacity: 1; }
+
+    .lyrics-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.035);
+      color: var(--milk-dim);
+      font-size: 0.8rem;
+      transition: background 0.15s ease;
+    }
+    .lyrics-toggle:hover { background: rgba(255,255,255,0.06); }
+    .lyrics-toggle .chevron { transition: transform 0.25s ease; }
+    .lyrics-toggle.open .chevron { transform: rotate(180deg); }
+
+    .lyrics-panel {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .lyrics-panel.open { max-height: 220px; }
+    .lyrics-scroll {
+      max-height: 220px;
+      overflow-y: auto;
+      padding-right: 6px;
+      margin-top: 10px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.12) transparent;
+    }
+    .lyrics-scroll::-webkit-scrollbar { width: 4px; }
+    .lyrics-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
+    .lyric-line {
+      margin: 0;
+      padding: 7px 0;
+      color: var(--mist);
+      font-family: var(--font-serif);
+      font-size: 0.95rem;
+      line-height: 1.5;
+      transition: color 0.3s ease, transform 0.3s ease, font-size 0.3s ease;
+      cursor: pointer;
+    }
+    .lyric-line:hover { color: var(--milk-dim); }
+    .lyric-line.current {
+      color: var(--gold);
+      font-size: 1.1rem;
+      transform: translateX(6px);
+      text-shadow: 0 0 18px rgba(255, 216, 92, 0.2);
+    }
+    .lyric-line.current + .lyric-line { color: rgba(248, 244, 234, 0.55); }
+
+    /* ---------- 播放列表抽屉 ---------- */
+    .playlist-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 6;
+      background: rgba(0,0,0,0.45);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+      backdrop-filter: blur(2px);
+    }
+    .playlist-overlay.open { opacity: 1; pointer-events: auto; }
+    .playlist-drawer {
+      position: fixed;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: min(380px, 85vw);
+      z-index: 7;
+      transform: translateX(100%);
+      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      padding: 28px;
+      border-left: 1px solid rgba(255,255,255,0.08);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01)),
+        rgba(7, 8, 12, 0.86);
+      backdrop-filter: blur(30px) saturate(1.2);
+    }
+    .playlist-drawer.open { transform: translateX(0); }
+    .playlist-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 22px;
+    }
+    .playlist-title {
+      margin: 0;
+      font-family: var(--font-serif);
+      font-size: 1.35rem;
+      font-weight: 700;
+    }
+    .playlist-list { display: flex; flex-direction: column; gap: 10px; }
+    .playlist-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .playlist-item:hover { background: rgba(255,255,255,0.05); }
+    .playlist-item.active { background: rgba(255, 216, 92, 0.08); border-color: rgba(255, 216, 92, 0.2); }
+    .playlist-thumb {
+      width: 42px;
+      height: 42px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, rgba(255,216,92,0.6), rgba(0,214,200,0.5));
+      flex-shrink: 0;
+    }
+    .playlist-meta { min-width: 0; }
+    .playlist-song { color: var(--milk); font-size: 0.88rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .playlist-artist { color: var(--mist); font-size: 0.72rem; margin-top: 2px; }
+
+    /* ---------- 响应式 ---------- */
+    @media (max-width: 1020px) {
+      .app { padding: 22px 24px 26px; }
+      .control-panel {
+        grid-template-columns: 100px 1fr;
+        gap: 22px;
+        padding: 20px 22px 22px;
+      }
+      .right-column { grid-column: 1 / -1; flex-direction: row; align-items: flex-end; }
+      .lyrics-panel.open { max-height: 160px; }
+      .lyrics-scroll { max-height: 160px; }
+      .cover-art { width: 100px; }
+    }
+
+    @media (max-width: 720px) {
+      .app { padding: 18px 18px 22px; }
+      .topbar { gap: 10px; }
+      .status-pill { display: none; }
+      .search-wrap.expanded .search-field { width: calc(100vw - 110px); }
+      .control-panel {
+        grid-template-columns: 1fr;
+        gap: 18px;
+        padding: 18px;
+      }
+      .cover-frame { flex-direction: row; align-items: center; gap: 14px; }
+      .cover-art { width: 86px; }
+      .right-column { flex-direction: column; }
+      .transport { justify-content: center; }
+      .track-title { font-size: 1.6rem; }
+    }
+
+    @media (max-height: 780px) {
+      .particle-core { width: min(36vw, 360px); transform: translate(-50%, -52%); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .status-dot { animation: none; }
+      .ripple { display: none; }
+      .lyric-line { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <!-- 顶部导航 -->
+    <header class="topbar">
+      <div class="top-left">
+        <button class="icon-btn" aria-label="返回聊天" title="返回聊天">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+        </button>
+        <div class="status-pill"><span class="status-dot"></span>Playing</div>
+      </div>
+      <div class="top-right">
+        <div class="search-wrap" id="searchWrap">
+          <input class="search-field" id="searchField" type="text" value="稻香 周杰伦" placeholder="搜索歌曲、歌手或专辑" aria-label="搜索" />
+          <button class="search-trigger" id="searchTrigger" aria-label="展开搜索" title="搜索">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          </button>
+          <div class="source-chips" aria-label="音源选择">
+            <button class="source-chip active" type="button">全部</button>
+            <button class="source-chip" type="button">netease</button>
+            <button class="source-chip" type="button">kuwo</button>
+            <button class="source-chip" type="button">joox</button>
+          </div>
+        </div>
+        <button class="icon-btn" id="playlistToggle" aria-label="播放列表" title="播放列表">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h12"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- 粒子舞台 -->
+    <div class="stage" aria-hidden="true">
+      <div class="particle-core" id="particleCore" title="点击播放/暂停">
+        <div class="core-hit"></div>
+        <div class="play-state-hint" id="playHint">
+          <svg id="playIcon" viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M8 5v14l11-7z"/></svg>
+          <svg id="pauseIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+        </div>
+        <div class="ripple" id="ripple"></div>
+      </div>
+      <canvas class="particle-canvas" id="particleCanvas"></canvas>
+    </div>
+
+    <!-- 底部控制面板 -->
+    <section class="control-panel" aria-label="音乐播放">
+      <div class="cover-frame">
+        <div class="cover-art" aria-label="专辑封面"></div>
+        <span class="cover-label">魔杰座 · 2008</span>
+      </div>
+
+      <div class="track-info">
+        <p class="eyebrow">GD Studio · joox</p>
+        <h1 class="track-title">稻香</h1>
+        <p class="track-artist">周杰伦</p>
+
+        <div class="progress-area">
+          <div class="progress-track" id="progressTrack" aria-label="播放进度">
+            <div class="progress-fill" id="progressFill"></div>
+            <div class="progress-thumb" id="progressThumb"></div>
+          </div>
+          <div class="time-row"><span id="currentTime">1:24</span><span id="totalTime">3:43</span></div>
+        </div>
+
+        <div class="transport">
+          <button class="transport-btn" id="prevBtn" aria-label="上一首">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+          </button>
+          <button class="transport-btn play" id="playPauseBtn" aria-label="暂停">
+            <svg id="transportPause" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+            <svg id="transportPlay" viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+          <button class="transport-btn" id="nextBtn" aria-label="下一首">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+          </button>
+          <span class="source-note" style="color:var(--mist);font-size:0.75rem;margin-left:6px">柔和播放中</span>
+        </div>
+      </div>
+
+      <div class="right-column">
+        <div class="volume-row" aria-label="音量">
+          <button class="icon-btn" id="muteBtn" style="width:36px;height:36px" aria-label="静音">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+          </button>
+          <div class="volume-slider" id="volumeSlider">
+            <div class="volume-fill" id="volumeFill"></div>
+            <div class="volume-thumb" id="volumeThumb"></div>
+          </div>
+        </div>
+
+        <button class="lyrics-toggle" id="lyricsToggle" aria-expanded="false" aria-controls="lyricsPanel">
+          <span>同步歌词</span>
+          <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="lyrics-panel" id="lyricsPanel" aria-label="同步歌词">
+          <div class="lyrics-scroll" id="lyricsScroll">
+            <p class="lyric-line">对这个世界如果你有太多的抱怨</p>
+            <p class="lyric-line">跌倒了就不敢继续往前走</p>
+            <p class="lyric-line current">为什么人要这么的脆弱堕落</p>
+            <p class="lyric-line">请你打开电视看看</p>
+            <p class="lyric-line">多少人为生命在努力勇敢的走下去</p>
+            <p class="lyric-line">我们是不是该知足</p>
+            <p class="lyric-line">珍惜一切就算没有拥有</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 播放列表抽屉 -->
+  <div class="playlist-overlay" id="playlistOverlay"></div>
+  <aside class="playlist-drawer" id="playlistDrawer" aria-label="播放列表">
+    <div class="playlist-header">
+      <h2 class="playlist-title">播放队列</h2>
+      <button class="icon-btn" id="closePlaylist" aria-label="关闭">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="playlist-list">
+      <div class="playlist-item active">
+        <div class="playlist-thumb"></div>
+        <div class="playlist-meta"><div class="playlist-song">稻香</div><div class="playlist-artist">周杰伦</div></div>
+      </div>
+      <div class="playlist-item">
+        <div class="playlist-thumb"></div>
+        <div class="playlist-meta"><div class="playlist-song">晴天</div><div class="playlist-artist">周杰伦</div></div>
+      </div>
+      <div class="playlist-item">
+        <div class="playlist-thumb"></div>
+        <div class="playlist-meta"><div class="playlist-song">七里香</div><div class="playlist-artist">周杰伦</div></div>
+      </div>
+      <div class="playlist-item">
+        <div class="playlist-thumb"></div>
+        <div class="playlist-meta"><div class="playlist-song">夜曲</div><div class="playlist-artist">周杰伦</div></div>
+      </div>
+      <div class="playlist-item">
+        <div class="playlist-thumb"></div>
+        <div class="playlist-meta"><div class="playlist-song">告白气球</div><div class="playlist-artist">周杰伦</div></div>
+      </div>
+    </div>
+  </aside>
+
+  <script>
+    /* ---------- 粒子球 ---------- */
+    const canvas = document.getElementById('particleCanvas');
+    const context = canvas.getContext('2d');
+    const points = [];
+    const count = 2400;
+    const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+    let isPlaying = true;
+    let energy = 1; // 声场能量，播放时增强
+    let rotationSpeed = 0.18;
+
+    for (let i = 0; i < count; i++) {
+      const y = 1 - (i / (count - 1)) * 2;
+      const r = Math.sqrt(1 - y * y);
+      const theta = goldenAngle * i;
+      points.push({
+        x: Math.cos(theta) * r,
+        y,
+        z: Math.sin(theta) * r,
+        phase: Math.random() * Math.PI * 2,
+        tint: Math.random()
+      });
+    }
+
+    function resize() {
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(window.innerWidth * ratio);
+      canvas.height = Math.floor(window.innerHeight * ratio);
+      canvas.style.width = `${window.innerWidth}px`;
+      canvas.style.height = `${window.innerHeight}px`;
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    }
+
+    function mix(s, e, t) { return Math.round(s + (e - s) * t); }
+    function colorFor(point, depth) {
+      const teal = [0, 214, 200];
+      const cream = [255, 247, 230];
+      const gold = [255, 216, 92];
+      const target = point.tint > 0.82 ? gold : cream;
+      const blend = point.tint > 0.82 ? 0.45 : 0.32 + depth * 0.22;
+      return `rgb(${mix(teal[0], target[0], blend)}, ${mix(teal[1], target[1], blend)}, ${mix(teal[2], target[2], blend)})`;
+    }
+
+    function draw(time) {
+      const seconds = time / 1000;
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const centerX = width / 2;
+      const centerY = height * 0.44;
+      const baseRadius = Math.min(width * 0.19, 230);
+      const sphereRadius = baseRadius * (0.96 + energy * 0.04);
+      const breath = 1 + Math.sin(seconds * (1.4 + energy * 0.6)) * (0.026 + energy * 0.014);
+      const rotY = seconds * rotationSpeed;
+      const rotX = -0.16 + Math.sin(seconds * 0.32) * 0.022;
+
+      context.clearRect(0, 0, width, height);
+
+      const sorted = points.map((point) => {
+        const cy = Math.cos(rotY), sy = Math.sin(rotY);
+        const cx = Math.cos(rotX), sx = Math.sin(rotX);
+        const rx = point.x * cy - point.z * sy;
+        const rz = point.x * sy + point.z * cy;
+        const ry = point.y * cx - rz * sx;
+        const fz = point.y * sx + rz * cx;
+        return { point, x: rx, y: ry, z: fz };
+      }).sort((a, b) => a.z - b.z);
+
+      for (const item of sorted) {
+        const depth = (item.z + 1) / 2;
+        const perspective = 0.84 + depth * 0.18;
+        const drift = Math.sin(seconds * (1.2 + energy * 1.2) + item.point.phase) * (1.2 + energy * 1.2);
+        const x = centerX + item.x * sphereRadius * breath * perspective + drift;
+        const y = centerY + item.y * sphereRadius * breath * perspective + drift * 0.35;
+        const alpha = (0.2 + depth * 0.72) * (0.75 + energy * 0.25);
+        const size = (0.8 + depth * 1.05) * (1 + energy * 0.2);
+
+        context.globalAlpha = alpha;
+        context.fillStyle = colorFor(item.point, depth);
+        context.beginPath();
+        context.arc(x, y, size, 0, Math.PI * 2);
+        context.fill();
+      }
+
+      context.globalAlpha = 1;
+      window.requestAnimationFrame(draw);
+    }
+
+    resize();
+    window.addEventListener('resize', resize);
+    window.requestAnimationFrame(draw);
+
+    /* ---------- 播放状态 ---------- */
+    const particleCore = document.getElementById('particleCore');
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    const transportPlay = document.getElementById('transportPlay');
+    const transportPause = document.getElementById('transportPause');
+    const playHint = document.getElementById('playHint');
+    const playIcon = document.getElementById('playIcon');
+    const pauseIcon = document.getElementById('pauseIcon');
+    const ripple = document.getElementById('ripple');
+    const statusDot = document.querySelector('.status-dot');
+
+    function togglePlay() {
+      isPlaying = !isPlaying;
+      updatePlayState();
+    }
+    function updatePlayState() {
+      if (isPlaying) {
+        energy = 1;
+        rotationSpeed = 0.28;
+        particleCore.classList.remove('paused');
+        transportPlay.style.display = 'none';
+        transportPause.style.display = 'block';
+        playIcon.style.display = 'none';
+        pauseIcon.style.display = 'block';
+        statusDot.style.animation = 'pulseDot 2.4s ease-in-out infinite';
+      } else {
+        energy = 0.35;
+        rotationSpeed = 0.08;
+        particleCore.classList.add('paused');
+        transportPlay.style.display = 'block';
+        transportPause.style.display = 'none';
+        playIcon.style.display = 'block';
+        pauseIcon.style.display = 'none';
+        statusDot.style.animation = 'none';
+      }
+      triggerRipple();
+    }
+    function triggerRipple() {
+      ripple.classList.remove('active');
+      void ripple.offsetWidth;
+      ripple.classList.add('active');
+    }
+
+    particleCore.addEventListener('click', togglePlay);
+    playPauseBtn.addEventListener('click', togglePlay);
+
+    /* ---------- 进度条拖拽 ---------- */
+    const progressTrack = document.getElementById('progressTrack');
+    const progressFill = document.getElementById('progressFill');
+    const progressThumb = document.getElementById('progressThumb');
+    const currentTimeEl = document.getElementById('currentTime');
+    const totalSeconds = 223;
+    let currentSeconds = 84;
+    let progressDragging = false;
+
+    function formatTime(sec) {
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
+      return `${m}:${s.toString().padStart(2, '0')}`;
+    }
+    function setProgress(ratio) {
+      const pct = Math.max(0, Math.min(1, ratio)) * 100;
+      progressFill.style.width = `${pct}%`;
+      progressThumb.style.left = `${pct}%`;
+      currentSeconds = Math.floor(ratio * totalSeconds);
+      currentTimeEl.textContent = formatTime(currentSeconds);
+    }
+    function progressRatioFromEvent(e) {
+      const rect = progressTrack.getBoundingClientRect();
+      const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+      return x / rect.width;
+    }
+    progressTrack.addEventListener('mousedown', (e) => { progressDragging = true; progressTrack.classList.add('dragging'); setProgress(progressRatioFromEvent(e)); });
+    progressTrack.addEventListener('touchstart', (e) => { progressDragging = true; progressTrack.classList.add('dragging'); setProgress(progressRatioFromEvent(e)); }, { passive: true });
+    window.addEventListener('mousemove', (e) => { if (progressDragging) setProgress(progressRatioFromEvent(e)); });
+    window.addEventListener('touchmove', (e) => { if (progressDragging) setProgress(progressRatioFromEvent(e.touches[0])); }, { passive: true });
+    window.addEventListener('mouseup', () => { progressDragging = false; progressTrack.classList.remove('dragging'); });
+    window.addEventListener('touchend', () => { progressDragging = false; progressTrack.classList.remove('dragging'); });
+    setProgress(currentSeconds / totalSeconds);
+
+    /* ---------- 音量 ---------- */
+    const volumeSlider = document.getElementById('volumeSlider');
+    const volumeFill = document.getElementById('volumeFill');
+    const volumeThumb = document.getElementById('volumeThumb');
+    let volumeDragging = false;
+    let volume = 0.7;
+    function setVolume(ratio) {
+      volume = Math.max(0, Math.min(1, ratio));
+      const pct = volume * 100;
+      volumeFill.style.width = `${pct}%`;
+      volumeThumb.style.left = `${pct}%`;
+    }
+    function volumeRatioFromEvent(e) {
+      const rect = volumeSlider.getBoundingClientRect();
+      const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+      return x / rect.width;
+    }
+    volumeSlider.addEventListener('mousedown', (e) => { volumeDragging = true; volumeSlider.classList.add('dragging'); setVolume(volumeRatioFromEvent(e)); });
+    volumeSlider.addEventListener('touchstart', (e) => { volumeDragging = true; volumeSlider.classList.add('dragging'); setVolume(volumeRatioFromEvent(e)); }, { passive: true });
+    window.addEventListener('mousemove', (e) => { if (volumeDragging) setVolume(volumeRatioFromEvent(e)); });
+    window.addEventListener('touchmove', (e) => { if (volumeDragging) setVolume(volumeRatioFromEvent(e.touches[0])); }, { passive: true });
+    window.addEventListener('mouseup', () => { volumeDragging = false; volumeSlider.classList.remove('dragging'); });
+    window.addEventListener('touchend', () => { volumeDragging = false; volumeSlider.classList.remove('dragging'); });
+    setVolume(volume);
+
+    /* ---------- 搜索展开 ---------- */
+    const searchWrap = document.getElementById('searchWrap');
+    const searchTrigger = document.getElementById('searchTrigger');
+    const searchField = document.getElementById('searchField');
+    searchTrigger.addEventListener('click', () => {
+      const expanded = searchWrap.classList.toggle('expanded');
+      searchTrigger.setAttribute('aria-label', expanded ? '收起搜索' : '展开搜索');
+      if (expanded) searchField.focus();
+    });
+    searchField.addEventListener('keydown', (e) => { if (e.key === 'Escape') { searchWrap.classList.remove('expanded'); searchTrigger.setAttribute('aria-label', '展开搜索'); } });
+
+    /* ---------- 歌词折叠 ---------- */
+    const lyricsToggle = document.getElementById('lyricsToggle');
+    const lyricsPanel = document.getElementById('lyricsPanel');
+    lyricsToggle.addEventListener('click', () => {
+      const open = lyricsPanel.classList.toggle('open');
+      lyricsToggle.classList.toggle('open', open);
+      lyricsToggle.setAttribute('aria-expanded', String(open));
+    });
+    lyricsPanel.classList.add('open');
+    lyricsToggle.classList.add('open');
+    lyricsToggle.setAttribute('aria-expanded', 'true');
+
+    // 模拟歌词滚动高亮
+    const lyricLines = Array.from(document.querySelectorAll('.lyric-line'));
+    let currentLine = 2;
+    setInterval(() => {
+      if (!isPlaying) return;
+      lyricLines.forEach((line, index) => line.classList.toggle('current', index === currentLine));
+      const scroll = document.getElementById('lyricsScroll');
+      const active = lyricLines[currentLine];
+      if (active && scroll) {
+        const top = active.offsetTop - scroll.offsetTop - scroll.clientHeight / 2 + active.clientHeight / 2;
+        scroll.scrollTo({ top, behavior: 'smooth' });
+      }
+      currentLine = (currentLine + 1) % lyricLines.length;
+    }, 3800);
+
+    /* ---------- 播放列表抽屉 ---------- */
+    const playlistToggle = document.getElementById('playlistToggle');
+    const playlistDrawer = document.getElementById('playlistDrawer');
+    const playlistOverlay = document.getElementById('playlistOverlay');
+    const closePlaylist = document.getElementById('closePlaylist');
+    function openPlaylist() { playlistDrawer.classList.add('open'); playlistOverlay.classList.add('open'); }
+    function closePlaylistFn() { playlistDrawer.classList.remove('open'); playlistOverlay.classList.remove('open'); }
+    playlistToggle.addEventListener('click', openPlaylist);
+    closePlaylist.addEventListener('click', closePlaylistFn);
+    playlistOverlay.addEventListener('click', closePlaylistFn);
+  </script>
+</body>
+</html>

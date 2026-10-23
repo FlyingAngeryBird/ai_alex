@@ -1,0 +1,31 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8" /><link rel="icon" href="data:," /><title>Seamo Topics Check</title></head><body style="margin:0"><div id="app"></div><script type="module">
+import { createApp, h, ref } from 'vue'
+import R1MemoryPanel from '../../src/components/R1MemoryPanel.vue'
+import '../../src/r1-shell.css'
+createApp({ setup() {
+  const revision = ref(0), status = ref(''), temporary = ref(false), panel = ref(true), busy = ref(false)
+  window.seamoR1.memory.onChanged(() => { revision.value++ })
+  async function createTopic() {
+    if (busy.value) return; busy.value = true
+    for (let i=1; i<=9; i++) {
+      const result = await window.lingli.invoke('chat.sendMessage', { text: `第${i}轮：我们决定先完成中文 macOS 桌面内部版，暂不做移动版。发布日期未确定。` })
+      if (!result.ok) { status.value = result.error.code; break }
+    }
+    revision.value++; status.value = '已提交 9 个真实合成聊天轮次；话题由生产 PR06 提交流程处理。'; busy.value = false
+  }
+  async function continued(topic) {
+    const result = await window.lingli.invoke('chat.sendMessage', { text: `接着「${topic.title}」聊` })
+    status.value = result.ok ? result.data.reply : result.error.code
+  }
+  async function mode() {
+    const result = await window.lingli.invoke('chat.setTemporary', { enabled: !temporary.value })
+    if (result.ok) temporary.value = result.data.temporary
+  }
+  return () => h('main', { class: 'r1-shell', style:'height:100vh;padding:50px;color:#e4e9e1;box-sizing:border-box' }, [
+    h('h2','独立持续话题检查'), h('p','合成模型输入、生产组件、真实 IPC 与临时数据库；不连接服务或麦克风。'),
+    h('button',{onClick:createTopic,disabled:busy.value},'生成合成话题'), h('button',{onClick:mode},'切换临时对话'),
+    h('button',{onClick:()=>{panel.value=true}},'打开记忆'),h('p',status.value),
+    panel.value ? h(R1MemoryPanel,{ temporary:temporary.value, revision:revision.value, onClose:()=>{panel.value=false}, onContinueTopic:continued, onSettings:()=>{status.value='设置开关另有独立验证'}}) : null
+  ])
+} }).mount('#app')
+</script></body></html>
