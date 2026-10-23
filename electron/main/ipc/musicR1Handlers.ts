@@ -25,6 +25,13 @@ export function registerR1MusicHandlers(db: R1Database, music: R1Music, assets: 
     catch (error) { return fail(error) }
   })
   ipc.handle('r1.music.detach', ({ sender }) => { music.detach(sender.id); return { ok: true, data: null } })
+  ipc.handle('r1.music.artwork', async (_event, payload) => {
+    try {
+      const trackKey = (payload as { trackKey: string }).trackKey
+      if (typeof trackKey !== 'string' || trackKey.length > 1000) throw new Error('MUSIC_TRACK_INVALID')
+      return { ok: true, data: await music.artwork(trackKey) }
+    } catch (error) { return fail(error) }
+  })
   ipc.handle('r1.music.snapshot', () => ({ ok: true, data: music.snapshot() }))
   ipc.handle('r1.music.exit', tracked(async (_event, payload) => {
     const actionId = randomUUID(), started = performance.now(), temporary = mode.temporary

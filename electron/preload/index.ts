@@ -6,7 +6,7 @@ export const exposedChannels = [
   'r1.data.prepareCleanup', 'r1.data.confirmCleanup', 'r1.data.exportCleanupBackup',
   'r1.data.summary', 'r1.data.exportBackup', 'r1.data.prepareRestore', 'r1.data.cancelRestore', 'r1.data.confirmRestore', 'r1.data.exportDiagnostics',
   'r1.preferences.get', 'r1.preferences.update',
-  'r1.music.attach', 'r1.music.detach', 'r1.music.snapshot', 'r1.music.report', 'r1.music.search', 'r1.music.control', 'r1.music.clearHistory', 'r1.music.exit',
+  'r1.music.artwork', 'r1.music.attach', 'r1.music.detach', 'r1.music.snapshot', 'r1.music.report', 'r1.music.search', 'r1.music.control', 'r1.music.clearHistory', 'r1.music.exit',
   'app.getRuntimeState',
   'app.requestMicrophoneAccess',
   'chat.sendMessage',
@@ -199,6 +199,7 @@ function exposeLingliApi(
       onChanged: handler => { const listener = (...args: unknown[]) => handler(args[1] as Parameters<typeof handler>[0]); renderer.on('r1.preferencesChanged', listener); return () => renderer.removeListener('r1.preferencesChanged', listener) }
     },
     music: {
+      artwork: input => invokeR1('r1.music.artwork', input),
       attach: () => invokeR1('r1.music.attach'), detach: () => invokeR1('r1.music.detach'), snapshot: () => invokeR1('r1.music.snapshot'),
       report: input => invokeR1('r1.music.report', input), search: input => invokeR1('r1.music.search', input),
       control: input => invokeR1('r1.music.control', input), clearHistory: () => invokeR1('r1.music.clearHistory'),

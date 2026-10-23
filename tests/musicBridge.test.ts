@@ -17,6 +17,7 @@ function fixture(options: Parameters<typeof useMusic>[0] = {}) {
   const searchListeners = new Set<Parameters<R1Api['music']['onSearchProgress']>[0]>()
   domain.onChanged(snapshot => { for (const listener of stateListeners) listener(snapshot) })
   const api: R1Api['music'] = {
+    artwork: async () => ({ ok: true, data: null }),
     attach: async () => ({ ok: true, data: { nonce: domain.attach(1, command => { for (const listener of commandListeners) listener(command) }), snapshot: domain.snapshot() } }),
     detach: async () => { domain.detach(1); return { ok: true, data: null } }, snapshot: async () => ({ ok: true, data: domain.snapshot() }),
     report: async input => { try { domain.report(1, input.nonce, input.report); return { ok: true, data: null } } catch { return { ok: false, error: { code: 'MUSIC_STALE_DEVICE_REPORT', message: '' } } } },
@@ -144,6 +145,16 @@ it('drops an older search response after a new query has completed', async () =>
     await s.music.searchMusic('较新查询'); release({ ok: true, data: [s.first] }); await previous
     expect(s.music.searchResults.value).toEqual([s.second])
   } finally { s.close() }
+})
+it('keeps an asynchronously loaded cover when a later search response has older metadata', async () => {
+  const s=fixture()
+  try {
+    await s.music.loadLibrary();await s.music.searchMusic('歌曲')
+    vi.spyOn(s.api,'artwork').mockResolvedValue({ok:true,data:'https://example.org/cover.jpg'})
+    await s.music.loadArtwork(s.first)
+    await s.music.searchMusic('歌曲')
+    expect(s.music.searchResults.value[0].artworkUrl).toBe('https://example.org/cover.jpg')
+  } finally {s.close()}
 })
 it('shows partial search results immediately, joins duplicate submits and ignores late progress from older queries', async () => {
   const s = fixture(); let release!: (value: Awaited<ReturnType<R1Api['music']['search']>>) => void

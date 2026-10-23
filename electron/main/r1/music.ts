@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { musicText } from '../../shared/musicMatching.js'
 import { afterTransactionCommit, afterTransactionRollback, inTransaction, type R1Database } from './database.js'
 import type { MusicProvider, MusicTrack, MusicSourcePreference, PlaybackState, MusicSearchProgress } from '../music/gdstudioMusicProvider.js'
 
@@ -14,7 +15,7 @@ export type MusicScope = { temporary: boolean; persistenceConfirmed: boolean; so
 export type MusicSnapshot = { state: MusicState; playback: PlaybackState; favorites: MusicTrack[]; searchHistory: string[];
   queue: Array<{ entryId: string; track: MusicTrack }>; resourceAttempts: number; failureReasons: string[] }
 const key = (track: MusicTrack) => `${track.source}:${track.id}`
-const normal = (value: string) => value.normalize('NFKC').toLocaleLowerCase().replace(/\s+/g, '').trim()
+const normal = (value: string) => musicText(value).replace(/\s+/g, '')
 const sameRecording = (left: MusicTrack, right: MusicTrack) => normal(left.title) === normal(right.title) && normal(left.artist) === normal(right.artist) &&
   !['', '未知歌手'].includes(left.artist) && (!left.durationMs || !right.durationMs || Math.abs(left.durationMs - right.durationMs) <= 3000)
 const trackView = (track: MusicTrack): MusicTrackView => ({ trackKey: key(track), title: track.title, artist: track.artist,
@@ -163,7 +164,17 @@ export class R1Music {
     }
     this.emit()
   }
-  register(track: MusicTrack): MusicTrack { const safe = metadata(track); this.tracks.set(key(safe), safe); return safe }
+  register(track: MusicTrack): MusicTrack {
+    const safe = metadata(track), existing = this.tracks.get(key(safe))
+    if (!safe.artworkUrl && existing?.artworkUrl) safe.artworkUrl = existing.artworkUrl
+    this.tracks.set(key(safe), safe); return safe
+  }
+  async artwork(trackKey: string): Promise<string | null> {
+    const track = this.track(trackKey)
+    const url = track.artworkUrl ?? await this.provider.artwork?.(track)
+    if (url && !this.closed) this.register({ ...track, artworkUrl: url })
+    return url ?? null
+  }
   track(trackKey: string): MusicTrack { const track = this.tracks.get(trackKey); if (!track) throw new Error('MUSIC_TRACK_NOT_AVAILABLE'); return structuredClone(track) }
   private trackOperation<T>(promise: Promise<T>): Promise<T> {
     const tracked = promise.finally(() => { this.operations.delete(tracked) }); this.operations.add(tracked); return tracked

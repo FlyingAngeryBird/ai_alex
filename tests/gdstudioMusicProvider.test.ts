@@ -67,6 +67,23 @@ function requestedIds(fetcher: ReturnType<typeof createFakeGdFetch>, type: strin
 }
 
 describe('GD Studio music provider', () => {
+  it('tries one bounded spaced variant for compact title+artist queries and ranks the requested artist first', async () => {
+    const fetcher=vi.fn(async(input:RequestInfo|URL)=>{const u=new URL(String(input));if(u.searchParams.get('source')==='kuwo')return new Response('',{status:400});return Response.json([{id:u.searchParams.get('name')!.includes(' ')?'original':'cover',name:'告白氣球',artist:[u.searchParams.get('name')!.includes(' ')?'周杰倫':'另一位歌手']}])})
+    const provider=createGdStudioMusicProvider({fetch:fetcher})
+    try {const result=await provider.search({query:'告白气球周杰伦',sourcePreference:'all'});expect(result.tracks[0].artist).toBe('周杰倫');expect(fetcher).toHaveBeenCalledTimes(5);expect(result.tracks.some(track=>track.artist==='另一位歌手')).toBe(true)}finally{provider.close?.()}
+  })
+  it('loads covers separately with shared requests/cache and no more than three active requests', async () => {
+    let active=0,maximum=0
+    const fetcher=vi.fn(async () => { active++;maximum=Math.max(maximum,active);await new Promise(resolve=>setTimeout(resolve,10));active--;return Response.json({url:'https://example.org/cover.jpg'}) })
+    const provider=createGdStudioMusicProvider({fetch:fetcher})
+    try {
+      const values=Array.from({length:8},(_,index)=>({id:String(index),artworkId:String(index),source:'netease' as const,title:'歌曲',artist:'歌手',durationMs:0}))
+      const urls=await Promise.all([...values,values[0]].map(value=>provider.artwork!(value)))
+      expect(urls.every(value=>value==='https://example.org/cover.jpg')).toBe(true)
+      expect(maximum).toBe(3);expect(fetcher).toHaveBeenCalledTimes(8)
+      await provider.artwork!(values[0]);expect(fetcher).toHaveBeenCalledTimes(8)
+    } finally {provider.close?.()}
+  })
   it('shares in-flight queries and reuses source caches when switching from all sources to one', async () => {
     let release!: () => void
     const barrier = new Promise<void>(resolve => { release = resolve })

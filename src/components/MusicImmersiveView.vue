@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
+import MusicArtwork from './MusicArtwork.vue'
 import type { MusicSourcePreference, MusicTrack, PlaybackState } from '@/types/app'
 import { getCurrentLyricIndex } from '@/utils/musicLyrics'
 import { groupMusicResults, musicSourceLabel } from '@/utils/musicSearchResults'
@@ -40,6 +41,7 @@ const emit = defineEmits<{
   playAllFavorites: [confirmed: boolean]
   previousTrack: []
   removeHistory: [query: string]
+  artworkNeeded: [track: MusicTrack]
   search: [query: string, sourcePreference: MusicSourcePreference, refresh?: boolean]
   selectFavorite: [track: MusicTrack]
   selectHistory: [query: string]
@@ -51,7 +53,6 @@ const emit = defineEmits<{
 
 const LYRIC_CONTEXT_BEFORE = 8
 const LYRIC_CONTEXT_AFTER = 8
-const TITLE_PREVIEW_LENGTH = 5
 
 const sourceOptions: Array<{ label: string; value: MusicSourcePreference }> = [
   { label: '全部', value: 'all' },
@@ -241,7 +242,6 @@ function onToggleFavorite(track: MusicTrack): void {
 }
 
 function onSelectFavorite(track: MusicTrack): void {
-  libraryOpen.value = false
   emit('selectFavorite', track)
 }
 function playAllFavorites(): void {
@@ -256,18 +256,8 @@ function onToggleCurrentFavorite(): void {
   }
 }
 
-const displayTrackTitle = computed(() => {
-  const title = props.playback.track?.title ?? ''
-  const chars = Array.from(title)
-
-  return chars.length > TITLE_PREVIEW_LENGTH
-    ? `${chars.slice(0, TITLE_PREVIEW_LENGTH).join('')}...`
-    : title
-})
-
-const isTrackTitleTruncated = computed(() => {
-  return Array.from(props.playback.track?.title ?? '').length > TITLE_PREVIEW_LENGTH
-})
+const displayTrackTitle = computed(() => props.playback.track?.title ?? '')
+const isTrackTitleTruncated = computed(() => false)
 
 watch(
   () => props.searchQuery,
@@ -310,7 +300,6 @@ function selectSource(sourcePreference: MusicSourcePreference): void {
 }
 
 function selectSearchResult(track: MusicTrack): void {
-  libraryOpen.value = false
   emit('selectSearchResult', track)
 }
 
@@ -408,8 +397,7 @@ function lyricStyle(distance: number): Record<string, string> {
             <article v-for="group in resultGroups" :key="group.key" class="music-result-group">
               <div class="music-track-row">
                 <button type="button" class="r1-track-select" :aria-label="`播放${group.primary.title}，${group.primary.artist}，${musicSourceLabel(group.primary.source)}`" @click="selectSearchResult(group.primary)">
-                  <img v-if="group.primary.artworkUrl && !failedArtworks.has(group.primary.artworkUrl)" @error="markArtworkFailed(group.primary.artworkUrl)" class="search-result-thumb search-result-thumb--image" :src="group.primary.artworkUrl" alt="" />
-                  <span v-else class="search-result-thumb music-track-placeholder" aria-hidden="true"><Music2 :size="19" /></span>
+                  <MusicArtwork :track="group.primary" @needed="emit('artworkNeeded', $event)" />
                   <span class="search-result-copy">
                     <span class="search-result-title" :title="group.primary.title">{{ group.primary.title }}</span>
                     <span class="search-result-meta" :title="[group.primary.artist, group.primary.album].filter(Boolean).join(' · ')">{{ [group.primary.artist, group.primary.album].filter(Boolean).join(' · ') }}</span>
@@ -462,15 +450,7 @@ function lyricStyle(distance: number): Record<string, string> {
               class="search-result-item"
             >
               <button type="button" class="r1-track-select" @click="onSelectFavorite(track)">
-              <img
-                v-if="track.artworkUrl && !failedArtworks.has(track.artworkUrl)"
-                @error="markArtworkFailed(track.artworkUrl)"
-                class="search-result-thumb search-result-thumb--image"
-                :src="track.artworkUrl"
-                alt=""
-                aria-hidden="true"
-              />
-              <span v-else class="search-result-thumb" aria-hidden="true" />
+              <MusicArtwork :track="track" @needed="emit('artworkNeeded', $event)" />
               <span class="search-result-copy">
                 <span class="search-result-title">{{ track.title }}</span>
                 <span class="search-result-meta">
@@ -523,6 +503,7 @@ function lyricStyle(distance: number): Record<string, string> {
           <p class="artist">{{ playback.track.artist }}</p>
         </div>
 
+        <p v-if="playback.status === 'error'" class="music-playback-error" role="status">{{ playback.errorMessage || '当前音源未能播放' }} <button type="button" @click="showLibrary('search')">选择其他音源</button></p>
         <div class="progress-block">
           <input class="progress-track r1-music-progress" type="range" min="0" :max="(playback.durationMs ?? 0) / 1000" step="0.1" :value="playback.positionMs / 1000"
             :disabled="!playback.durationMs || playback.status === 'loading'" aria-label="歌曲进度" :style="{ '--progress': `${progress}%` }" @change="emit('seek', Number(($event.target as HTMLInputElement).value))" />
@@ -642,6 +623,7 @@ function lyricStyle(distance: number): Record<string, string> {
 </template>
 
 <style scoped>
+.music-playback-error{margin:8px 0;color:#c9a99d;font-size:11px;line-height:1.6}.music-playback-error button{border:0;background:none;color:var(--r1-aqua);font:inherit;text-decoration:underline}
 .r1-track-select{display:grid;grid-template-columns:42px minmax(0,1fr);align-items:center;gap:11px;width:100%;min-width:0;padding:0;border:0;background:none;text-align:left;color:inherit;font:inherit;cursor:pointer}
 .search-result-item{grid-template-columns:minmax(0,1fr) 30px 30px;gap:8px;border-radius:8px}.r1-track-select .search-result-copy{min-width:0}.r1-track-select .search-result-thumb{width:42px;height:42px;flex:none;border-radius:6px}
 .music-result-group{min-width:0;border:1px solid var(--r1-line);border-radius:8px;background:#ffffff03;overflow:hidden}.music-result-group:hover{border-color:#a1d9cf3b;background:#a1d9cf07}.music-track-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;min-height:82px;padding:12px}.music-track-actions{display:flex;gap:4px}.music-track-actions .favorite-toggle,.music-track-version .favorite-toggle{width:28px;height:28px;border:0;background:transparent}.music-track-actions .favorite-toggle:hover,.music-track-version .favorite-toggle:hover{color:var(--r1-aqua);background:#a1d9cf12}.music-track-placeholder{display:grid;place-items:center;background:#a1d9cf0b;color:#a1d9cf9c}.music-track-source{display:block;margin-top:4px;font-size:10px;line-height:1.4;color:#82978e;white-space:nowrap}.music-track-playing{color:var(--r1-gold)}

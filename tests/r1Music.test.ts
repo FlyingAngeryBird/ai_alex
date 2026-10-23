@@ -23,6 +23,16 @@ function fixture(auto = false) {
   return { db, music, provider, candidates, commands, nonce, acknowledge, close() { music.close(); db.close() } }
 }
 describe('actual-device-gated R1 music domain', () => {
+  it('retains a separately resolved cover when slower search results register the same song again', async () => {
+    const s=fixture()
+    try {
+      await s.music.search('测试曲');s.provider.artwork=async()=> 'https://example.org/cover.jpg'
+      expect(await s.music.artwork('netease:netease-1')).toBe('https://example.org/cover.jpg')
+      await s.music.search('测试曲')
+      expect(s.music.track('netease:netease-1').artworkUrl).toBe('https://example.org/cover.jpg')
+      await expect(s.music.artwork('netease:unknown')).rejects.toThrow('MUSIC_TRACK_NOT_AVAILABLE')
+    } finally {s.close()}
+  })
   it('registers incremental candidates before the final search so early rows can be played', async () => {
     const s = fixture(true); let finish!: () => void
     try {

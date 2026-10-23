@@ -49,6 +49,7 @@ export type R1Api = {
     onChanged(handler: (value: AppPreferences) => void): () => void
   }
   music: {
+    artwork(input: { trackKey: string }): Promise<R1Result<string | null>>
     attach(): Promise<R1Result<{ nonce: string; snapshot: MusicSnapshot }>>
     detach(): Promise<R1Result<null>>
     snapshot(): Promise<R1Result<MusicSnapshot>>

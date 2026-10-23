@@ -1325,7 +1325,7 @@ onBeforeUnmount(() => {
         @play-all-favorites="music.playAllFavorites"
         @previous-track="music.previousTrack"
         @remove-history="music.removeSearchHistory"
-        @search="music.searchMusic"
+        @search="music.searchMusic" @artwork-needed="music.loadArtwork"
         @select-favorite="music.playFavorite"
         @select-history="music.searchMusic"
         @select-search-result="music.playSearchResult"

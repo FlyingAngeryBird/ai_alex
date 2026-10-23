@@ -1,0 +1,32 @@
+{
+  "at": "2026-10-23T03:22:25.388Z",
+  "query": "告白气球周杰伦",
+  "firstResultsMs": 2303,
+  "searchMs": 2303,
+  "count": 10,
+  "coverBatchMs": 1357,
+  "samples": [
+    {
+      "source": "netease",
+      "title": "告白气球",
+      "artist": "Xai小爱",
+      "coverResolved": true,
+      "imageStatus": 200
+    },
+    {
+      "source": "netease",
+      "title": "告白气球",
+      "artist": "Lih_P小爱",
+      "coverResolved": true,
+      "imageStatus": 200
+    },
+    {
+      "source": "netease",
+      "title": "告白气球",
+      "artist": "梦里啥都有",
+      "coverResolved": true,
+      "imageStatus": 200
+    }
+  ],
+  "playbackVerified": false
+}

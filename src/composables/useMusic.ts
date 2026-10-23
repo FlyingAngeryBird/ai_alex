@@ -121,7 +121,9 @@ export function useMusic(options: UseMusicOptions = {}) {
   const playback = ref<PlaybackState>(createInitialPlayback())
   const audioLevel = ref(0)
   const audioBands = ref<MusicAudioBands>(createInitialAudioBands())
+  const artworkUrls = new Map<string, string>()
   const searchResults = ref<MusicTrack[]>([])
+  function retainArtwork(tracks: MusicTrack[]): MusicTrack[] { return tracks.map(track => track.artworkUrl || !artworkUrls.has(getTrackKey(track)) ? track : { ...track, artworkUrl: artworkUrls.get(getTrackKey(track)) }) }
   const searchResultsVisible = ref(false)
   const searchBusy = ref(false)
   const searchSources = ref<MusicSearchProgress['sources']>([])
@@ -175,7 +177,7 @@ export function useMusic(options: UseMusicOptions = {}) {
     stopSnapshots = r1.onChanged(adopt)
     stopSearchProgress = r1.onSearchProgress?.(value => {
       if (stopped || value.requestId !== searchRequestId) return
-      searchResults.value = value.tracks
+      searchResults.value = retainArtwork(value.tracks)
       searchSources.value = value.sources
     })
     stopCommands = r1.onCommand(command => { void ensureBridge().then(ready => { if (ready) void applyCommand(command) }) })
@@ -750,12 +752,12 @@ export function useMusic(options: UseMusicOptions = {}) {
         const result = await r1.search({ keyword: normalizedQuery, sourcePreference: source, requestId, refresh })
         if (generation !== searchGeneration || stopped) return searchResults.value
         musicNotice.value = result.ok ? '' : `音乐搜索暂不可用（${result.error.code}），请重试或切换音源。`
-        searchResults.value = result.ok ? result.data : []
+        searchResults.value = result.ok ? retainArtwork(result.data) : []
       } else {
         const result = await invokeMusic<{ tracks: MusicTrack[] }>('music.search', { query: normalizedQuery, sourcePreference: source })
         if (generation !== searchGeneration || stopped) return searchResults.value
         musicNotice.value = result.ok ? '' : `音乐搜索暂不可用（${result.error.code}），请重试或切换音源。`
-        searchResults.value = result.ok ? result.data.tracks : []
+        searchResults.value = result.ok ? retainArtwork(result.data.tracks) : []
         if (result.ok) void addSearchHistory(normalizedQuery)
       }
       return searchResults.value
@@ -771,6 +773,24 @@ export function useMusic(options: UseMusicOptions = {}) {
           status: searchResults.value.some(track => track.source === value.source) ? 'ready' : musicNotice.value ? 'unavailable' : 'empty' }))
       }
     }
+  }
+
+  const artworkPending = new Map<string, Promise<void>>()
+  function loadArtwork(track: MusicTrack): Promise<void> {
+    if (!r1 || track.artworkUrl || stopped) return Promise.resolve()
+    const key = getTrackKey(track), existing = artworkPending.get(key)
+    if (existing) return existing
+    const pending = r1.artwork({ trackKey: key }).then(result => {
+      if (stopped || !result.ok || !result.data) return
+      if (artworkUrls.size >= 200) artworkUrls.delete(artworkUrls.keys().next().value!)
+      artworkUrls.set(key, result.data)
+      const patch = (value: MusicTrack) => getTrackKey(value) === key ? { ...value, artworkUrl: result.data! } : value
+      searchResults.value = searchResults.value.map(patch)
+      favorites.value = favorites.value.map(patch)
+      if (playback.value.track && getTrackKey(playback.value.track) === key) playback.value = { ...playback.value, track: patch(playback.value.track) }
+    }).catch(() => undefined).finally(() => artworkPending.delete(key))
+    artworkPending.set(key, pending)
+    return pending
   }
 
   async function playSearchResult(track: MusicTrack): Promise<PlaybackState> {
@@ -1117,6 +1137,7 @@ export function useMusic(options: UseMusicOptions = {}) {
     searchAndPlay,
     searchHistory,
     searchMusic,
+    loadArtwork,
     searchQuery,
     searchResults,
     searchResultsVisible,
